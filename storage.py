@@ -39,7 +39,7 @@ def find_next_session_id(repopath):
 class RepoWriter:
 
     def __init__(self):
-        self.repopath = "REPO"
+        self.repopath = "/tmp/REPO"
         self.session_path = None
         self.metadatas = []
         self.sessioninfo = {}
@@ -54,9 +54,8 @@ class RepoWriter:
         sum = md5sum(data)
         metadata["md5sum"] = sum
         existing_blob = find_blob(self.repopath, sum)
-        if not existing_blob:
-            fname = os.path.join(self.session_path, sum)
-            assert not os.path.exists(fname)
+        fname = os.path.join(self.session_path, sum)
+        if not existing_blob and not os.path.exists(fname):
             f = open(fname, "w")
             f.write(data)
             f.close()
@@ -104,20 +103,25 @@ class RepoReader:
 
 
 
+
+
 def main():
     s = RepoWriter()
-    s.new_session("new_session")
+    s.new_session("TestSession")
+    os.chdir("/tmp")
+    def visitor(arg, dirname, names):
+        for name in names:
+            print "Visiting", dirname, name
+            full_path = os.path.join(dirname, name)
+            if not os.path.isfile(full_path):
+                continue
+            f = open(full_path, "r")
+            data = f.read()
+            f.close()
+            s.add(data, {"filename": full_path})
+        
+    os.path.walk("json", visitor, "bilder")
 
-    file_to_add = "promenader.txt"
-    data = open(file_to_add, "r").read()
-    s.add(data, {"filename": file_to_add})
-    s.add(data, {"filename": file_to_add})
-    s.add(data, {"filename": file_to_add})
-    s.add(data, {"filename": file_to_add})
-    s.add(data, {"filename": file_to_add})
-    s.add(data, {"filename": file_to_add})
-    s.add(data, {"filename": file_to_add})
-    s.add(data, {"filename": file_to_add})
     s.close_session()
     
 if __name__ == "__main__":
