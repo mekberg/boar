@@ -1,4 +1,6 @@
 #!/usr/bin/python
+from __future__ import with_statement
+
 import md5
 import os
 import tempfile
@@ -10,8 +12,15 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
+def get_session_info(repopath, session_id):
+    session_path = get_session_path(repopath, session_id)
+    
+
 def get_session_path(repopath, session_id):
     return os.path.join(repopath, str(session_id))
+
+def get_blob_path(repopath, sum):
+    os.path.join(session_path, sum[0:2], sum)
 
 def find_blob(repopath, sum):
     """ Takes a md5sum arg as a string, and returns the path to the blob
@@ -36,8 +45,13 @@ def find_next_session_id(repopath):
     session_dirs.append(-1)
     return max(session_dirs) + 1            
 
-class RepoWriter:
+def find_session(repopath, key, value):
+    pass
+    #for session_id in get_all_sessions(repopath):
+        #with open("")
+        #json.loads()
 
+class RepoWriter:
     def __init__(self):
         self.repopath = "/tmp/REPO"
         self.session_path = None
@@ -70,15 +84,13 @@ class RepoWriter:
 
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
         assert not os.path.exists(bloblist_filename)
-        f = open(bloblist_filename, "w")
-        json.dump(self.metadatas, f, indent = 4)
-        f.close()
+        with open(bloblist_filename, "w") as f:
+            json.dump(self.metadatas, f, indent = 4)
 
         session_filename = os.path.join(self.session_path, "session.json")
         assert not os.path.exists(session_filename)
-        f = open(session_filename, "w")
-        json.dump(self.sessioninfo, f, indent = 4)
-        f.close()
+        with open(session_filename, "w") as f:
+            json.dump(self.sessioninfo, f, indent = 4)
 
         fileno = find_next_session_id(self.repopath)
         final_session_dir = os.path.join(self.repopath, str(fileno))
