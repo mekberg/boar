@@ -8,6 +8,7 @@ import re
 import simplejson as json
 
 import repository
+import shutil
 
 def md5sum(data):
     m = md5.new()
@@ -55,11 +56,13 @@ class RepoWriter:
         with open(session_filename, "w") as f:
             json.dump(self.sessioninfo, f, indent = 4)
 
-        fileno = self.repo.find_next_session_id()
-        final_session_dir = os.path.join(self.repo.repopath, str(fileno))
-        assert not os.path.exists(final_session_dir)
-        os.rename(self.session_path, final_session_dir)
-
+        queue_dir = self.repo.get_queue_path("queued_session")
+        assert not os.path.exists(queue_dir)
+        #queue_dir = self.repo.get_queue_path("")
+        print "Committing to", queue_dir, "from", self.session_path
+        shutil.move(self.session_path, queue_dir)
+        print "Done committing"
+        self.repo.process_queue()
 
 class RepoReader:
 

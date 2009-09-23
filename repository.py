@@ -4,26 +4,38 @@ import tempfile
 import re
 import simplejson as json
 
+QUEUE_DIR = "queue"
+BLOB_DIR = "blobs"
+SESSIONS_DIR = "sessions"
+TMP_DIR = "tmp"
+
+def is_md5sum(str):
+    return re.match("^[0-9]+$", str) != None    
+
 def create_repository(repopath):
     os.mkdir(repopath)
-    os.mkdir(os.path.join(repopath, "queue"))
-    os.mkdir(os.path.join(repopath, "blobs"))
-    os.mkdir(os.path.join(repopath, "sessions"))
+    os.mkdir(os.path.join(repopath, QUEUE_DIR))
+    os.mkdir(os.path.join(repopath, BLOB_DIR))
+    os.mkdir(os.path.join(repopath, SESSIONS_DIR))
+    os.mkdir(os.path.join(repopath, TMP_DIR))
 
 class Repo:
-
     def __init__(self, repopath):
         self.repopath = repopath
+
+    def get_queue_path(self, filename):
+        return os.path.join(self.repopath, QUEUE_DIR, filename)
+
+    def get_blob_path(self, sum):
+        assert is_md5sum(sum)
+        os.path.join(session_path, sum[0:2], sum)
+        return os.path.join(self.repopath, QUEUE_DIR, filename)
 
     def get_session_info(self, session_id):
         session_path = get_session_path(self.repopath, session_id)
     
-
     def get_session_path(self, session_id):
         return os.path.join(self.repopath, str(session_id))
-
-#    def get_blob_path(repopath, sum):
-#        os.path.join(session_path, sum[0:2], sum)
 
     def find_blob(self, sum):
         """ Takes a md5sum arg as a string, and returns the path to the blob
@@ -54,3 +66,22 @@ class Repo:
             #with open("")
             #json.loads()
 
+
+    def process_queue(self):        
+        print "Processing queue"
+        queued_item = self.get_queue_path("queued_session")
+        if not os.path.exists(queued_item):
+            return
+        items = os.listdir(queued_item)
+        for filename in items:
+            if not is_md5sum(filename):
+                continue
+            destination_path = self.get_blob_path(filename)
+
+            dir = os.path.dirname(destination_path)
+            if not os.path.exists(dir):
+                os.mkdir(dir)
+            os.rename(os.path.join(queued_item, filename), destination_path)
+            print "Moving", os.path.join(queued_item, filename),"to", destination_path
+        
+        print "Done"
