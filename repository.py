@@ -2,6 +2,7 @@ import md5
 import os
 import tempfile
 import re
+import shutil
 import simplejson as json
 
 QUEUE_DIR = "queue"
@@ -10,7 +11,9 @@ SESSIONS_DIR = "sessions"
 TMP_DIR = "tmp"
 
 def is_md5sum(str):
-    return re.match("^[0-9]+$", str) != None    
+    return re.match("^[a-f0-9]{32}$", str) != None    
+
+assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 
 def create_repository(repopath):
     os.mkdir(repopath)
@@ -22,14 +25,15 @@ def create_repository(repopath):
 class Repo:
     def __init__(self, repopath):
         self.repopath = repopath
+        assert os.path.exists(self.repopath)
+        self.process_queue()
 
     def get_queue_path(self, filename):
         return os.path.join(self.repopath, QUEUE_DIR, filename)
 
     def get_blob_path(self, sum):
         assert is_md5sum(sum)
-        os.path.join(session_path, sum[0:2], sum)
-        return os.path.join(self.repopath, QUEUE_DIR, filename)
+        return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
 
     def get_session_info(self, session_id):
         session_path = get_session_path(self.repopath, session_id)
@@ -37,19 +41,9 @@ class Repo:
     def get_session_path(self, session_id):
         return os.path.join(self.repopath, str(session_id))
 
-    def find_blob(self, sum):
-        """ Takes a md5sum arg as a string, and returns the path to the blob
-        with that checksum, if it exists """
-        for session_id in self.get_all_sessions():
-            session_path = self.get_session_path(session_id)
-            blob_path = os.path.join(session_path, sum)
-            if os.path.exists(blob_path):
-                return blob_path
-        return None
-
     def get_all_sessions(self):
         session_dirs = []
-        for dir in os.listdir(self.repopath):
+        for dir in os.listdir(os.path.join(self.repopath, SESSIONS_DIR)):
             if re.match("^[0-9]+$", dir) != None:
                 session_dirs.append(int(dir))
         return session_dirs
@@ -68,20 +62,24 @@ class Repo:
 
 
     def process_queue(self):        
-        print "Processing queue"
         queued_item = self.get_queue_path("queued_session")
         if not os.path.exists(queued_item):
             return
+        print "Processing queue"
         items = os.listdir(queued_item)
         for filename in items:
             if not is_md5sum(filename):
                 continue
             destination_path = self.get_blob_path(filename)
-
             dir = os.path.dirname(destination_path)
             if not os.path.exists(dir):
                 os.mkdir(dir)
             os.rename(os.path.join(queued_item, filename), destination_path)
             print "Moving", os.path.join(queued_item, filename),"to", destination_path
-        
+        assert set(os.listdir(queued_item)) == set(["session.json", "bloblist.json"]), \
+            "Unexpected or missing files in queue dir"
+        id = self.find_next_session_id()
+        session_path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
+        shutil.move(queued_item, session_path)
+        assert not os.path.exists(queued_item), "Queue should be empty after processing"
         print "Done"

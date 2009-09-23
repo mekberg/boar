@@ -31,12 +31,12 @@ class RepoWriter:
         assert self.session_path != None
         sum = md5sum(data)
         metadata["md5sum"] = sum
-        existing_blob = self.repo.find_blob(sum)
         fname = os.path.join(self.session_path, sum)
+        existing_blob_path = self.repo.get_blob_path(sum)
+        existing_blob = os.path.exists(existing_blob_path)
         if not existing_blob and not os.path.exists(fname):
-            f = open(fname, "w")
-            f.write(data)
-            f.close()
+            with open(fname, "w") as f:
+                f.write(data)
         self.metadatas.append(metadata)
         return sum
 
