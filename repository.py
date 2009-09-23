@@ -4,6 +4,12 @@ import tempfile
 import re
 import simplejson as json
 
+def create_repository(repopath):
+    os.mkdir(repopath)
+    os.mkdir(os.path.join(repopath, "queue"))
+    os.mkdir(os.path.join(repopath, "blobs"))
+    os.mkdir(os.path.join(repopath, "sessions"))
+
 class Repo:
 
     def __init__(self, repopath):
