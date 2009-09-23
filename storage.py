@@ -25,7 +25,9 @@ class RepoWriter:
     def new_session(self, session_name):
         assert self.session_path == None
         assert os.path.exists(self.repo.repopath)
-        self.session_path = tempfile.mkdtemp(prefix = "tmp_", dir = self.repo.repopath) 
+        self.session_path = tempfile.mkdtemp( \
+            prefix = "tmp_", 
+            dir = os.path.join(self.repo.repopath, repository.TMP_DIR)) 
 
     def add(self, data, metadata = {}):
         assert self.session_path != None
@@ -79,29 +81,6 @@ class RepoReader:
     def get_session_names(self):
         assert False, "Not implemented"
 
-
-
-
-
-def main():
-    r = repository.Repo("/tmp/REPO")
-    s = RepoWriter(r)
-    s.new_session("TestSession")
-    os.chdir("/tmp")
-    def visitor(arg, dirname, names):
-        for name in names:
-            print "Visiting", dirname, name
-            full_path = os.path.join(dirname, name)
-            if not os.path.isfile(full_path):
-                continue
-            f = open(full_path, "r")
-            data = f.read()
-            f.close()
-            s.add(data, {"filename": full_path})
-        
-    os.path.walk("json", visitor, "bilder")
-
-    s.close_session()
     
 if __name__ == "__main__":
     main()
