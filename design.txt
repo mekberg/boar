@@ -1,0 +1,30 @@
+Inga filer tas bort, någonsin.
+
+
+Strukturen liknar SVN.
+
+Backenden baserad på zip-ar? Ett arkiv per fil, med versioner namngivna baserat på datum?
+
+Info-fil i varje hanterad katalog med md5-summor och annan info.
+
+Checkpoints, en lista av datum med kommentarer helt enkelt, istället för atomära commits.
+
+Varje arkiv i repositoryt kan ha flera sessioner. Så när man checkat
+in/ut ett arkiv så har katalogen en infofil som talar om vilket arkiv
+det handlar om (likt svn), och låter en checka in en ny version av
+arkivet.
+
+Detta kan implementeras genom att i backenden bara checka in
+sessioner, utan individuell koppling till andra sessioner, och göra
+kopplingen i metadata för sessionen som kommer från klientsidan.
+
+Hur göra atomära commits med flera filer?  
+
+* Strunta i atomiciteten och commita filerna en och en, möjligen med
+en garbning ibland. Nackdel: olänkade filer blir ett normalt tillstånd
+istället för en felindikator.
+
+* Använd flytt av katalog som commit. Nackdel: måste köra en
+"recovery" före varje start för att färdigställa ev. commit.
+
+
