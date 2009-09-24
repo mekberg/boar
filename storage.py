@@ -63,9 +63,9 @@ class RepoWriter:
         shutil.move(self.session_path, queue_dir)
         print "Done committing."
         print "Consolidating changes..."
-        self.repo.process_queue()
+        id = self.repo.process_queue()
         print "Consolidating changes complete"
-
+        return id
 
 checked_blobs = {}
 

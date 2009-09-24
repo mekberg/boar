@@ -5,6 +5,7 @@ import repository
 import storage
 import os
 import stat
+import sys
 
 def print_help():
     print """Usage: 
@@ -13,7 +14,17 @@ co <file>
 mkrepo <dir to create>
 """
 
+def get_relative_path(p):
+    """ Simply strips any leading slashes from the given path """
+    # TODO: doesn't work on windows
+    assert sys.platform.startswith("linux")
+    while p.startswith("/"):
+        p = p[1:]
+    return p
+
 def check_in_tree(repowriter, session_name, path):
+    if path != get_relative_path(path):
+        print "Warning: stripping leading slashes from given path"
     def visitor(arg, dirname, names):
         for name in names:
             full_path = os.path.join(dirname, name)
@@ -29,7 +40,7 @@ def check_in_tree(repowriter, session_name, path):
                 data = f.read()
             st = os.lstat(full_path)
             blobinfo = {}
-            blobinfo["filename"] = full_path
+            blobinfo["filename"] = get_relative_path(full_path)
             blobinfo["ctime"] = st[stat.ST_CTIME]
             blobinfo["mtime"] = st[stat.ST_MTIME]
             repowriter.add(data, blobinfo)
@@ -47,8 +58,8 @@ def cmd_ci(args):
     s = storage.RepoWriter(repo)
     s.new_session()
     check_in_tree(s, "TestSession", path_to_ci)
-    s.close_session()
-
+    session_id = s.close_session()
+    print "Checked in session id", session_id
 
 def cmd_mkrepo(args):
     repository.create_repository(args[0])

@@ -97,3 +97,4 @@ class Repo:
         shutil.move(queued_item, session_path)
         assert not os.path.exists(queued_item), "Queue should be empty after processing"
         print "Done"
+        return id
