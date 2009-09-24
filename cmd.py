@@ -4,6 +4,7 @@ import sys
 import repository
 import storage
 import os
+import stat
 
 def print_help():
     print """Usage: 
@@ -12,6 +13,27 @@ co <file>
 mkrepo <dir to create>
 """
 
+def check_in_tree(repowriter, session_name, path):
+    def visitor(arg, dirname, names):
+        for name in names:
+            full_path = os.path.join(dirname, name)
+            if os.path.isdir(full_path):
+                # print "Skipping directory:", full_path
+                continue
+            elif not os.path.isfile(full_path):
+                print "Skipping non-file:", full_path
+                continue
+
+            print "Adding", full_path
+            with open(full_path, "r") as f:
+                data = f.read()
+            st = os.lstat(full_path)
+            blobinfo = {}
+            blobinfo["filename"] = full_path
+            blobinfo["ctime"] = st[stat.ST_CTIME]
+            blobinfo["mtime"] = st[stat.ST_MTIME]
+            repowriter.add(data, blobinfo)
+    os.path.walk(path, visitor, None)
 
 
 def cmd_ci(args):
@@ -23,19 +45,8 @@ def cmd_ci(args):
     path_to_ci = args[0]
     assert os.path.exists(path_to_ci)
     s = storage.RepoWriter(repo)
-    s.new_session("TestSession")
-    def visitor(arg, dirname, names):
-        for name in names:
-            print "Visiting", dirname, name
-            full_path = os.path.join(dirname, name)
-            if not os.path.isfile(full_path):
-                continue
-            with open(full_path, "r") as f:
-                data = f.read()
-            s.add(data, {"filename": full_path})
-        
-    os.path.walk(path_to_ci, visitor, None)
-
+    s.new_session()
+    check_in_tree(s, "TestSession", path_to_ci)
     s.close_session()
 
 
