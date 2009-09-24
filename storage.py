@@ -75,13 +75,19 @@ class SessionReader:
         self.session_id = session_id
         self.repo = repo
         assert os.path.exists(self.path)
+        self.session_info = json
+        self.session_id = session_id
 
-    def verify(self):
         path = os.path.join(self.path, "bloblist.json")
         with open(path, "r") as f:
-            bloblist = json.load(f)
-        print "Loaded bloblist for session", self.session_id
-        for blobinfo in bloblist:
+            self.bloblist = json.load(f)
+
+        path = os.path.join(self.path, "session.json")
+        with open(path, "r") as f:
+            self.session_info = json.load(f)
+
+    def verify(self):
+        for blobinfo in self.bloblist:
             sum = blobinfo['md5sum']
             if checked_blobs.has_key(sum):
                 is_ok = checked_blobs[sum]
@@ -89,17 +95,6 @@ class SessionReader:
                 is_ok = self.repo.verify_blob(blobinfo['md5sum'])
                 checked_blobs[sum] = is_ok
             print blobinfo['filename'], is_ok
-
-
-    def open(self, session_name):
-        assert self.session_path == None
-
-    def get(self, file_path):
-        assert self.session_path != None
-        assert False, "Not implemented"
-
-    def get_session_names(self):
-        assert False, "Not implemented"
 
     
 if __name__ == "__main__":

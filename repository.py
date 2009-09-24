@@ -49,7 +49,11 @@ class Repo:
         for dir in os.listdir(os.path.join(self.repopath, SESSIONS_DIR)):
             if re.match("^[0-9]+$", dir) != None:
                 session_dirs.append(int(dir))
+        session_dirs.sort()
         return session_dirs
+
+    def get_session(self, id):
+        return storage.SessionReader(self, id)
 
     def find_next_session_id(self):
         assert os.path.exists(self.repopath)
