@@ -20,18 +20,19 @@ class RepoWriter:
         self.repo = repo
         self.session_path = None
         self.metadatas = []
-        self.sessioninfo = {}
 
-    def new_session(self, session_name):
+    def new_session(self):
         assert self.session_path == None
         assert os.path.exists(self.repo.repopath)
         self.session_path = tempfile.mkdtemp( \
             prefix = "tmp_", 
             dir = os.path.join(self.repo.repopath, repository.TMP_DIR)) 
 
-    def add(self, data, metadata = {}):
+    def add(self, data, metadata = {}, original_sum = None):
         assert self.session_path != None
         sum = md5sum(data)
+        if original_sum:
+            assert sum == md5sum, "Calculated checksum did not match client provided checksum"
         metadata["md5sum"] = sum
         fname = os.path.join(self.session_path, sum)
         existing_blob_path = self.repo.get_blob_path(sum)
@@ -42,10 +43,7 @@ class RepoWriter:
         self.metadatas.append(metadata)
         return sum
 
-    def set_sessioninfo(sessioninfo):
-        self.sessioninfo = sessioninfo
-
-    def close_session(self):
+    def close_session(self, sessioninfo = {}):
         assert self.session_path != None
 
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
@@ -56,15 +54,20 @@ class RepoWriter:
         session_filename = os.path.join(self.session_path, "session.json")
         assert not os.path.exists(session_filename)
         with open(session_filename, "w") as f:
-            json.dump(self.sessioninfo, f, indent = 4)
+            json.dump(sessioninfo, f, indent = 4)
 
         queue_dir = self.repo.get_queue_path("queued_session")
         assert not os.path.exists(queue_dir)
-        #queue_dir = self.repo.get_queue_path("")
-        print "Committing to", queue_dir, "from", self.session_path
+
+        print "Committing to", queue_dir, "from", self.session_path, "..."
         shutil.move(self.session_path, queue_dir)
-        print "Done committing"
+        print "Done committing."
+        print "Consolidating changes..."
         self.repo.process_queue()
+        print "Consolidating changes complete"
+
+
+checked_blobs = {}
 
 class SessionReader:
     def __init__(self, repo, session_id):
@@ -74,7 +77,6 @@ class SessionReader:
         assert os.path.exists(self.path)
 
     def verify(self):
-        checked_blobs = {}
         path = os.path.join(self.path, "bloblist.json")
         with open(path, "r") as f:
             bloblist = json.load(f)
@@ -86,7 +88,7 @@ class SessionReader:
             else:
                 is_ok = self.repo.verify_blob(blobinfo['md5sum'])
                 checked_blobs[sum] = is_ok
-            print sum, is_ok
+            print blobinfo['filename'], is_ok
 
 
     def open(self, session_name):
