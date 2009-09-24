@@ -42,6 +42,14 @@ def cmd_ci(args):
 def cmd_mkrepo(args):
     repository.create_repository(args[0])
 
+def cmd_verify(args):
+    repopath = os.getenv("REPO_PATH")
+    if repopath == None:
+        print "You need to set REPO_PATH"
+        return
+    repo = repository.Repo(repopath)
+    repo.verify_all()
+
 def main():
     if len(sys.argv) <= 1:
         print_help()
@@ -49,6 +57,8 @@ def main():
         cmd_ci(sys.argv[2:])
     elif sys.argv[1] == "mkrepo":
         cmd_mkrepo(sys.argv[2:])
+    elif sys.argv[1] == "verify":
+        cmd_verify(sys.argv[2:])
     else:
         print_help()
         return

@@ -66,10 +66,28 @@ class RepoWriter:
         print "Done committing"
         self.repo.process_queue()
 
-class RepoReader:
+class SessionReader:
+    def __init__(self, repo, session_id):
+        self.path = repo.get_session_path(session_id)
+        self.session_id = session_id
+        self.repo = repo
+        assert os.path.exists(self.path)
 
-    def __init__(self):
-        self.session_path = None
+    def verify(self):
+        checked_blobs = {}
+        path = os.path.join(self.path, "bloblist.json")
+        with open(path, "r") as f:
+            bloblist = json.load(f)
+        print "Loaded bloblist for session", self.session_id
+        for blobinfo in bloblist:
+            sum = blobinfo['md5sum']
+            if checked_blobs.has_key(sum):
+                is_ok = checked_blobs[sum]
+            else:
+                is_ok = self.repo.verify_blob(blobinfo['md5sum'])
+                checked_blobs[sum] = is_ok
+            print sum, is_ok
+
 
     def open(self, session_name):
         assert self.session_path == None

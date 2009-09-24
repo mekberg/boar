@@ -1,9 +1,12 @@
+from __future__ import with_statement
+
 import md5
 import os
 import tempfile
 import re
 import shutil
 import simplejson as json
+import storage
 
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
@@ -39,7 +42,7 @@ class Repo:
         session_path = get_session_path(self.repopath, session_id)
     
     def get_session_path(self, session_id):
-        return os.path.join(self.repopath, str(session_id))
+        return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
 
     def get_all_sessions(self):
         session_dirs = []
@@ -59,6 +62,17 @@ class Repo:
         #for session_id in get_all_sessions(self.repopath):
             #with open("")
             #json.loads()
+
+    def verify_all(self):
+        for sid in self.get_all_sessions():
+            session = storage.SessionReader(self, sid)
+            session.verify()
+
+    def verify_blob(self, sum):
+        path = self.get_blob_path(sum)
+        with open(path, "r") as f:
+            verified_ok = (sum == storage.md5sum(f.read()))
+        return verified_ok 
 
 
     def process_queue(self):        
