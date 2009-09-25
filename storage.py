@@ -16,14 +16,11 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
-class RepoWriter:
+class SessionWriter:
     def __init__(self, repo):
         self.repo = repo
         self.session_path = None
         self.metadatas = []
-
-    def new_session(self):
-        assert self.session_path == None
         assert os.path.exists(self.repo.repopath)
         self.session_path = tempfile.mkdtemp( \
             prefix = "tmp_", 
@@ -44,7 +41,7 @@ class RepoWriter:
         self.metadatas.append(metadata)
         return sum
 
-    def close_session(self, sessioninfo = {}):
+    def commit(self, sessioninfo = {}):
         assert self.session_path != None
 
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")

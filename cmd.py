@@ -24,7 +24,7 @@ def get_relative_path(p):
         p = p[1:]
     return p
 
-def check_in_tree(repowriter, path):
+def check_in_tree(sessionwriter, path):
     if path != get_relative_path(path):
         print "Warning: stripping leading slashes from given path"
     def visitor(arg, dirname, names):
@@ -46,7 +46,7 @@ def check_in_tree(repowriter, path):
             blobinfo["ctime"] = st[stat.ST_CTIME]
             blobinfo["mtime"] = st[stat.ST_MTIME]
             blobinfo["size"] = st[stat.ST_SIZE]
-            repowriter.add(data, blobinfo)
+            sessionwriter.add(data, blobinfo)
     os.path.walk(path, visitor, None)
 
 def list_sessions(repo):
@@ -100,14 +100,13 @@ def cmd_ci(args):
     path_to_ci = args[0]
     session_name = "MyTestSession"
     assert os.path.exists(path_to_ci)
-    s = storage.RepoWriter(repo)
-    s.new_session()
+    s = storage.SessionWriter(repo)
     check_in_tree(s, path_to_ci)
     session_info = {}
     session_info["name"] = session_name
     session_info["timestamp"] = int(time.time())
     session_info["date"] = time.ctime()
-    session_id = s.close_session(session_info)
+    session_id = s.commit(session_info)
     print "Checked in session id", session_id
 
 def cmd_mkrepo(args):
