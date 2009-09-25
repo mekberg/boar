@@ -6,6 +6,7 @@ import os
 import tempfile
 import re
 import simplejson as json
+import copy
 
 import repository
 import shutil
@@ -75,8 +76,6 @@ class SessionReader:
         self.session_id = session_id
         self.repo = repo
         assert os.path.exists(self.path)
-        self.session_info = json
-        self.session_id = session_id
 
         path = os.path.join(self.path, "bloblist.json")
         with open(path, "r") as f:
@@ -95,7 +94,14 @@ class SessionReader:
                 is_ok = self.repo.verify_blob(blobinfo['md5sum'])
                 checked_blobs[sum] = is_ok
             print blobinfo['filename'], is_ok
-
+            
+    def get_all_files(self):
+        for blobinfo in self.bloblist:
+            info = copy.copy(blobinfo)
+            with open(self.repo.get_blob_path(info['md5sum']), "r") as f:
+                info['data'] = f.read()
+            assert md5sum(info['data']) == info['md5sum']
+            yield info
     
 if __name__ == "__main__":
     main()

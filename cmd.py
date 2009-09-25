@@ -121,6 +121,30 @@ def cmd_verify(args):
     repo = repository.Repo(repopath)
     repo.verify_all()
 
+def cmd_co(args): 
+    repopath = os.getenv("REPO_PATH")
+    if repopath == None:
+        print "You need to set REPO_PATH"
+        return
+    session_name = args[0]
+    repo = repository.Repo(repopath)
+    session_ids = repo.get_all_sessions()
+    session_ids.reverse()
+    for sid in session_ids:
+        session = repo.get_session(sid)
+        name = session.session_info.get("name", "<no name>")
+        if name == session_name:
+            break
+    if name != session_name:
+        print "No such session found"
+        return
+    for info in session.get_all_files():
+        print info['filename']
+        if not os.path.exists(os.path.dirname(info['filename'])):
+            os.makedirs(os.path.dirname(info['filename']))
+        with open(info['filename'], "w") as f:
+            f.write(info['data'])
+
 def main():
     if len(sys.argv) <= 1:
         print_help()
@@ -132,6 +156,8 @@ def main():
         cmd_verify(sys.argv[2:])
     elif sys.argv[1] == "list":
         cmd_list(sys.argv[2:])
+    elif sys.argv[1] == "co":
+        cmd_co(sys.argv[2:])
     else:
         print_help()
         return
