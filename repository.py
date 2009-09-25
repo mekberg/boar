@@ -51,6 +51,9 @@ class Repo:
     def get_session(self, id):
         return sessions.SessionReader(self, id)
 
+    def create_session(self):
+        return sessions.SessionWriter(self)
+
     def find_next_session_id(self):
         assert os.path.exists(self.repopath)
         session_dirs = self.get_all_sessions()
