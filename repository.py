@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 import simplejson as json
-import storage
+import sessions
 
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
@@ -49,7 +49,7 @@ class Repo:
         return session_dirs
 
     def get_session(self, id):
-        return storage.SessionReader(self, id)
+        return sessions.SessionReader(self, id)
 
     def find_next_session_id(self):
         assert os.path.exists(self.repopath)
@@ -59,13 +59,13 @@ class Repo:
 
     def verify_all(self):
         for sid in self.get_all_sessions():
-            session = storage.SessionReader(self, sid)
+            session = sessions.SessionReader(self, sid)
             session.verify()
 
     def verify_blob(self, sum):
         path = self.get_blob_path(sum)
         with open(path, "r") as f:
-            verified_ok = (sum == storage.md5sum(f.read()))
+            verified_ok = (sum == sessions.md5sum(f.read()))
         return verified_ok 
 
     def process_queue(self):        

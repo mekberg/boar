@@ -2,7 +2,7 @@
 from __future__ import with_statement
 import sys
 import repository
-import storage
+import sessions
 import os
 import stat
 import sys
@@ -100,7 +100,7 @@ def cmd_ci(args):
     path_to_ci = args[0]
     session_name = "MyTestSession"
     assert os.path.exists(path_to_ci)
-    s = storage.SessionWriter(repo)
+    s = sessions.SessionWriter(repo)
     check_in_tree(s, path_to_ci)
     session_info = {}
     session_info["name"] = session_name
