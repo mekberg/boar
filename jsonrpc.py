@@ -1033,7 +1033,7 @@ class Server:
         except RPCFault, err:
             return self.__data_serializer.dumps_error( err, id=None )
         except Exception, err:
-            self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
+            self.log( "EXCEPTION2 %d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id=None )
 
         if method not in self.funcs:
@@ -1053,7 +1053,7 @@ class Server:
         except Exception, err:
             if notification:
                 return None
-            self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
+            self.log( "EXCEPTION %d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
         if notification:
@@ -1061,7 +1061,7 @@ class Server:
         try:
             return self.__data_serializer.dumps_response( result, id )
         except Exception, err:
-            self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
+            self.log( "NOTIFICATION %d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
     def serve(self, n=None):
