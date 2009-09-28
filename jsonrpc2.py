@@ -56,16 +56,14 @@ class Server:
         try:
             id = None # In case of an early exception below
             id, result = self._handle_msg(recvd_obj)
-            response = {"result": result,
-                        "id": id,
-                        "jsonrpc": "2.0"}
+            response = {"result": result}
         except Exception, err:
             print "Exception while handling:", type(err), err
             response = {"error": {"code": -32603,
-                                  "message": str(err)},
-                        "id": id,
-                        "jsonrpc": "2.0"}
-
+                                  "message": str(err)}}
+            
+        response["id"] = id
+        response["jsonrpc"] = "2.0"
         msg = json.dumps(response)
         self.conn.sendall(msg)
 
