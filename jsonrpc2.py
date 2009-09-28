@@ -19,15 +19,6 @@ class Server:
         self.input_buffer = ""
         self.conn = conn
 
-    def recv(self):
-        """Returns some data from the other side"""
-        return self.conn.recv(1024)
-        
-    def send(self, msg):
-        print "Sending msg:", msg
-        self.conn.sendall(msg)
-
-    
     def register_function(self, name, func):
         assert isinstance(name, types.StringType)
         self.functions[name] = func
@@ -36,24 +27,35 @@ class Server:
         while True:
             self.serve_once()
 
-    def serve_once(self):
-        self.input_buffer += self.recv()
+    def _poll_for_message(self):
+        self.input_buffer += self.conn.recv(1024)
         try:
             recvd_obj = json.loads(self.input_buffer)
         except ValueError:
             # Not yet a full packet probably
-            return
+            return None
         print "Got message:", self.input_buffer
         self.input_buffer = ""
-        id = None
+        return recvd_obj
+
+    def _handle_msg(self, msg):
+        id = msg['id']
+        method = msg['method']
+        params = []
+        if msg.has_key('params'):
+            params = msg['params']
+        handler = self.functions[method]
+        result = handler(*params)
+        return id, result
+
+    def serve_once(self):
+        recvd_obj = self._poll_for_message()
+        if recvd_obj == None:
+            return
+
         try:
-            id = recvd_obj['id']
-            method = recvd_obj['method']
-            params = []
-            if recvd_obj.has_key('params'):
-                params = recvd_obj['params']
-            handler = self.functions[method]
-            result = handler(*params)
+            id = None # In case of an early exception below
+            id, result = self._handle_msg(recvd_obj)
             response = {"result": result,
                         "id": id,
                         "jsonrpc": "2.0"}
@@ -65,7 +67,7 @@ class Server:
                         "jsonrpc": "2.0"}
 
         msg = json.dumps(response)
-        self.send(msg)
+        self.conn.sendall(msg)
 
 
 def hello():
