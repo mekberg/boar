@@ -18,7 +18,7 @@ class Front:
         print "Somebody said hello"
         return "Hello!"
 
-    def get_all_session_ids(self):
+    def get_session_ids(self, filter = {}):
         sessions = self.repo.get_all_sessions()
         print "Get all session ids:", sessions
         return sessions
@@ -27,25 +27,13 @@ class Front:
         self.new_session = sessions.SessionWriter(self.repo)
 
     def add(self, data, metadata = {}, original_sum = None):
+        """ Must be called after a create_session()  """
         self.new_session.add(data, metadata, original_sum)
 
     def commit(self, sessioninfo = {}):
         self.new_session.commit(sessioninfo)
+        self.new_session = None
 
-    def init_co(self, session_id):
-        print "Init co for session", session_id
-        session = self.repo.get_session(session_id)
-        self.files_generator = session.get_all_files()
-
-    def get_next_file(self):
-        try:
-            info = self.files_generator.next()
-        except StopIteration:
-            print "No more files"
-            return None
-        print info['filename'], info['size']
-
-        info['data_b64'] = base64.b64encode(info['data'])
-        del info['data']
-        return info
+    def get_file(self, sum):
+        return self.repo.get_blob(sum)
 

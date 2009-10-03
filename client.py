@@ -7,9 +7,10 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
-server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), jsonrpc.TransportTcpIp(addr=("127.0.0.1", 31415), timeout=60.0))
+server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), jsonrpc.TransportTcpIp(addr=("127.0.0.1", 50000), timeout=60.0))
 
-print server.front.hello()
+print server.hello()
+"""
 print server.front.get_all_session_ids()
 print "Initing co"
 server.front.init_co(10)
@@ -21,3 +22,4 @@ while True:
     print info['filename'], info['size'], info['md5sum']
     data = base64.b64decode(info['data_b64'])
     print md5sum(data) == info['md5sum']
+"""

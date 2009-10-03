@@ -1,7 +1,6 @@
 #!/usr/bin/python
 from __future__ import with_statement
 
-import md5
 import os
 import tempfile
 import re
@@ -11,10 +10,7 @@ import copy
 import repository
 import shutil
 
-def md5sum(data):
-    m = md5.new()
-    m.update(data)
-    return m.hexdigest()
+from common import *
 
 class SessionWriter:
     def __init__(self, repo):
