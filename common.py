@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 import md5
 import re
+import os
 
 def is_md5sum(str):
     return re.match("^[a-f0-9]{32}$", str) != None    
