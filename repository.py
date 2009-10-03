@@ -1,21 +1,18 @@
 from __future__ import with_statement
 
-import md5
 import os
 import re
 import shutil
 import simplejson as json
 import sessions
 
+from common import *
+
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
 SESSIONS_DIR = "sessions"
 TMP_DIR = "tmp"
 
-def is_md5sum(str):
-    return re.match("^[a-f0-9]{32}$", str) != None    
-
-assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 
 def create_repository(repopath):
     os.mkdir(repopath)
@@ -23,6 +20,7 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, BLOB_DIR))
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
     os.mkdir(os.path.join(repopath, TMP_DIR))
+    
 
 class Repo:
     def __init__(self, repopath):
@@ -36,6 +34,14 @@ class Repo:
     def get_blob_path(self, sum):
         assert is_md5sum(sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
+
+    def get_blob(self, sum):
+        """ Returns None if there is no such blob """
+        path = self.get_blob_path(sum)
+        data = read_file(path)
+        assert sum == md5sum(data)
+        return data
+            
 
     def get_session_path(self, session_id):
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
@@ -68,7 +74,7 @@ class Repo:
     def verify_blob(self, sum):
         path = self.get_blob_path(sum)
         with open(path, "r") as f:
-            verified_ok = (sum == sessions.md5sum(f.read()))
+            verified_ok = (sum == md5sum(f.read()))
         return verified_ok 
 
     def process_queue(self):        
