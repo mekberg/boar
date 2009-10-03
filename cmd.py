@@ -8,6 +8,8 @@ import sys
 import datetime
 import time
 
+from front import Front
+
 def print_help():
     print """Usage: 
 ci <file>
@@ -48,114 +50,100 @@ def check_in_tree(sessionwriter, path):
             sessionwriter.add(data, blobinfo)
     os.path.walk(path, visitor, None)
 
-def list_sessions(repo):
+def list_sessions(front):
     sessions_count = {}
-    for sid in repo.get_all_sessions():
-        session = repo.get_session(sid)
-        name = session.session_info.get("name", "<no name>")
+    for sid in front.get_session_ids():
+        session_info = front.get_session_info(sid)
+        name = session_info.get("name", "<no name>")
         sessions_count[name] = sessions_count.get(name, 0) + 1
     for name in sessions_count:
         print name, "(" + str(sessions_count[name]) + " revs)"
 
-def list_revisions(repo, session_name):
-    for sid in repo.get_all_sessions():
-        session = repo.get_session(sid)
-        name = session.session_info.get("name", "<no name>")
+def list_revisions(front, session_name):
+    for sid in front.get_session_ids():
+        session_info = front.get_session_info(sid)
+        bloblist = front.get_session_bloblist(sid)
+        name = session_info.get("name", "<no name>")
         if name != session_name:
             continue
-        print "Revision id", str(sid), "(" + session.session_info['date'] + "),", \
-            len(session.bloblist), "files"
+        print "Revision id", str(sid), "(" + session_info['date'] + "),", \
+            len(bloblist), "files"
 
-def list_files(repo, session_name, revision):
-    session = repo.get_session(revision)
-    name = session.session_info.get("name", "<no name>")
+def list_files(front, session_name, revision):
+    session_info = front.get_session_info(revision)
+    name = session_info.get("name", "<no name>")
     if name != session_name:
         print "There is no such session/revision"
         return
-    for info in session.bloblist:
+    for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
-
-def cmd_list(args):
-    repopath = os.getenv("REPO_PATH")
-    if repopath == None:
-        print "You need to set REPO_PATH"
-        return
-    repo = repository.Repo(repopath)
-    if len(args) == 0:
-        list_sessions(repo)
-    elif len(args) == 1:
-        list_revisions(repo, args[0])
-    elif len(args) == 2:
-        list_files(repo, args[0], args[1])
-    else:
-        print "Duuuh?"
-
-def cmd_ci(args):
-    repopath = os.getenv("REPO_PATH")
-    if repopath == None:
-        print "You need to set REPO_PATH"
-        return
-    repo = repository.Repo(repopath)
-    path_to_ci = args[0]
-    session_name = "MyTestSession"
-    assert os.path.exists(path_to_ci)
-    s = repo.create_session()
-    check_in_tree(s, path_to_ci)
-    session_info = {}
-    session_info["name"] = session_name
-    session_info["timestamp"] = int(time.time())
-    session_info["date"] = time.ctime()
-    session_id = s.commit(session_info)
-    print "Checked in session id", session_id
 
 def cmd_mkrepo(args):
     repository.create_repository(args[0])
 
-def cmd_verify(args):
-    repopath = os.getenv("REPO_PATH")
-    if repopath == None:
-        print "You need to set REPO_PATH"
-        return
-    repo = repository.Repo(repopath)
-    repo.verify_all()
 
-def cmd_co(args): 
-    repopath = os.getenv("REPO_PATH")
-    if repopath == None:
-        print "You need to set REPO_PATH"
-        return
-    session_name = args[0]
-    repo = repository.Repo(repopath)
-    session_ids = repo.get_all_sessions()
+def cmd_list(front, args):
+    if len(args) == 0:
+        list_sessions(front)
+    elif len(args) == 1:
+        list_revisions(front, args[0])
+    elif len(args) == 2:
+        list_files(front, args[0], args[1])
+    else:
+        print "Duuuh?"
+
+def cmd_ci(front, args):
+    path_to_ci = args[0]
+    session_name = "MyTestSession"
+    assert os.path.exists(path_to_ci)
+    front.create_session()
+    check_in_tree(front, path_to_ci)
+    session_info = {}
+    session_info["name"] = session_name
+    session_info["timestamp"] = int(time.time())
+    session_info["date"] = time.ctime()
+    session_id = front.commit(session_info)
+    print "Checked in session id", session_id
+
+def cmd_co(front, args): 
+    session_ids = front.get_session_ids()
     session_ids.reverse()
+    session_name = args[0]
     for sid in session_ids:
-        session = repo.get_session(sid)
-        name = session.session_info.get("name", "<no name>")
+        session_info = front.get_session_info(sid)
+        name = session_info.get("name", "<no name>")
         if name == session_name:
             break
     if name != session_name:
         print "No such session found"
         return
-    for info in session.get_all_files():
+    for info in front.get_session_bloblist(sid):
         print info['filename']
+        data = front.get_blob(info['md5sum'])
+        assert data
         if not os.path.exists(os.path.dirname(info['filename'])):
             os.makedirs(os.path.dirname(info['filename']))
-        with open(info['filename'], "w") as f:
-            f.write(info['data'])
+        with open(info['filename'], "w") as f:            
+            f.write(data)
 
-def main():
+def main():    
+    repopath = os.getenv("REPO_PATH")
+    if repopath == None:
+        print "You need to set REPO_PATH"
+        front = None
+    else:
+        front = Front(repository.Repo(repopath))
+
     if len(sys.argv) <= 1:
         print_help()
-    elif sys.argv[1] == "ci":
-        cmd_ci(sys.argv[2:])
     elif sys.argv[1] == "mkrepo":
         cmd_mkrepo(sys.argv[2:])
-    elif sys.argv[1] == "verify":
-        cmd_verify(sys.argv[2:])
+    elif sys.argv[1] == "ci":
+        cmd_ci(front, sys.argv[2:])
     elif sys.argv[1] == "list":
-        cmd_list(sys.argv[2:])
+        cmd_list(front, sys.argv[2:])
     elif sys.argv[1] == "co":
-        cmd_co(sys.argv[2:])
+        cmd_co(front, sys.argv[2:])
     else:
         print_help()
         return

@@ -19,21 +19,28 @@ class Front:
         return "Hello!"
 
     def get_session_ids(self, filter = {}):
-        sessions = self.repo.get_all_sessions()
-        print "Get all session ids:", sessions
-        return sessions
+        return self.repo.get_all_sessions()
+
+    def get_session_info(self, id):
+        session_reader = self.repo.get_session(id)
+        return session_reader.session_info
+
+    def get_session_bloblist(self, id):
+        session_reader = self.repo.get_session(id)
+        return session_reader.bloblist
 
     def create_session(self):
-        self.new_session = sessions.SessionWriter(self.repo)
+        self.new_session = self.repo.create_session()
 
     def add(self, data, metadata = {}, original_sum = None):
         """ Must be called after a create_session()  """
         self.new_session.add(data, metadata, original_sum)
 
     def commit(self, sessioninfo = {}):
-        self.new_session.commit(sessioninfo)
+        id = self.new_session.commit(sessioninfo)
         self.new_session = None
+        return id
 
-    def get_file(self, sum):
+    def get_blob(self, sum):
         return self.repo.get_blob(sum)
 

@@ -21,11 +21,10 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
     os.mkdir(os.path.join(repopath, TMP_DIR))
     
-
 class Repo:
     def __init__(self, repopath):
         self.repopath = repopath
-        assert os.path.exists(self.repopath)
+        assert os.path.exists(self.repopath), "No such directory: %s" % (self.repopath)
         self.process_queue()
 
     def get_queue_path(self, filename):
