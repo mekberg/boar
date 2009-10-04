@@ -17,10 +17,15 @@ co <file>
 mkrepo <dir to create>
 """
 
+def convert_win_path_to_unix(path):
+    """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
+        Has no effect on unix style paths. """
+    nodrive = os.path.splitdrive(path)[1]
+    return nodrive.replace("\\", "/")
+
 def get_relative_path(p):
     """ Simply strips any leading slashes from the given path """
-    # TODO: doesn't work on windows
-    assert sys.platform.startswith("linux")
+    p = convert_win_path_to_unix(p)
     while p.startswith("/"):
         p = p[1:]
     return p
