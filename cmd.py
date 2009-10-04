@@ -52,6 +52,7 @@ def check_in_tree(sessionwriter, path):
             blobinfo["ctime"] = st[stat.ST_CTIME]
             blobinfo["mtime"] = st[stat.ST_MTIME]
             blobinfo["size"] = st[stat.ST_SIZE]
+            assert len(data) == blobinfo["size"]
             sessionwriter.add(data, blobinfo)
     os.path.walk(path, visitor, None)
 
