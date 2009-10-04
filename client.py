@@ -1,15 +1,16 @@
 import jsonrpc
 import md5
 import base64
+import re
+def connect(url):
+    
+    m = re.match("avo://(.*?)/", url)
+    assert m, "Not a valid avocado url"
+    address = m.group(1)    
+    server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
+                                 jsonrpc.TransportTcpIp(addr=(address, 50000), timeout=60.0))
+    return server.front
 
-def md5sum(data):
-    m = md5.new()
-    m.update(data)
-    return m.hexdigest()
-
-server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), jsonrpc.TransportTcpIp(addr=("127.0.0.1", 50000), timeout=60.0))
-
-print server.hello()
 """
 print server.front.get_all_session_ids()
 print "Initing co"

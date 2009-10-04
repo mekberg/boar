@@ -7,6 +7,7 @@ import stat
 import sys
 import datetime
 import time
+import client
 
 from front import Front
 
@@ -134,11 +135,18 @@ def cmd_co(front, args):
 
 def main():    
     repopath = os.getenv("REPO_PATH")
-    if repopath == None:
-        print "You need to set REPO_PATH"
-        front = None
-    else:
+    repourl = os.getenv("REPO_URL")
+    front = None
+    if repopath == None and repourl == None:
+        print "You need to set REPO_PATH or REPO_URL"
+    elif repopath and repourl:
+        print "Both REPO_PATH and REPO_URL was set. Only one allowed"
+    elif repopath:
+        print "Using repo at '%s'" % (repopath)
         front = Front(repository.Repo(repopath))
+    elif repourl:
+        print "Using remote repo at '%s'" % (repourl)
+        front = client.connect(repourl)
 
     if len(sys.argv) <= 1:
         print_help()

@@ -5,8 +5,7 @@ import front
 
 def main():
     server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
-                            jsonrpc.TransportTcpIp(timeout=60.0, addr=("127.0.0.1", 31415), 
-                                                   logfunc=jsonrpc.log_file("myrpc.log")))
+                            jsonrpc.TransportTcpIp(timeout=60.0, addr=("0.0.0.0", 50000)))
 
     repopath = os.getenv("REPO_PATH")
     if repopath == None:
