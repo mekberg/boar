@@ -12,7 +12,7 @@ assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 def read_file(filename):
     if not os.path.exists(filename):
         return None
-    with open(filename, "r") as f:
+    with open(filename, "rb") as f:
         data = f.read()
     return data
 
@@ -21,3 +21,4 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
+    
