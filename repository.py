@@ -72,7 +72,7 @@ class Repo:
 
     def verify_blob(self, sum):
         path = self.get_blob_path(sum)
-        with open(path, "r") as f:
+        with open(path, "rb") as f:
             verified_ok = (sum == md5sum(f.read()))
         return verified_ok 
 
