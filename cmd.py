@@ -59,7 +59,8 @@ def check_in_tree(sessionwriter, path):
             blobinfo["mtime"] = st[stat.ST_MTIME]
             blobinfo["size"] = st[stat.ST_SIZE]
             assert len(data) == blobinfo["size"]
-            sessionwriter.add(data, blobinfo)
+            sum = md5sum(data)
+            sessionwriter.add(base64.b64encode(data), blobinfo, sum)
     os.path.walk(path, visitor, None)
 
 def list_sessions(front):
