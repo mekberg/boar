@@ -8,7 +8,7 @@ import sys
 import datetime
 import time
 import client
-
+import base64
 from front import Front
 
 def print_help():
@@ -17,6 +17,12 @@ ci <file>
 co <file>
 mkrepo <dir to create>
 """
+
+def get_blob(front, sum):
+    """ Hack to wrap base64 encoding to make json happy """ 
+    b64data = front.get_blob_b64(sum)
+    data = base64.b64decode(b64data)
+    return data
 
 def convert_win_path_to_unix(path):
     """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
@@ -126,7 +132,7 @@ def cmd_co(front, args):
         return
     for info in front.get_session_bloblist(sid):
         print info['filename']
-        data = front.get_blob(info['md5sum'])
+        data = get_blob(front, info['md5sum'])
         assert data
         if not os.path.exists(os.path.dirname(info['filename'])):
             os.makedirs(os.path.dirname(info['filename']))
