@@ -5,7 +5,10 @@ import re
 import os
 
 def is_md5sum(str):
-    return re.match("^[a-f0-9]{32}$", str) != None    
+    try:
+        return re.match("^[a-f0-9]{32}$", str) != None    
+    except TypeError:
+        return False
 
 assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 

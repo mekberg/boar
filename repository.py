@@ -34,6 +34,10 @@ class Repo:
         assert is_md5sum(sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
 
+    def has_blob(self, sum):
+        path = self.get_blob_path(sum)
+        return os.path.exists(path)
+
     def get_blob(self, sum):
         """ Returns None if there is no such blob """
         path = self.get_blob_path(sum)
