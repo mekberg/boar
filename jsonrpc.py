@@ -778,15 +778,18 @@ class TransportSocket(Transport):
             self.connect()
         self.log( "--> "+repr(string) )
         self.s.sendall( string )
+        
     def recv( self ):
         if self.s is None:
             self.connect()
-        data = self.s.recv( self.limit )
+        data_parts = []
+        data_parts.append(self.s.recv( self.limit ))
         while( select.select((self.s,), (), (), 0.1)[0] ):  #TODO: this select is probably not necessary, because server closes this socket
             d = self.s.recv( self.limit )
             if len(d) == 0:
                 break
-            data += d
+            data_parts.append(d)
+        data = "".join(data_parts)
         self.log( "<-- "+repr(data) )
         return data
 
@@ -1033,7 +1036,7 @@ class Server:
         except RPCFault, err:
             return self.__data_serializer.dumps_error( err, id=None )
         except Exception, err:
-            self.log( "EXCEPTION2 %d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
+            self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id=None )
 
         if method not in self.funcs:
@@ -1053,7 +1056,7 @@ class Server:
         except Exception, err:
             if notification:
                 return None
-            self.log( "EXCEPTION %d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
+            self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
         if notification:
@@ -1061,7 +1064,7 @@ class Server:
         try:
             return self.__data_serializer.dumps_response( result, id )
         except Exception, err:
-            self.log( "NOTIFICATION %d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
+            self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
     def serve(self, n=None):
