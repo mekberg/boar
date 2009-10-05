@@ -8,7 +8,7 @@ def connect(url):
     assert m, "Not a valid avocado url"
     address = m.group(1)    
     server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
-                                 jsonrpc.TransportTcpIp(addr=(address, 50000), timeout=60.0))
+                                 jsonrpc.TransportTcpIp(addr=(address, 50000), timeout=60.0, limit=2**16))
     return server.front
 
 """
