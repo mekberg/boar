@@ -21,17 +21,19 @@ class Front:
     def create_session(self):
         self.new_session = self.repo.create_session()
 
-    def add(self, data, metadata = {}, original_sum = None):
+    def add(self, b64data, metadata = {}, original_sum = None):
         """ Must be called after a create_session()  """
-        self.new_session.add(data, metadata, original_sum)
+        self.new_session.add(base64.b64decode(b64data), metadata, original_sum)
 
     def commit(self, sessioninfo = {}):
         id = self.new_session.commit(sessioninfo)
         self.new_session = None
         return id
 
-    def get_blob(self, sum):
-        return self.repo.get_blob(sum)
+## Disabled until I can figure out how to make transparent 
+##calls with binary data in jasonrpc
+#    def get_blob(self, sum):
+#        return self.repo.get_blob(sum)
 
     def get_blob_b64(self, sum):
         blob = self.repo.get_blob(sum)
