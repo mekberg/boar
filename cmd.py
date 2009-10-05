@@ -5,7 +5,6 @@ import repository
 import os
 import stat
 import sys
-import datetime
 import time
 import client
 import base64
@@ -169,4 +168,7 @@ def main():
         return
 
 if __name__ == "__main__":
+    t1 = time.time()
     main()
+    t2 = time.time()
+    print "Finished in", round(t2-t1, 2), "seconds"
