@@ -50,7 +50,7 @@ def check_in_tree(sessionwriter, path):
                 continue
 
             print "Adding", full_path
-            with open(full_path, "r") as f:
+            with open(full_path, "rb") as f:
                 data = f.read()
             st = os.lstat(full_path)
             blobinfo = {}
