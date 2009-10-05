@@ -7,17 +7,6 @@ class Front:
     def __init__(self, repo):
         self.repo = repo
         
-
-    def open(self):
-        pass
-
-    def close(self):
-        pass
-
-    def hello(self):
-        print "Somebody said hello"
-        return "Hello!"
-
     def get_session_ids(self, filter = {}):
         return self.repo.get_all_sessions()
 
@@ -44,3 +33,9 @@ class Front:
     def get_blob(self, sum):
         return self.repo.get_blob(sum)
 
+    def get_blob_b64(self, sum):
+        blob = self.repo.get_blob(sum)
+        return base64.b64encode(blob)
+
+    def has_blob(self, sum):
+        return self.repo.has_blob(sum)
