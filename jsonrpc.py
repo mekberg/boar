@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: ascii -*-
+# -*- coding: utf-8 -*-
 """
 JSON-RPC (remote procedure call).
 
@@ -271,6 +271,22 @@ def dictkeyclean(d):
 
 #----------------------
 # JSON-RPC 1.0
+
+def ReadJsonObjectFromSocket(s):
+    """Perform a blocking read of a json object from the given socket"""
+    print "Receiving from socket"
+    data_parts = []
+    data_parts.extend(self.s.recv( self.limit ))
+    while( select.select((s,), (), (), 0.1)[0] ):  #TODO: this select is probably not necessary, because server closes this socket
+        d = s.recv( self.limit )
+        if len(d) == 0:
+            print "Got nothing on read. Maybe finished?"
+            break
+        data_parts.append(d)
+    print "Finished reading"
+    data = "".join(data_parts)
+    return data
+
 
 class JsonRpc10:
     """JSON-RPC V1.0 data-structure / serializer
@@ -782,15 +798,7 @@ class TransportSocket(Transport):
     def recv( self ):
         if self.s is None:
             self.connect()
-        data_parts = []
-        data_parts.append(self.s.recv( self.limit ))
-        while( select.select((self.s,), (), (), 0.1)[0] ):  #TODO: this select is probably not necessary, because server closes this socket
-            d = self.s.recv( self.limit )
-            if len(d) == 0:
-                break
-            data_parts.append(d)
-        data = "".join(data_parts)
-        self.log( "<-- "+repr(data) )
+        data = ReadJsonObjectFromSocket(self.s)
         return data
 
     def sendrecv( self, string ):
@@ -905,10 +913,7 @@ class ServerProxy:
         else:
             req_str  = self.__data_serializer.dumps_request( methodname, kwargs, id )
 
-        try:
-            resp_str = self.__transport.sendrecv( req_str )
-        except Exception,err:
-            raise RPCTransportError(err)
+        resp_str = self.__transport.sendrecv( req_str )
         resp = self.__data_serializer.loads_response( resp_str )
         return resp[0]
 
