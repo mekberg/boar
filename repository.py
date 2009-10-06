@@ -89,11 +89,13 @@ class Repo:
         for filename in items:
             if not is_md5sum(filename):
                 continue
+            blob_to_move = os.path.join(queued_item, filename)
             destination_path = self.get_blob_path(filename)
+            assert filename == md5sum_file(blob_to_move)
             dir = os.path.dirname(destination_path)
             if not os.path.exists(dir):
                 os.mkdir(dir)
-            os.rename(os.path.join(queued_item, filename), destination_path)
+            os.rename(blob_to_move, destination_path)
             print "Moving", os.path.join(queued_item, filename),"to", destination_path
         assert set(os.listdir(queued_item)) == set(["session.json", "bloblist.json"]), \
             "Unexpected or missing files in queue dir"
