@@ -60,6 +60,8 @@ def check_in_tree(sessionwriter, path):
             blobinfo["size"] = st[stat.ST_SIZE]
             assert len(data) == blobinfo["size"]
             sum = md5sum(data)
+            file_sum = md5sum_file(full_path)
+            assert sum == file_sum
             sessionwriter.add(base64.b64encode(data), blobinfo, sum)
     os.path.walk(path, visitor, None)
 
@@ -140,6 +142,14 @@ def cmd_co(front, args):
             f.write(data)
 
 def main():    
+
+    if len(sys.argv) <= 1:
+        print_help()
+        return
+    elif sys.argv[1] == "mkrepo":
+        cmd_mkrepo(sys.argv[2:])
+        return
+
     repopath = os.getenv("REPO_PATH")
     repourl = os.getenv("REPO_URL")
     front = None
@@ -154,11 +164,7 @@ def main():
         print "Using remote repo at '%s'" % (repourl)
         front = client.connect(repourl)
 
-    if len(sys.argv) <= 1:
-        print_help()
-    elif sys.argv[1] == "mkrepo":
-        cmd_mkrepo(sys.argv[2:])
-    elif sys.argv[1] == "ci":
+    if sys.argv[1] == "ci":
         cmd_ci(front, sys.argv[2:])
     elif sys.argv[1] == "list":
         cmd_list(front, sys.argv[2:])
