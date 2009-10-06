@@ -24,4 +24,9 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
-    
+def md5sum_file(path):
+    m = md5.new()
+    with open(path, "rb") as f:
+        data = f.read()
+    m.update(data)
+    return m.hexdigest()
