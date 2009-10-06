@@ -826,7 +826,7 @@ class TransportSocket(Transport):
                     break
                 conn, addr = self.s.accept()
                 self.log( "%s connected" % repr(addr) )
-                data = conn.recv(self.limit)
+                data = ReadJsonObjectFromSocket(conn)
                 self.log( "%s --> %s" % (repr(addr), repr(data)) )
                 result = handler(data)
                 if data is not None:
