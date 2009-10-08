@@ -1,0 +1,1 @@
+C:\Python25\python.exe C:\Python25\pyarchive\cmd.py %1 %2 %3 %4
