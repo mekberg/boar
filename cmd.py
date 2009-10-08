@@ -8,6 +8,8 @@ import sys
 import time
 import client
 import base64
+from common import *
+
 from front import Front
 
 def print_help():
@@ -138,7 +140,7 @@ def cmd_co(front, args):
         assert data
         if not os.path.exists(os.path.dirname(info['filename'])):
             os.makedirs(os.path.dirname(info['filename']))
-        with open(info['filename'], "w") as f:            
+        with open(info['filename'], "wb") as f:            
             f.write(data)
 
 def main():    
