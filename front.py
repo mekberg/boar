@@ -21,7 +21,7 @@ class Front:
     def create_session(self):
         self.new_session = self.repo.create_session()
 
-    def add(self, b64data, metadata = {}, original_sum = None):
+    def add(self, b64data, metadata, original_sum):
         """ Must be called after a create_session()  """
         self.new_session.add(base64.b64decode(b64data), metadata, original_sum)
 
