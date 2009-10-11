@@ -25,7 +25,10 @@ class SessionWriter:
             prefix = "tmp_", 
             dir = os.path.join(self.repo.repopath, repository.TMP_DIR)) 
 
-    def add(self, data, metadata = {}, original_sum = None):
+    def add(self, data, metadata, original_sum):
+        assert data != None
+        assert metadata != None
+        assert is_md5sum(original_sum)
         assert self.session_path != None
         sum = md5sum(data)
         if original_sum and (sum != original_sum):
