@@ -11,6 +11,7 @@ import base64
 from common import *
 
 from front import Front
+from common import *
 
 def print_help():
     print """Usage: 
@@ -65,6 +66,7 @@ def check_in_tree(sessionwriter, path):
             file_sum = md5sum_file(full_path)
             assert sum == file_sum
             sessionwriter.add(base64.b64encode(data), blobinfo, sum)
+
     os.path.walk(path, visitor, None)
 
 def list_sessions(front):
