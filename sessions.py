@@ -41,7 +41,11 @@ class SessionWriter:
             with open(fname, "wb") as f:
                 f.write(data)
         self.metadatas.append(metadata)
-        return sum
+
+    def add_existing(self, metadata, sum):
+        assert self.repo.has_blob(sum)
+        metadata["md5sum"] = sum
+        self.metadatas.append(metadata)
 
     def commit(self, sessioninfo = {}):
         assert self.session_path != None

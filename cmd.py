@@ -53,19 +53,21 @@ def check_in_tree(sessionwriter, path):
                 continue
 
             print "Adding", full_path
-            with open(full_path, "rb") as f:
-                data = f.read()
+            file_sum = md5sum_file(full_path)
             st = os.lstat(full_path)
             blobinfo = {}
             blobinfo["filename"] = get_relative_path(full_path)
             blobinfo["ctime"] = st[stat.ST_CTIME]
             blobinfo["mtime"] = st[stat.ST_MTIME]
             blobinfo["size"] = st[stat.ST_SIZE]
-            assert len(data) == blobinfo["size"]
-            sum = md5sum(data)
-            file_sum = md5sum_file(full_path)
-            assert sum == file_sum
-            sessionwriter.add(base64.b64encode(data), blobinfo, sum)
+            if sessionwriter.has_blob(file_sum):
+                sessionwriter.add_existing(blobinfo, file_sum)
+            else:
+                with open(full_path, "rb") as f:
+                    data = f.read()
+                assert len(data) == blobinfo["size"]
+                assert md5sum(data) == file_sum
+                sessionwriter.add(base64.b64encode(data), blobinfo, file_sum)
 
     os.path.walk(path, visitor, None)
 
@@ -113,7 +115,8 @@ def cmd_list(front, args):
 
 def cmd_ci(front, args):
     path_to_ci = args[0]
-    session_name = "MyTestSession"
+    session_name = args[1]
+
     assert os.path.exists(path_to_ci)
     front.create_session()
     check_in_tree(front, path_to_ci)

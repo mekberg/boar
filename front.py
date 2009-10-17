@@ -25,6 +25,11 @@ class Front:
         """ Must be called after a create_session()  """
         self.new_session.add(base64.b64decode(b64data), metadata, original_sum)
 
+    def add_existing(self, metadata, sum):
+        """ Must be called after a create_session(). Adds a link to a existing
+        blob. Will throw an exception if there is no such blob """
+        self.new_session.add_existing(metadata, sum)
+
     def commit(self, sessioninfo = {}):
         id = self.new_session.commit(sessioninfo)
         self.new_session = None
