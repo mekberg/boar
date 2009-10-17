@@ -20,6 +20,17 @@ co <file>
 mkrepo <dir to create>
 """
 
+def find_last_revision(front, session_name):
+    all_sids = front.get_session_ids()
+    all_sids.sort()
+    all_sids.reverse()
+    for sid in all_sids:
+        session_info = front.get_session_info(sid)
+        name = session_info.get("name", "<no name>")
+        if name == session_name:
+            return sid
+    return None
+
 def get_blob(front, sum):
     """ Hack to wrap base64 encoding to make json happy """ 
     b64data = front.get_blob_b64(sum)
@@ -33,7 +44,8 @@ def convert_win_path_to_unix(path):
     return nodrive.replace("\\", "/")
 
 def get_relative_path(p):
-    """ Simply strips any leading slashes from the given path """
+    """ Normalizes the path to unix format and then removes drive letters
+    and/or slashes from the given path """
     p = convert_win_path_to_unix(p)
     while p.startswith("/"):
         p = p[1:]
@@ -98,6 +110,25 @@ def list_files(front, session_name, revision):
         return
     for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
+
+def cmd_status(front, args):
+    session_name = args[0]
+    rev = find_last_revision(front, session_name)
+    if rev == None:
+        print "There is no session with the name '" + session_name + "'"
+        return
+    bloblist = front.get_session_bloblist(rev)
+    unchanged_files = 0
+    for info in bloblist:
+        fname = info['filename']
+        sum = info['md5sum']
+        if not os.path.exists(fname):
+            print "!", fname
+        elif md5sum_file(fname) != sum:
+            print "M", fname
+        else:
+            unchanged_files += 1
+    print "There was", unchanged_files, "unchanged files"
 
 def cmd_mkrepo(args):
     repository.create_repository(args[0])
@@ -177,6 +208,8 @@ def main():
         cmd_list(front, sys.argv[2:])
     elif sys.argv[1] == "co":
         cmd_co(front, sys.argv[2:])
+    elif sys.argv[1] == "status":
+        cmd_status(front, sys.argv[2:])
     else:
         print_help()
         return
