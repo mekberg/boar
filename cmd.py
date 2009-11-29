@@ -37,20 +37,6 @@ def get_blob(front, sum):
     data = base64.b64decode(b64data)
     return data
 
-def convert_win_path_to_unix(path):
-    """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
-        Has no effect on unix style paths. """
-    nodrive = os.path.splitdrive(path)[1]
-    return nodrive.replace("\\", "/")
-
-def get_relative_path(p):
-    """ Normalizes the path to unix format and then removes drive letters
-    and/or slashes from the given path """
-    p = convert_win_path_to_unix(p)
-    while p.startswith("/"):
-        p = p[1:]
-    return p
-
 def check_in_tree(sessionwriter, path):
     if path != get_relative_path(path):
         print "Warning: stripping leading slashes from given path"
@@ -112,15 +98,24 @@ def list_files(front, session_name, revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
 def cmd_status(front, args):
-    session_name = args[0]
+    session_name, local_dir = args
     rev = find_last_revision(front, session_name)
     if rev == None:
         print "There is no session with the name '" + session_name + "'"
         return
+
+    def visitor(out_list, dirname, names):
+        for name in names:
+            out_list.append(os.path.join(dirname, name))
+    existing_files_list = []
+    os.path.walk(local_dir, visitor, existing_files_list)
+    print existing_files_list
     bloblist = front.get_session_bloblist(rev)
     unchanged_files = 0
     for info in bloblist:
-        fname = info['filename']
+        fname = os.path.join(local_dir, info['filename'])
+        if fname in existing_files_list:
+            existing_files_list.remove(fname)
         sum = info['md5sum']
         if not os.path.exists(fname):
             print "!", fname
@@ -129,6 +124,8 @@ def cmd_status(front, args):
         else:
             unchanged_files += 1
     print "There was", unchanged_files, "unchanged files"
+    for fname in existing_files_list:
+        print "?", fname
 
 def cmd_mkrepo(args):
     repository.create_repository(args[0])
