@@ -51,3 +51,15 @@ def get_relative_path(p):
             p = p[2:]
         else:
             return p
+
+def remove_first_dirname(p):
+    rel_path = get_relative_path(p)
+    firstslash = rel_path.find("/")
+    if firstslash == -1:
+        return None
+    rest = rel_path[firstslash+1:]
+    # Let's just trim any double slashes
+    rest = get_relative_path(rest)
+    return rest
+
+assert remove_first_dirname("tjosan/hejsan") == "hejsan"
