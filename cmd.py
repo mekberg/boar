@@ -8,6 +8,8 @@ import sys
 import time
 import client
 import base64
+import simplejson as json
+
 from common import *
 
 from front import Front
@@ -54,7 +56,7 @@ def check_in_tree(sessionwriter, path):
             file_sum = md5sum_file(full_path)
             st = os.lstat(full_path)
             blobinfo = {}
-            blobinfo["filename"] = get_relative_path(full_path)
+            blobinfo["filename"] = remove_first_dirname(full_path)
             blobinfo["ctime"] = st[stat.ST_CTIME]
             blobinfo["mtime"] = st[stat.ST_MTIME]
             blobinfo["size"] = st[stat.ST_SIZE]
@@ -159,6 +161,13 @@ def cmd_co(front, args):
     session_ids = front.get_session_ids()
     session_ids.reverse()
     session_name = args[0]
+
+    if len(args) <= 1:
+        workdir_path = session_name
+    else:
+        workdir_path = args[1]
+    print "Exporting to workdir", "./" + workdir_path
+
     for sid in session_ids:
         session_info = front.get_session_info(sid)
         name = session_info.get("name", "<no name>")
@@ -167,17 +176,30 @@ def cmd_co(front, args):
     if name != session_name:
         print "No such session found"
         return
+
+    # Write status file here
+# Some random code
+#     status_dir = ""
+#     if not os.path.exists(dir):
+#         os.mkdir(dir)
+#     bloblist_filename = os.path.join(self.session_path, "bloblist.json")
+#     assert not os.path.exists(bloblist_filename)
+#     with open(bloblist_filename, "wb") as f:
+#         json.dump(self.metadatas, f, indent = 4)
+    # EOF
+
+    assert not os.path.exists(workdir_path)
     for info in front.get_session_bloblist(sid):
         print info['filename']
         data = get_blob(front, info['md5sum'])
         assert data
-        if not os.path.exists(os.path.dirname(info['filename'])):
-            os.makedirs(os.path.dirname(info['filename']))
-        with open(info['filename'], "wb") as f:            
+        filename = os.path.join(workdir_path, info['filename'])
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        with open(filename, "wb") as f:            
             f.write(data)
 
 def main():    
-
     if len(sys.argv) <= 1:
         print_help()
         return
