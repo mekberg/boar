@@ -6,7 +6,10 @@ class Front:
 
     def __init__(self, repo):
         self.repo = repo
-        
+
+    def get_repo_path(self):
+        return self.repo.get_repo_path()
+
     def get_session_ids(self, filter = {}):
         return self.repo.get_all_sessions()
 
