@@ -10,16 +10,17 @@ import client
 import base64
 import simplejson as json
 
-from common import *
-
 from front import Front
 from common import *
 
+metadir = ".meta"
+
 def print_help():
     print """Usage: 
-ci <file>
-co <file>
+ci <dir> <session_name>
+co <session_name> [destination]
 mkrepo <dir to create>
+list [session_name [revision_id]]
 """
 
 def find_last_revision(front, session_name):
@@ -43,6 +44,9 @@ def check_in_tree(sessionwriter, path):
     if path != get_relative_path(path):
         print "Warning: stripping leading slashes from given path"
     def visitor(arg, dirname, names):
+        if metadir in names:
+            print "Ignoring meta directory", os.path.join(dirname, metadir)
+            names.remove(metadir)
         for name in names:
             full_path = os.path.join(dirname, name)
             if os.path.isdir(full_path):
@@ -129,6 +133,9 @@ def cmd_status(front, args):
     for fname in existing_files_list:
         print "?", fname
 
+def cmd_info(args):
+    pass
+
 def cmd_mkrepo(args):
     repository.create_repository(args[0])
 
@@ -190,12 +197,12 @@ def cmd_co(front, args):
     # EOF
     assert not os.path.exists(workdir_path)
     os.mkdir(workdir_path)
-    statusfile = os.path.join(workdir_path, ".pyarchive")
+    os.mkdir(os.path.join(workdir_path, metadir))
+    statusfile = os.path.join(workdir_path, metadir, "info")
     with open(statusfile, "wb") as f:
         json.dump({'repo_path': front.get_repo_path(),
                    'session_name': session_name,
-                   'session_id': sid}, f, indent = 4)
-    
+                   'session_id': sid}, f, indent = 4)    
 
     for info in front.get_session_bloblist(sid):
         print info['filename']
@@ -206,6 +213,7 @@ def cmd_co(front, args):
             os.makedirs(os.path.dirname(filename))
         with open(filename, "wb") as f:            
             f.write(data)
+
 
 def main():    
     if len(sys.argv) <= 1:
@@ -237,6 +245,8 @@ def main():
         cmd_co(front, sys.argv[2:])
     elif sys.argv[1] == "status":
         cmd_status(front, sys.argv[2:])
+    elif sys.argv[1] == "info":
+        cmd_info(front, sys.argv[2:])
     else:
         print_help()
         return
