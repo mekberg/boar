@@ -133,7 +133,7 @@ def cmd_status(front, args):
     for fname in existing_files_list:
         print "?", fname
 
-def cmd_info(args):
+def cmd_info(front, args):
     pass
 
 def cmd_mkrepo(args):
@@ -214,6 +214,54 @@ def cmd_co(front, args):
         with open(filename, "wb") as f:            
             f.write(data)
 
+def init_repo_from_env():
+    repopath = os.getenv("REPO_PATH")
+    repourl = os.getenv("REPO_URL")
+    front = None
+    msg = None
+    if not repopath and not repourl:
+        msg = "You need to set REPO_PATH or REPO_URL"
+    elif repopath and repourl:
+        msg = "Both REPO_PATH and REPO_URL was set. Only one allowed"
+    elif repopath:
+        print "Using repo at '%s'" % (repopath)
+        front = Front(repository.Repo(repopath))
+    elif repourl:
+        print "Using remote repo at '%s'" % (repourl)
+        front = client.connect(repourl)
+    if front == None:
+        raise Exception(msg)
+    return front
+
+def find_meta(path):
+    meta = os.path.join(path, metadir)
+    if os.path.exists(meta):
+        return meta
+    head, tail = os.path.split(path)
+    if head == path:
+        return None
+    return find_meta(head)
+
+def init_repo_from_meta(path):
+    front = None
+    msg = None
+    meta = find_meta(path)
+    if meta:
+        print "Found meta data at", meta
+    else:
+        print "No metadata found"
+        return None
+
+    with open(os.path.join(meta, "info"), "rb") as f:
+        info = json.load(f)
+
+    repo_path = info['repo_path']
+    session_name = info['session_name']
+    session_id = info['session_id']
+
+    print "Using repo at", repo_path, "with session", session_name
+    front = Front(repository.Repo(repo_path))
+    return front
 
 def main():    
     if len(sys.argv) <= 1:
@@ -223,29 +271,20 @@ def main():
         cmd_mkrepo(sys.argv[2:])
         return
 
-    repopath = os.getenv("REPO_PATH")
-    repourl = os.getenv("REPO_URL")
-    front = None
-    if repopath == None and repourl == None:
-        print "You need to set REPO_PATH or REPO_URL"
-    elif repopath and repourl:
-        print "Both REPO_PATH and REPO_URL was set. Only one allowed"
-    elif repopath:
-        print "Using repo at '%s'" % (repopath)
-        front = Front(repository.Repo(repopath))
-    elif repourl:
-        print "Using remote repo at '%s'" % (repourl)
-        front = client.connect(repourl)
-
     if sys.argv[1] == "ci":
+        front = init_repo_from_env()
         cmd_ci(front, sys.argv[2:])
     elif sys.argv[1] == "list":
+        front = init_repo_from_env()
         cmd_list(front, sys.argv[2:])
     elif sys.argv[1] == "co":
+        front = init_repo_from_env()
         cmd_co(front, sys.argv[2:])
     elif sys.argv[1] == "status":
+        front = init_repo_from_meta(os.getcwd())
         cmd_status(front, sys.argv[2:])
     elif sys.argv[1] == "info":
+        front = init_repo_from_meta(os.getcwd())
         cmd_info(front, sys.argv[2:])
     else:
         print_help()
