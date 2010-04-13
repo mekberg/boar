@@ -26,6 +26,9 @@ class Repo:
         assert os.path.exists(self.repopath), "No such directory: %s" % (self.repopath)
         self.process_queue()
 
+    def get_repo_path(self):
+        return self.repopath
+
     def get_queue_path(self, filename):
         return os.path.join(self.repopath, QUEUE_DIR, filename)
 

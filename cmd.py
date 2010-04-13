@@ -186,9 +186,17 @@ def cmd_co(front, args):
 #     assert not os.path.exists(bloblist_filename)
 #     with open(bloblist_filename, "wb") as f:
 #         json.dump(self.metadatas, f, indent = 4)
+    
     # EOF
-
     assert not os.path.exists(workdir_path)
+    os.mkdir(workdir_path)
+    statusfile = os.path.join(workdir_path, ".pyarchive")
+    with open(statusfile, "wb") as f:
+        json.dump({'repo_path': front.get_repo_path(),
+                   'session_name': session_name,
+                   'session_id': sid}, f, indent = 4)
+    
+
     for info in front.get_session_bloblist(sid):
         print info['filename']
         data = get_blob(front, info['md5sum'])

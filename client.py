@@ -1,5 +1,4 @@
 import jsonrpc
-import md5
 import base64
 import re
 def connect(url):

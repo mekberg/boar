@@ -1,6 +1,6 @@
 from __future__ import with_statement
 
-import md5
+import hashlib
 import re
 import os
 
@@ -23,12 +23,12 @@ def read_file(filename):
     return data
 
 def md5sum(data):
-    m = md5.new()
+    m = hashlib.md5()
     m.update(data)
     return m.hexdigest()
 
 def md5sum_file(path):
-    m = md5.new()
+    m = hashlib.md5()
     with open(path, "rb") as f:
         data = f.read()
     m.update(data)
