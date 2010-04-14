@@ -103,19 +103,26 @@ def list_files(front, session_name, revision):
     for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
-def cmd_status(front, args):
-    session_name, local_dir = args
+def cmd_status(args):
+    front = init_repo_from_meta(os.getcwd())
+    assert front, "No workdir found here"
+    metapath = find_meta(os.getcwd())
+    info = load_meta_info(metapath)
+    session_name = info['session_name']
+    local_dir = os.path.split(metapath)[0]
     rev = find_last_revision(front, session_name)
     if rev == None:
         print "There is no session with the name '" + session_name + "'"
         return
 
     def visitor(out_list, dirname, names):
+        if metadir in names:
+            names.remove(metadir)
         for name in names:
             out_list.append(os.path.join(dirname, name))
     existing_files_list = []
     os.path.walk(local_dir, visitor, existing_files_list)
-    print existing_files_list
+    #print existing_files_list
     bloblist = front.get_session_bloblist(rev)
     unchanged_files = 0
     for info in bloblist:
@@ -242,6 +249,11 @@ def find_meta(path):
         return None
     return find_meta(head)
 
+def load_meta_info(metapath):
+    with open(os.path.join(metapath, "info"), "rb") as f:
+        info = json.load(f)
+    return info
+
 def init_repo_from_meta(path):
     front = None
     msg = None
@@ -252,9 +264,7 @@ def init_repo_from_meta(path):
         print "No metadata found"
         return None
 
-    with open(os.path.join(meta, "info"), "rb") as f:
-        info = json.load(f)
-
+    info = load_meta_info(meta)
     repo_path = info['repo_path']
     session_name = info['session_name']
     session_id = info['session_id']
@@ -281,8 +291,7 @@ def main():
         front = init_repo_from_env()
         cmd_co(front, sys.argv[2:])
     elif sys.argv[1] == "status":
-        front = init_repo_from_meta(os.getcwd())
-        cmd_status(front, sys.argv[2:])
+        cmd_status(sys.argv[2:])
     elif sys.argv[1] == "info":
         front = init_repo_from_meta(os.getcwd())
         cmd_info(front, sys.argv[2:])

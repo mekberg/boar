@@ -1,3 +1,18 @@
+* Hardware and software errors - the integrity and completeness of the
+  repository can be verified automatically. The repository operations
+  are atomic. All files are write-once, added data never affects
+  existing meta files.
+
+* User error - The system never physically deletes any information
+  that has been added. Additionally, sessions are normally add-only,
+  to make it harder to lose a file. Files within sessions can only be
+  moved, not removed.
+
+* Software obsolescence - The system is easy enough to understand to
+  at least allow for extraction of data with a relatively simple
+  program, without the need of compression algorithms or complex data
+  formats.
+
 Inga filer tas bort, någonsin.
 
 
