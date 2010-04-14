@@ -114,31 +114,39 @@ def cmd_status(args):
     if rev == None:
         print "There is no session with the name '" + session_name + "'"
         return
-
+    verbose = ( "-v" in args )
     def visitor(out_list, dirname, names):
         if metadir in names:
             names.remove(metadir)
         for name in names:
             out_list.append(os.path.join(dirname, name))
+
     existing_files_list = []
     os.path.walk(local_dir, visitor, existing_files_list)
     #print existing_files_list
     bloblist = front.get_session_bloblist(rev)
     unchanged_files = 0
+    file_status = {} # Filename -> Statuscode
     for info in bloblist:
         fname = os.path.join(local_dir, info['filename'])
         if fname in existing_files_list:
             existing_files_list.remove(fname)
         sum = info['md5sum']
         if not os.path.exists(fname):
-            print "!", fname
+            file_status[fname] = "!"
         elif md5sum_file(fname) != sum:
-            print "M", fname
+            file_status[fname] = "M"
         else:
+            file_status[fname] = " "
             unchanged_files += 1
-    print "There was", unchanged_files, "unchanged files"
+            
     for fname in existing_files_list:
-        print "?", fname
+        file_status[fname] = "?"
+    filenames = file_status.keys()
+    filenames.sort()
+    for f in filenames:
+        if file_status[f] != " " or verbose:
+            print file_status[f], f
 
 def cmd_info(front, args):
     pass
@@ -157,7 +165,7 @@ def cmd_list(front, args):
     else:
         print "Duuuh?"
 
-def cmd_ci(front, args):
+def cmd_import(front, args):
     path_to_ci = args[0]
     session_name = args[1]
 
@@ -281,9 +289,9 @@ def main():
         cmd_mkrepo(sys.argv[2:])
         return
 
-    if sys.argv[1] == "ci":
+    if sys.argv[1] == "import":
         front = init_repo_from_env()
-        cmd_ci(front, sys.argv[2:])
+        cmd_import(front, sys.argv[2:])
     elif sys.argv[1] == "list":
         front = init_repo_from_env()
         cmd_list(front, sys.argv[2:])
