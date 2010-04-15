@@ -49,3 +49,14 @@ class Front:
 
     def has_blob(self, sum):
         return self.repo.has_blob(sum)
+
+    def find_last_revision(self, session_name):
+        all_sids = self.get_session_ids()
+        all_sids.sort()
+        all_sids.reverse()
+        for sid in all_sids:
+            session_info = self.get_session_info(sid)
+            name = session_info.get("name", "<no name>")
+            if name == session_name:
+                return sid
+        return None
