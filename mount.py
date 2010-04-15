@@ -62,7 +62,7 @@ class HelloFS(Fuse):
         for r in  '.', '..':
             yield fuse.Direntry(r)
         for i in self.bloblist:
-            yield fuse.Direntry(i['filename'])
+            yield fuse.Direntry(str(i['filename']))
                 
 
     def open(self, path, flags):
