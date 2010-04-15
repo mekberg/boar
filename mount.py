@@ -66,22 +66,25 @@ class HelloFS(Fuse):
                 
 
     def open(self, path, flags):
-        if path != hello_path:
+        fn = path[1:]
+        if fn not in self.files:
             return -errno.ENOENT
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
         if (flags & accmode) != os.O_RDONLY:
             return -errno.EACCES
 
     def read(self, path, size, offset):
-        if path != hello_path:
+        fn = path[1:]
+        if fn not in self.files:
             return -errno.ENOENT
-        slen = len(hello_str)
-        if offset < slen:
-            if offset + size > slen:
-                size = slen - offset
-            buf = hello_str[offset:offset+size]
-        else:
-            buf = ''
+        repo = self.front.repo
+        
+        fileinfo=self.files[fn]
+        assert repo.has_blob(fileinfo['md5sum'])
+        realpath = repo.get_blob_path(fileinfo['md5sum'])
+        with open(realpath, "rb") as blob:
+            blob.seek(offset)
+            buf = blob.read(size)
         return buf
 
 def main():
