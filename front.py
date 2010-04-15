@@ -1,5 +1,5 @@
 import repository
-import simplejson as json
+import json
 import base64
 
 class Front:

@@ -4,7 +4,7 @@ from __future__ import with_statement
 import os
 import tempfile
 import re
-import simplejson as json
+import json
 import copy
 
 import repository
