@@ -23,17 +23,6 @@ mkrepo <dir to create>
 list [session_name [revision_id]]
 """
 
-def find_last_revision(front, session_name):
-    all_sids = front.get_session_ids()
-    all_sids.sort()
-    all_sids.reverse()
-    for sid in all_sids:
-        session_info = front.get_session_info(sid)
-        name = session_info.get("name", "<no name>")
-        if name == session_name:
-            return sid
-    return None
-
 def get_blob(front, sum):
     """ Hack to wrap base64 encoding to make json happy """ 
     b64data = front.get_blob_b64(sum)
