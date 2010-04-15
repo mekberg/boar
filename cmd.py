@@ -56,6 +56,10 @@ def check_in_tree(sessionwriter, path):
             elif not os.path.isfile(full_path):
                 print "Skipping non-file:", full_path
                 continue
+            elif os.path.islink(full_path):
+                print "Skipping symbolic link:", full_path
+                continue
+                
 
             print "Adding", full_path
             file_sum = md5sum_file(full_path)
