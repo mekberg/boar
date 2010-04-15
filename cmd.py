@@ -8,7 +8,7 @@ import sys
 import time
 import client
 import base64
-import simplejson as json
+import json
 
 from front import Front
 from common import *
