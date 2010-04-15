@@ -43,6 +43,7 @@ def get_blob(front, sum):
 def check_in_tree(sessionwriter, path):
     if path != get_relative_path(path):
         print "Warning: stripping leading slashes from given path"
+
     def visitor(arg, dirname, names):
         if metadir in names:
             print "Ignoring meta directory", os.path.join(dirname, metadir)
@@ -60,7 +61,7 @@ def check_in_tree(sessionwriter, path):
             file_sum = md5sum_file(full_path)
             st = os.lstat(full_path)
             blobinfo = {}
-            blobinfo["filename"] = remove_first_dirname(full_path)
+            blobinfo["filename"] = os.path.relpath(full_path, path)
             blobinfo["ctime"] = st[stat.ST_CTIME]
             blobinfo["mtime"] = st[stat.ST_MTIME]
             blobinfo["size"] = st[stat.ST_SIZE]
@@ -179,6 +180,21 @@ def cmd_import(front, args):
     session_id = front.commit(session_info)
     print "Checked in session id", session_id
 
+
+def cmd_ci(workdir, args):
+    path_to_ci = workdir.root
+    front = workdir.get_front()
+    session_name = workdir.sessionName
+    assert os.path.exists(path_to_ci)
+    front.create_session()
+    check_in_tree(front, path_to_ci)
+    session_info = {}
+    session_info["name"] = session_name
+    session_info["timestamp"] = int(time.time())
+    session_info["date"] = time.ctime()
+    session_id = front.commit(session_info)
+    print "Checked in session id", session_id
+
 def cmd_co(front, args): 
     session_ids = front.get_session_ids()
     session_ids.reverse()
@@ -222,7 +238,7 @@ def cmd_co(front, args):
     for info in front.get_session_bloblist(sid):
         print info['filename']
         data = get_blob(front, info['md5sum'])
-        assert data
+        assert data or info['size'] == 0
         filename = os.path.join(workdir_path, info['filename'])
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
@@ -281,6 +297,31 @@ def init_repo_from_meta(path):
     front = Front(repository.Repo(repo_path))
     return front
 
+def init_workdir(path):
+    front = init_repo_from_meta(path)
+    assert front, "No workdir found here"
+    metapath = find_meta(os.getcwd())
+    info = load_meta_info(metapath)
+    root = os.path.split(metapath)[0]    
+    wd = Workdir(repoUrl=info['repo_path'], 
+                 sessionName=info['session_name'], 
+                 revision=info['session_id'],
+                 root=root) 
+    return wd
+
+class Workdir:
+    def __init__(self, repoUrl, sessionName, revision, root):
+        self.repoUrl = repoUrl
+        self.sessionName = sessionName
+        self.revision = revision
+        self.root = root
+        self.front = None
+
+    def get_front(self):
+        if not self.front:
+            self.front = Front(repository.Repo(self.repoUrl))
+        return self.front
+
 def main():    
     if len(sys.argv) <= 1:
         print_help()
@@ -303,6 +344,9 @@ def main():
     elif sys.argv[1] == "info":
         front = init_repo_from_meta(os.getcwd())
         cmd_info(front, sys.argv[2:])
+    elif sys.argv[1] == "ci":
+        wd = init_workdir(os.getcwd())
+        cmd_ci(wd, sys.argv[2:])
     else:
         print_help()
         return
