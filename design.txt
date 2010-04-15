@@ -13,6 +13,8 @@
   program, without the need of compression algorithms or complex data
   formats.
 
+SiLL
+
 Inga filer tas bort, någonsin.
 
 
