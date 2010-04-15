@@ -64,14 +64,4 @@ def remove_first_dirname(p):
 
 assert remove_first_dirname("tjosan/hejsan") == "hejsan"
 
-def find_last_revision(front, session_name):
-    all_sids = front.get_session_ids()
-    all_sids.sort()
-    all_sids.reverse()
-    for sid in all_sids:
-        session_info = front.get_session_info(sid)
-        name = session_info.get("name", "<no name>")
-        if name == session_name:
-            return sid
-    return None
 

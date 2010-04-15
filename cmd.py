@@ -104,7 +104,7 @@ def cmd_status(args):
     info = load_meta_info(metapath)
     session_name = info['session_name']
     local_dir = os.path.split(metapath)[0]
-    rev = find_last_revision(front, session_name)
+    rev = front.find_last_revision(session_name)
     if rev == None:
         print "There is no session with the name '" + session_name + "'"
         return
