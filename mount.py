@@ -92,14 +92,16 @@ class HelloFS(Fuse):
         fn = path[1:]
         if fn not in self.files:
             return -errno.ENOENT
-        repo = self.front.repo
-        
-        fileinfo=self.files[fn]
-        assert repo.has_blob(fileinfo['md5sum'])
-        realpath = repo.get_blob_path(fileinfo['md5sum'])
-        with open(realpath, "rb") as blob:
-            blob.seek(offset)
-            buf = blob.read(size)
+        try:
+            repo = self.front.repo        
+            fileinfo=self.files[fn]
+            assert repo.has_blob(fileinfo['md5sum']), "Blob does not exist in the repository. Corrupt repo?"
+            realpath = repo.get_blob_path(fileinfo['md5sum'])
+            with open(realpath, "rb") as blob:
+                blob.seek(offset)
+                buf = blob.read(size)
+        except Exception as e:
+            return "error! " + repr(e)
         return buf
 
 def main():
@@ -108,6 +110,7 @@ Userspace hello example
 
 """ + Fuse.fusage
     repopath, sessionName = sys.argv[1:3]
+    repopath = os.path.abspath(repopath)
     front = Front(repository.Repo(repopath))
     revision = front.find_last_revision(sessionName)
     assert revision, "No such session found: " + sessionName
