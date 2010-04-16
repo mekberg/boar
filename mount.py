@@ -37,10 +37,17 @@ class HelloFS(Fuse):
         Fuse.__init__(self, *args, **kwargs)
         self.front = front
         self.revision = revision
-        self.bloblist = front.get_session_bloblist(revision)
+        bloblist = front.get_session_bloblist(revision)
         self.files = {}
-        for i in self.bloblist:
+        for i in bloblist:
+            i['type'] = "file"
+            i['dir'] = "/" + os.path.dirname(i['filename'])
+            assert i['filename'] not in self.files, "Dupes in bloblist - repository corruption?"
             self.files[i['filename']] = i
+            dirname = os.path.dirname(i['filename'])
+            if dirname and dirname not in self.files: # Don't add an empty top dir name
+                self.files[dirname] = { 'filename': dirname, 'type': 'directory', 'size': 0, 'dir': "/" + os.path.dirname(dirname) }
+        print self.files
 
     def getattr(self, path):
         st = MyStat()
@@ -49,20 +56,28 @@ class HelloFS(Fuse):
             st.st_mode = stat.S_IFDIR | 0755
             st.st_nlink = 2
         elif fn in self.files.keys():
-            st.st_mode = stat.S_IFREG | 0444
-            st.st_nlink = 1
-            st.st_size = self.files[fn]['size']
+            info = self.files[fn]
+            if info['type'] == 'file':
+                st.st_mode = stat.S_IFREG | 0444
+                st.st_nlink = 1
+                st.st_size = self.files[fn]['size']
+            elif info['type'] == 'directory':
+                st.st_mode = stat.S_IFDIR | 0755
+                st.st_nlink = 2
         else:
             return -errno.ENOENT
         return st
 
     def readdir(self, path, offset):
-#        for r in  '.', '..', hello_path[1:]:
-#            yield fuse.Direntry(r)
+        #        for r in  '.', '..', hello_path[1:]:
+        print "Readdir(", path, ",", offset, ")"
+        #            yield fuse.Direntry(r)
         for r in  '.', '..':
             yield fuse.Direntry(r)
-        for i in self.bloblist:
-            yield fuse.Direntry(str(i['filename']))
+        for i in self.files.values():
+            fn = i['filename']
+            if i['dir'] == path:
+                yield fuse.Direntry(os.path.basename(str(fn)))
                 
 
     def open(self, path, flags):
