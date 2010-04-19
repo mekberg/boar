@@ -113,7 +113,7 @@ Userspace hello example
     repopath = os.path.abspath(repopath)
     front = Front(repository.Repo(repopath))
     revision = front.find_last_revision(sessionName)
-    assert revision, "No such session found: " + sessionName
+    assert revision != None, "No such session found: " + sessionName
     print "Connecting to revision", revision, "on session", sessionName
 
     server = HelloFS(front=front,
