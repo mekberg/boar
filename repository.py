@@ -12,6 +12,34 @@ BLOB_DIR = "blobs"
 SESSIONS_DIR = "sessions"
 TMP_DIR = "tmp"
 
+recoverytext = """
+This is a versioned repository of files. It is designed to be easy to
+recover in case the original software is lost or not available on
+modern hardware. This document describes the layout of the repository,
+so that a programmer can construct a simple program that recovers the
+data.
+
+All files are stored verbatim in the "blobs" directory, named after
+their md5 checksum, and sorted in sub directories based on the start
+of their names. For instance, if a file "testimage.jpg" has the
+checksum bc7b0fb8c2e096693acacbd6cb070f16, it will be stored in
+blobs/bc/bc7b0fb8c2e096693acacbd6cb070f16 since the checksum starts
+with the letters "bc". The filename "testimage.jpg" is discarded. The
+information necessary to reconstruct a file tree is stored in a
+session file.
+
+The individual sessions are stored in the "sessions" sub
+directory. Each session represents a point in time for a file
+tree. The session directory contains two files, bloblist.json and
+session.json. See RFC4627 for details on the json file format. For
+each entry in the list of blobs, a filename and a md5 checksum is
+stored. 
+
+To restore a session, iterate over the bloblist and copy the blob with
+the corresponding checksum to a file with the name specified in the
+bloblist.
+
+"""
 
 def create_repository(repopath):
     os.mkdir(repopath)
@@ -19,6 +47,8 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, BLOB_DIR))
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
     os.mkdir(os.path.join(repopath, TMP_DIR))
+    with open(os.path.join(repopath, "recovery.txt"), "w") as f:
+        f.write(recoverytext)
     
 class Repo:
     def __init__(self, repopath):
