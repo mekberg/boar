@@ -61,6 +61,8 @@ class HelloFS(Fuse):
                 st.st_mode = stat.S_IFREG | 0444
                 st.st_nlink = 1
                 st.st_size = self.files[fn]['size']
+                st.st_mtime = self.files[fn]['mtime']
+                st.st_ctime = self.files[fn]['ctime']
             elif info['type'] == 'directory':
                 st.st_mode = stat.S_IFDIR | 0755
                 st.st_nlink = 2
