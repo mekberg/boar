@@ -3,6 +3,7 @@ from __future__ import with_statement
 import hashlib
 import re
 import os
+import sys
 
 """ This file contains code that is generally useful, without being
 specific for any project """
@@ -65,3 +66,22 @@ def remove_first_dirname(p):
 assert remove_first_dirname("tjosan/hejsan") == "hejsan"
 
 
+import os.path as posixpath
+from os.path import curdir, sep, pardir, join
+# Python 2.5 compatible relpath(), Based on James Gardner's relpath
+# function.
+# http://www.saltycrane.com/blog/2010/03/ospathrelpath-source-code-python-25/
+def my_relpath(path, start=curdir):
+    """Return a relative version of a path"""
+    if sys.version_info >= (2, 6):
+        return os.path.relpath(path, start)
+    if not path:
+        raise ValueError("no path specified")
+    start_list = posixpath.abspath(start).split(sep)
+    path_list = posixpath.abspath(path).split(sep)
+    # Work out how much of the filepath is shared by start and path.
+    i = len(posixpath.commonprefix([start_list, path_list]))
+    rel_list = [pardir] * (len(start_list)-i) + path_list[i:]
+    if not rel_list:
+        return curdir
+    return join(*rel_list)

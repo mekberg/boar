@@ -1,5 +1,10 @@
 import repository
-import json
+import sys
+
+if sys.version_info >= (2, 6):
+    import json
+else:
+    import simplejson as json
 import base64
 
 class Front:
