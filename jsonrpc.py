@@ -251,11 +251,10 @@ class RPCInvalidParamValues(RPCFault):
 #=========================================
 # data structure / serializer
 
-try:
+if sys.version_info >= (2, 6):
+    import json as simplejson
+else:
     import simplejson
-except ImportError, err:
-    print "FATAL: json-module 'simplejson' is missing (%s)" % (err)
-    sys.exit(1)
 
 #----------------------
 #

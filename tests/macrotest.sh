@@ -1,6 +1,5 @@
 #!/bin/bash
-
-export PATH="$PATH:/home/mats/hack/pyarchive/"
+export PATH="$PATH:/tmp/test2/pyarchive"
 CMD="cmd.py"
 CWD=`pwd`
 REPO="$CWD/TESTREPO"
