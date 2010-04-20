@@ -8,7 +8,11 @@ import sys
 import time
 import client
 import base64
-import json
+
+if sys.version_info >= (2, 6):
+    import json
+else:
+    import simplejson as json
 
 from front import Front
 from common import *
@@ -54,7 +58,7 @@ def check_in_tree(sessionwriter, path):
             file_sum = md5sum_file(full_path)
             st = os.lstat(full_path)
             blobinfo = {}
-            blobinfo["filename"] = os.path.relpath(full_path, path)
+            blobinfo["filename"] = my_relpath(full_path, path)
             blobinfo["ctime"] = st[stat.ST_CTIME]
             blobinfo["mtime"] = st[stat.ST_MTIME]
             blobinfo["size"] = st[stat.ST_SIZE]
