@@ -16,18 +16,51 @@ import shutil
 
 from common import *
 
+"""
+A session consists of a set of blobs and a set of metadatas. The
+metadatas are dictionaries. Some keywords are reserved by the
+repository, and some are required to be set by the client. Any
+keys/values not specified here are stored and provided as they are.
+
+md5sum:   Set/overwritten by the session.
+filename: Required by the session, set by the client.
+change:   Required by the session when creating a derived session. Can 
+          be one of the following: add, remove, replace
+
+The sessioninfo object also is mostly filled by the client, but a few
+keywords are reserved.
+
+base_id: The revision id of the revision that this revision is based
+        on. May be null in case of a non-incremental revision.
+
+
+"""
+
 class AddException(Exception):
     pass
 
+def bloblist_to_dict(bloblist):
+    d = {}
+    for b in bloblist:
+        d[b['filename']] = b
+    return d
+
 class SessionWriter:
-    def __init__(self, repo):
+    def __init__(self, repo, base_id = None):
         self.repo = repo
+        self.base_id = base_id
         self.session_path = None
-        self.metadatas = []
+        self.metadatas = {}
         assert os.path.exists(self.repo.repopath)
         self.session_path = tempfile.mkdtemp( \
             prefix = "tmp_", 
             dir = os.path.join(self.repo.repopath, repository.TMP_DIR)) 
+        
+        self.base_session_info = {}
+        self.base_bloblist_dict = {}
+        if self.base_id != None:
+            self.base_session_info = self.repo.get_session(self.base_id).session_info
+            self.base_bloblist_dict = bloblist_to_dict(self.repo.get_session(self.base_id).bloblist)
 
     def add(self, data, metadata, original_sum):
         assert data != None
@@ -39,25 +72,30 @@ class SessionWriter:
             raise AddException("Calculated checksum did not match client provided checksum")
         metadata["md5sum"] = sum
         fname = os.path.join(self.session_path, sum)
-        existing_blob_path = self.repo.get_blob_path(sum)
-        existing_blob = os.path.exists(existing_blob_path)
+        existing_blob = self.repo.has_blob(sum)
         if not existing_blob and not os.path.exists(fname):
             with open(fname, "wb") as f:
                 f.write(data)
-        self.metadatas.append(metadata)
+        assert metadata['filename'] not in self.metadatas
+        self.metadatas[metadata['filename']] = metadata
 
     def add_existing(self, metadata, sum):
         assert self.repo.has_blob(sum)
         metadata["md5sum"] = sum
-        self.metadatas.append(metadata)
+        assert metadata['filename'] not in self.metadatas
+        self.metadatas[metadata['filename']] = metadata
+
+    def remove(self, filename):
+        assert filename in self.metadatas
+        del self.metadatas['filename']
 
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
-
+        sessioninfo['base_id'] = self.base_id
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
         assert not os.path.exists(bloblist_filename)
         with open(bloblist_filename, "wb") as f:
-            json.dump(self.metadatas, f, indent = 4)
+            json.dump(self.metadatas.values(), f, indent = 4)
 
         session_filename = os.path.join(self.session_path, "session.json")
         assert not os.path.exists(session_filename)
