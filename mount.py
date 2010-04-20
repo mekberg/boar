@@ -51,6 +51,8 @@ class HelloFS(Fuse):
 
     def getattr(self, path):
         st = MyStat()
+        st.st_uid = os.geteuid()
+        st.st_gid = os.getegid()
         fn = path[1:]
         if path == '/':
             st.st_mode = stat.S_IFDIR | 0755
