@@ -208,17 +208,6 @@ def cmd_co(front, args):
         print "No such session found"
         return
 
-    # Write status file here
-# Some random code
-#     status_dir = ""
-#     if not os.path.exists(dir):
-#         os.mkdir(dir)
-#     bloblist_filename = os.path.join(self.session_path, "bloblist.json")
-#     assert not os.path.exists(bloblist_filename)
-#     with open(bloblist_filename, "wb") as f:
-#         json.dump(self.metadatas, f, indent = 4)
-    
-    # EOF
     assert not os.path.exists(workdir_path)
     os.mkdir(workdir_path)
     os.mkdir(os.path.join(workdir_path, metadir))
@@ -237,6 +226,23 @@ def cmd_co(front, args):
             os.makedirs(os.path.dirname(filename))
         with open(filename, "wb") as f:            
             f.write(data)
+
+def cmd_find(front, args):
+    filename, = args
+    cs = md5sum_file(filename)
+    all_ids = front.get_session_ids()
+    all_ids.sort()
+    all_ids.reverse()
+    seen = set()
+    for i in all_ids:
+        info = front.get_session_info(i)
+        if info['name'] in seen:
+            continue
+        seen.add(info['name'])
+        for bi in front.get_session_bloblist(i):
+            if bi['md5sum'] == cs:
+                print info['name'] +":"+bi['filename']
+
 
 def init_repo_from_env():
     repopath = os.getenv("REPO_PATH")
@@ -340,6 +346,9 @@ def main():
     elif sys.argv[1] == "ci":
         wd = init_workdir(os.getcwd())
         cmd_ci(wd, sys.argv[2:])
+    elif sys.argv[1] == "find":
+        front = init_repo_from_env()
+        cmd_find(front, sys.argv[2:])
     else:
         print_help()
         return
