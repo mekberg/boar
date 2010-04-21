@@ -1,13 +1,15 @@
 #!/usr/bin/python
 from __future__ import with_statement
 import sys
-import repository
 import os
 import stat
 import sys
 import time
-import client
 import base64
+
+import repository
+import bloblist
+import client
 
 if sys.version_info >= (2, 6):
     import json
@@ -51,25 +53,19 @@ def check_in_tree(sessionwriter, path):
                 continue
             elif os.path.islink(full_path):
                 print "Skipping symbolic link:", full_path
-                continue
-                
+                continue                
 
             print "Adding", full_path
-            file_sum = md5sum_file(full_path)
-            st = os.lstat(full_path)
-            blobinfo = {}
-            blobinfo["filename"] = my_relpath(full_path, path)
-            blobinfo["ctime"] = st[stat.ST_CTIME]
-            blobinfo["mtime"] = st[stat.ST_MTIME]
-            blobinfo["size"] = st[stat.ST_SIZE]
-            if sessionwriter.has_blob(file_sum):
-                sessionwriter.add_existing(blobinfo, file_sum)
+            blobinfo = bloblist.create_blobinfo(full_path, path)
+            
+            if sessionwriter.has_blob(blobinfo["md5sum"]):
+                sessionwriter.add_existing(blobinfo, blobinfo["md5sum"])
             else:
                 with open(full_path, "rb") as f:
                     data = f.read()
                 assert len(data) == blobinfo["size"]
-                assert md5sum(data) == file_sum
-                sessionwriter.add(base64.b64encode(data), blobinfo, file_sum)
+                assert md5sum(data) == blobinfo["md5sum"]
+                sessionwriter.add(base64.b64encode(data), blobinfo, blobinfo["md5sum"])
 
     os.path.walk(path, visitor, None)
 
@@ -123,6 +119,9 @@ def cmd_status(args):
     os.path.walk(local_dir, visitor, existing_files_list)
     #print existing_files_list
     bloblist = front.get_session_bloblist(rev)
+    blobs_by_csum = {}
+    for b in bloblist:
+        blobs_by_csum[b['md5sum']] = b
     unchanged_files = 0
     file_status = {} # Filename -> Statuscode
     for info in bloblist:
