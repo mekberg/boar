@@ -12,11 +12,49 @@ class Workdir:
         self.revision = revision
         self.root = root
         self.front = None
+        self.md5cache = {}
 
     def get_front(self):
         if not self.front:
             self.front = Front(Repo(self.repoUrl))
         return self.front
+
+    def exists_in_session(self, csum):
+        """ Returns true if a file with the given checksum exists in the
+            current session. """
+        blobinfos = self.get_front().get_session_bloblist(self.revision)
+        for info in blobinfos:
+            if info['md5sum'] == csum:
+                return True
+        return False
+
+    def exists_in_workdir(self, csum):
+        """ Returns true if at least one file with the given checksum exists
+            in the workdir. """
+        tree = self.get_tree()
+        for f in tree:
+            pass
+        return False
+
+    def cached_md5sum(self, relative_path):
+        if relative_path in self.md5cache:
+            return self.md5cache[relative_path]
+        csum = md5sum_file(os.path.join(self.root, relative_path))
+        self.md5cache[relative_path] = csum
+        return self.md5cache[relative_path]
+
+    def get_tree(self):
+        """ Returns a simple list of all the files and directories in the
+            workdir (except meta directories). """
+        def visitor(out_list, dirname, names):
+            if settings.metadir in names:
+                names.remove(settings.metadir)
+            for name in names:
+                name = unicode(name, encoding="utf_8")
+                out_list.append(os.path.join(dirname, name))
+        result = []
+        os.path.walk(self.root, visitor, result)
+        return result
 
     def get_changes(self, skip_checksum = False):
         """ Compares the work dir with the checked out revision. Returns a
@@ -27,15 +65,7 @@ class Workdir:
             has been changed. """
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
-        def visitor(out_list, dirname, names):
-            if settings.metadir in names:
-                names.remove(settings.metadir)
-            for name in names:
-                name = unicode(name, encoding="utf_8")
-                out_list.append(os.path.join(dirname, name))
-
-        existing_files_list = []
-        os.path.walk(self.root, visitor, existing_files_list)
+        existing_files_list = self.get_tree()
         #print existing_files_list
         bloblist = front.get_session_bloblist(self.revision)
         unchanged_files, new_files, modified_files, deleted_files = [], [], [], []
@@ -43,7 +73,7 @@ class Workdir:
             fname = os.path.join(self.root, info['filename'])
             if fname in existing_files_list:
                 existing_files_list.remove(fname)
-                if md5sum_file(fname) == info['md5sum']:
+                if self.cached_md5sum(info['filename']) == info['md5sum']:
                     unchanged_files.append(fname)
                 else:
                     modified_files.append(fname)                    
