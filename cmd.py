@@ -17,9 +17,9 @@ else:
     import simplejson as json
 
 from front import Front
+from workdir import Workdir
 from common import *
-
-metadir = ".meta"
+import settings
 
 def print_help():
     print """Usage: 
@@ -41,9 +41,9 @@ def check_in_tree(sessionwriter, path):
         print "Warning: stripping leading slashes from given path"
 
     def visitor(arg, dirname, names):
-        if metadir in names:
-            print "Ignoring meta directory", os.path.join(dirname, metadir)
-            names.remove(metadir)
+        if settings.metadir in names:
+            print "Ignoring meta directory", os.path.join(dirname, settings.metadir)
+            names.remove(settings.metadir)
         for name in names:
             full_path = os.path.join(dirname, name)
             if os.path.isdir(full_path):
@@ -99,56 +99,23 @@ def list_files(front, session_name, revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
 def cmd_status(args):
-    front = init_repo_from_meta(os.getcwd())
-    assert front, "No workdir found here"
-    metapath = find_meta(os.getcwd())
-    info = load_meta_info(metapath)
-    session_name = info['session_name']
-    local_dir = os.path.split(metapath)[0]
-    rev = front.find_last_revision(session_name)
-    if rev == None:
-        print "There is no session with the name '" + session_name + "'"
-        return
-    verbose = ( "-v" in args )
-    def visitor(out_list, dirname, names):
-        if metadir in names:
-            names.remove(metadir)
-        for name in names:
-            out_list.append(os.path.join(dirname, name))
-
-    existing_files_list = []
-    os.path.walk(local_dir, visitor, existing_files_list)
-    #print existing_files_list
-    bloblist = front.get_session_bloblist(rev)
-    blobs_by_csum = {}
-    for b in bloblist:
-        blobs_by_csum[b['md5sum']] = b
-    unchanged_files = 0
-    file_status = {} # Filename -> Statuscode
-    for info in bloblist:
-        fname = os.path.join(local_dir, info['filename'])
-        if fname in existing_files_list:
-            existing_files_list.remove(fname)
-            csum = md5sum_file(fname)
-            if csum in blobs_by_csum:
-                del blobs_by_csum[csum]
-        if not os.path.exists(fname):
-            file_status[fname] = "!"
-        elif csum != info['md5sum']:
-            file_status[fname] = "M"
-        else:
-            file_status[fname] = " "
-            unchanged_files += 1
-            
-    for fname in existing_files_list:
-        file_status[fname] = "?"
-    filenames = file_status.keys()
+    verbose = ("-v" in args)
+    workdir = init_workdir(os.getcwd())
+    unchanged_files, new_files, modified_files, deleted_files = workdir.get_changes()
+    filestats = {}
+    for f in new_files:
+        filestats[f] = "A"
+    for f in modified_files:
+        filestats[f] = "M"
+    for f in deleted_files:
+        filestats[f] = "D"
+    if verbose:
+        for f in unchanged_files:
+            filestats[f] = " "
+    filenames = filestats.keys()
     filenames.sort()
     for f in filenames:
-        if file_status[f] != " " or verbose:
-            print file_status[f], f
-    for b in blobs_by_csum.values():
-        print "This file was not present by any name", b['md5sum'],  b['filename']
+        print filestats[f], f
 
 def cmd_info(front, args):
     pass
@@ -218,8 +185,8 @@ def cmd_co(front, args):
 
     assert not os.path.exists(workdir_path)
     os.mkdir(workdir_path)
-    os.mkdir(os.path.join(workdir_path, metadir))
-    statusfile = os.path.join(workdir_path, metadir, "info")
+    os.mkdir(os.path.join(workdir_path, settings.metadir))
+    statusfile = os.path.join(workdir_path, settings.metadir, "info")
     with open(statusfile, "wb") as f:
         json.dump({'repo_path': front.get_repo_path(),
                    'session_name': session_name,
@@ -272,7 +239,7 @@ def init_repo_from_env():
     return front
 
 def find_meta(path):
-    meta = os.path.join(path, metadir)
+    meta = os.path.join(path, settings.metadir)
     if os.path.exists(meta):
         return meta
     head, tail = os.path.split(path)
@@ -315,19 +282,6 @@ def init_workdir(path):
                  revision=info['session_id'],
                  root=root) 
     return wd
-
-class Workdir:
-    def __init__(self, repoUrl, sessionName, revision, root):
-        self.repoUrl = repoUrl
-        self.sessionName = sessionName
-        self.revision = revision
-        self.root = root
-        self.front = None
-
-    def get_front(self):
-        if not self.front:
-            self.front = Front(repository.Repo(self.repoUrl))
-        return self.front
 
 def main():    
     if len(sys.argv) <= 1:
