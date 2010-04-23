@@ -103,10 +103,13 @@ def cmd_status(args):
     workdir = init_workdir(os.getcwd())
     unchanged_files, new_files, modified_files, deleted_files = workdir.get_changes()
     filestats = {}
+    def in_session(f):
+        return "*" if workdir.exists_in_session(workdir.cached_md5sum(f)) else " "
+
     for f in new_files:
-        filestats[f] = "A"
+        filestats[f] = "A" + in_session(f)
     for f in modified_files:
-        filestats[f] = "M"
+        filestats[f] = "M" + in_session(f)
     for f in deleted_files:
         filestats[f] = "D"
     if verbose:
