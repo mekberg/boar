@@ -33,8 +33,19 @@ class Workdir:
             in the workdir. """
         tree = self.get_tree()
         for f in tree:
-            pass
+            if self.cached_md5sum(f) == csum:
+                return True
         return False
+
+    def get_blobinfo(self, relpath):
+        """ Returns the info dictionary for the given path and the current
+            session. The given file does not need to exist, the information is
+            fetched from the repository"""
+        blobinfos = self.get_front().get_session_bloblist(self.revision)
+        for info in blobinfos:
+            if info['filename'] == relpath:
+                return info
+        return None
 
     def cached_md5sum(self, relative_path):
         if relative_path in self.md5cache:
@@ -52,9 +63,14 @@ class Workdir:
             for name in names:
                 name = unicode(name, encoding="utf_8")
                 out_list.append(os.path.join(dirname, name))
-        result = []
-        os.path.walk(self.root, visitor, result)
-        return result
+        all_files = []
+        os.path.walk(self.root, visitor, all_files)
+        remove_rootpath = lambda fn: my_relpath(fn, self.root)
+        relative_paths = map(remove_rootpath, all_files)
+        return relative_paths
+
+    def rel_to_abs(self, relpath):
+        return os.path.join(self.root, relpath)
 
     def get_changes(self, skip_checksum = False):
         """ Compares the work dir with the checked out revision. Returns a
@@ -70,7 +86,7 @@ class Workdir:
         bloblist = front.get_session_bloblist(self.revision)
         unchanged_files, new_files, modified_files, deleted_files = [], [], [], []
         for info in bloblist:
-            fname = os.path.join(self.root, info['filename'])
+            fname = info['filename']
             if fname in existing_files_list:
                 existing_files_list.remove(fname)
                 if self.cached_md5sum(info['filename']) == info['md5sum']:
