@@ -23,10 +23,11 @@ metadir = ".meta"
 
 def print_help():
     print """Usage: 
-ci <dir> <session_name>
+import <dir> <session_name>
 co <session_name> [destination]
 mkrepo <dir to create>
 list [session_name [revision_id]]
+find <filename>
 """
 
 def get_blob(front, sum):
@@ -66,7 +67,7 @@ def check_in_tree(sessionwriter, path):
                 assert len(data) == blobinfo["size"]
                 assert md5sum(data) == blobinfo["md5sum"]
                 sessionwriter.add(base64.b64encode(data), blobinfo, blobinfo["md5sum"])
-
+        # End of visitor()
     os.path.walk(path, visitor, None)
 
 def list_sessions(front):
@@ -128,10 +129,12 @@ def cmd_status(args):
         fname = os.path.join(local_dir, info['filename'])
         if fname in existing_files_list:
             existing_files_list.remove(fname)
-        sum = info['md5sum']
+            csum = md5sum_file(fname)
+            if csum in blobs_by_csum:
+                del blobs_by_csum[csum]
         if not os.path.exists(fname):
             file_status[fname] = "!"
-        elif md5sum_file(fname) != sum:
+        elif csum != info['md5sum']:
             file_status[fname] = "M"
         else:
             file_status[fname] = " "
@@ -144,6 +147,8 @@ def cmd_status(args):
     for f in filenames:
         if file_status[f] != " " or verbose:
             print file_status[f], f
+    for b in blobs_by_csum.values():
+        print "This file was not present by any name", b['md5sum'],  b['filename']
 
 def cmd_info(front, args):
     pass
