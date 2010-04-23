@@ -104,14 +104,17 @@ def cmd_status(args):
     unchanged_files, new_files, modified_files, deleted_files = workdir.get_changes()
     filestats = {}
     def in_session(f):
-        return "*" if workdir.exists_in_session(workdir.cached_md5sum(f)) else " "
+        return "C" if workdir.exists_in_session(workdir.cached_md5sum(f)) else " "
+    def in_workdir(f):
+        csum = workdir.get_blobinfo(f)['md5sum']
+        return "C" if workdir.exists_in_workdir(csum) else " "
 
     for f in new_files:
         filestats[f] = "A" + in_session(f)
     for f in modified_files:
-        filestats[f] = "M" + in_session(f)
+        filestats[f] = "M" + in_workdir(f)
     for f in deleted_files:
-        filestats[f] = "D"
+        filestats[f] = "D" + in_workdir(f)
     if verbose:
         for f in unchanged_files:
             filestats[f] = " "
