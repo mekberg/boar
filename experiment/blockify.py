@@ -15,6 +15,7 @@ def split(data, sep, minlimit = 50000):
             parts[i:i+2] = [parts[i]  + sep + parts[i+1]]
         else:
             i += 1
+    assert string.join(parts, sep) == data
     return parts
 
 def main():
