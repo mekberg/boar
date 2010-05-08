@@ -1,5 +1,10 @@
 from __future__ import with_statement
 
+"""
+The Repository together with SessionWriter and SessionReader are the
+only classes that directly accesses the repository.
+"""
+
 import os
 import re
 import shutil

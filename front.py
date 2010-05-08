@@ -1,3 +1,11 @@
+""" The Front class is a facade for the Repository, SessionWriter and
+SessionReader classes. It provides some convenience methods, but its
+primary purpose is to provide an interface that is easy to use over
+RPC. All arguments and return values are primitive values that can be
+serialized easily.
+"""
+
+
 import repository
 import sys
 

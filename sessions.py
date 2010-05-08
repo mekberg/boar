@@ -17,6 +17,9 @@ import shutil
 from common import *
 
 """
+The SessionWriter and SessionReader are together with Repository the
+only classes that directly accesses the repository. 
+
 A session consists of a set of blobs and a set of metadatas. The
 metadatas are dictionaries. Some keywords are reserved by the
 repository, and some are required to be set by the client. Any
