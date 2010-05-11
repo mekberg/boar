@@ -30,12 +30,6 @@ list [session_name [revision_id]]
 find <filename>
 """
 
-def get_blob(front, sum):
-    """ Hack to wrap base64 encoding to make json happy """ 
-    b64data = front.get_blob_b64(sum)
-    data = base64.b64decode(b64data)
-    return data
-
 def check_in_tree(sessionwriter, path):
     if path != get_relative_path(path):
         print "Warning: stripping leading slashes from given path"
@@ -192,17 +186,7 @@ def cmd_co(front, args):
     assert not os.path.exists(workdir_path)
     os.mkdir(workdir_path)
     wd = Workdir(front.get_repo_path(), session_name, sid, workdir_path)
-    wd.write_metadata()
-
-    for info in front.get_session_bloblist(sid):
-        print info['filename']
-        data = get_blob(front, info['md5sum'])
-        assert data or info['size'] == 0
-        filename = os.path.join(workdir_path, info['filename'])
-        if not os.path.exists(os.path.dirname(filename)):
-            os.makedirs(os.path.dirname(filename))
-        with open(filename, "wb") as f:            
-            f.write(data)
+    wd.checkout()
 
 def cmd_find(front, args):
     filename, = args
