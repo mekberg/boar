@@ -3,6 +3,7 @@ import os
 from front import Front
 from repository import Repo
 from common import *
+from base64 import b64decode
 import settings
 
 if sys.version_info >= (2, 6):
@@ -30,6 +31,21 @@ class Workdir:
             json.dump({'repo_path': self.repoUrl,
                        'session_name': self.sessionName,
                        'session_id': self.revision}, f, indent = 4)    
+
+    def checkout(self):
+        assert os.path.exists(self.root) and os.path.isdir(self.root)
+        front = self.get_front()
+        self.write_metadata()
+        for info in front.get_session_bloblist(self.revision):
+            print info['filename']
+            data = b64decode(front.get_blob_b64(info['md5sum']))
+            assert data or info['size'] == 0
+            filename = os.path.join(self.root, info['filename'])
+            if not os.path.exists(os.path.dirname(filename)):
+                os.makedirs(os.path.dirname(filename))
+            with open(filename, "wb") as f:            
+                f.write(data)
+
 
     def get_front(self):
         if not self.front:
