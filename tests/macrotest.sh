@@ -1,10 +1,12 @@
 #!/bin/bash
-export PATH="$PATH:/tmp/test2/pyarchive"
-CMD="cmd.py"
-CWD=`pwd`
-REPO="$CWD/TESTREPO"
+TESTDIR=~+/`dirname $0`
+cd $TESTDIR
 
-rm -r $REPO test_tree
+export PATH="$PATH:$TESTDIR/../"
+CMD="cmd.py"
+REPO="$TESTDIR/TESTREPO"
+
+rm -r $REPO test_tree 2>/dev/null
 
 tar -xvzf test_tree.tar.gz || { echo "Couldn't create test tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 before check-in"; exit 1; }
