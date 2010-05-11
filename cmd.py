@@ -191,12 +191,8 @@ def cmd_co(front, args):
 
     assert not os.path.exists(workdir_path)
     os.mkdir(workdir_path)
-    os.mkdir(os.path.join(workdir_path, settings.metadir))
-    statusfile = os.path.join(workdir_path, settings.metadir, "info")
-    with open(statusfile, "wb") as f:
-        json.dump({'repo_path': front.get_repo_path(),
-                   'session_name': session_name,
-                   'session_id': sid}, f, indent = 4)    
+    wd = Workdir(front.get_repo_path(), session_name, sid, workdir_path)
+    wd.write_metadata()
 
     for info in front.get_session_bloblist(sid):
         print info['filename']

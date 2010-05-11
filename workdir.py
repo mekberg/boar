@@ -5,6 +5,12 @@ from repository import Repo
 from common import *
 import settings
 
+if sys.version_info >= (2, 6):
+    import json
+else:
+    import simplejson as json
+
+
 class Workdir:
     def __init__(self, repoUrl, sessionName, revision, root):
         self.repoUrl = repoUrl
@@ -13,6 +19,17 @@ class Workdir:
         self.root = root
         self.front = None
         self.md5cache = {}
+
+    def write_metadata(self):
+        workdir_path = self.root
+        metadir = os.path.join(workdir_path, settings.metadir)        
+        if not os.path.exists(metadir):
+            os.mkdir(metadir)
+        statusfile = os.path.join(workdir_path, settings.metadir, "info")
+        with open(statusfile, "wb") as f:
+            json.dump({'repo_path': self.repoUrl,
+                       'session_name': self.sessionName,
+                       'session_id': self.revision}, f, indent = 4)    
 
     def get_front(self):
         if not self.front:
