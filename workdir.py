@@ -3,8 +3,10 @@ import os
 from front import Front
 from repository import Repo
 from common import *
-from base64 import b64decode
+from base64 import b64decode, b64encode
+import bloblist
 import settings
+import time
 
 if sys.version_info >= (2, 6):
     import json
@@ -46,6 +48,17 @@ class Workdir:
             with open(filename, "wb") as f:            
                 f.write(data)
 
+    def checkin(self):
+        front = self.get_front()
+        assert os.path.exists(self.root)
+        front.create_session()
+        check_in_tree(front, self.root)
+        session_info = {}
+        session_info["name"] = self.sessionName
+        session_info["timestamp"] = int(time.time())
+        session_info["date"] = time.ctime()
+        self.revision = front.commit(session_info)
+        return self.revision
 
     def get_front(self):
         if not self.front:
@@ -137,3 +150,41 @@ class Workdir:
         deleted_files = map(remove_rootpath, deleted_files)
 
         return unchanged_files, new_files, modified_files, deleted_files
+
+
+def check_in_tree(sessionwriter, path):
+    """ Walks the tree starting at path, and checks in all found files
+    in the given session writer """
+
+    if path != get_relative_path(path):
+        print "Warning: stripping leading slashes from given path"
+
+    def visitor(arg, dirname, names):
+        if settings.metadir in names:
+            print "Ignoring meta directory", os.path.join(dirname, settings.metadir)
+            names.remove(settings.metadir)
+        for name in names:
+            full_path = os.path.join(dirname, name)
+            if os.path.isdir(full_path):
+                # print "Skipping directory:", full_path
+                continue
+            elif not os.path.isfile(full_path):
+                print "Skipping non-file:", full_path
+                continue
+            elif os.path.islink(full_path):
+                print "Skipping symbolic link:", full_path
+                continue                
+
+            print "Adding", full_path
+            blobinfo = bloblist.create_blobinfo(full_path, path)
+            
+            if sessionwriter.has_blob(blobinfo["md5sum"]):
+                sessionwriter.add_existing(blobinfo, blobinfo["md5sum"])
+            else:
+                with open(full_path, "rb") as f:
+                    data = f.read()
+                assert len(data) == blobinfo["size"]
+                assert md5sum(data) == blobinfo["md5sum"]
+                sessionwriter.add(b64encode(data), blobinfo, blobinfo["md5sum"])
+        # End of visitor()
+    os.path.walk(path, visitor, None)
