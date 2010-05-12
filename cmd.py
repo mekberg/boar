@@ -30,39 +30,6 @@ list [session_name [revision_id]]
 find <filename>
 """
 
-def check_in_tree(sessionwriter, path):
-    if path != get_relative_path(path):
-        print "Warning: stripping leading slashes from given path"
-
-    def visitor(arg, dirname, names):
-        if settings.metadir in names:
-            print "Ignoring meta directory", os.path.join(dirname, settings.metadir)
-            names.remove(settings.metadir)
-        for name in names:
-            full_path = os.path.join(dirname, name)
-            if os.path.isdir(full_path):
-                # print "Skipping directory:", full_path
-                continue
-            elif not os.path.isfile(full_path):
-                print "Skipping non-file:", full_path
-                continue
-            elif os.path.islink(full_path):
-                print "Skipping symbolic link:", full_path
-                continue                
-
-            print "Adding", full_path
-            blobinfo = bloblist.create_blobinfo(full_path, path)
-            
-            if sessionwriter.has_blob(blobinfo["md5sum"]):
-                sessionwriter.add_existing(blobinfo, blobinfo["md5sum"])
-            else:
-                with open(full_path, "rb") as f:
-                    data = f.read()
-                assert len(data) == blobinfo["size"]
-                assert md5sum(data) == blobinfo["md5sum"]
-                sessionwriter.add(base64.b64encode(data), blobinfo, blobinfo["md5sum"])
-        # End of visitor()
-    os.path.walk(path, visitor, None)
 
 def list_sessions(front):
     sessions_count = {}
@@ -137,30 +104,15 @@ def cmd_list(front, args):
 def cmd_import(front, args):
     path_to_ci = args[0]
     session_name = args[1]
-
     assert os.path.exists(path_to_ci)
     front.create_session()
-    check_in_tree(front, path_to_ci)
-    session_info = {}
-    session_info["name"] = session_name
-    session_info["timestamp"] = int(time.time())
-    session_info["date"] = time.ctime()
-    session_id = front.commit(session_info)
+    wd = Workdir(front.get_repo_path(), session_name, None, path_to_ci)
+    session_id = wd.checkin()
     print "Checked in session id", session_id
 
 
 def cmd_ci(workdir, args):
-    path_to_ci = workdir.root
-    front = workdir.get_front()
-    session_name = workdir.sessionName
-    assert os.path.exists(path_to_ci)
-    front.create_session()
-    check_in_tree(front, path_to_ci)
-    session_info = {}
-    session_info["name"] = session_name
-    session_info["timestamp"] = int(time.time())
-    session_info["date"] = time.ctime()
-    session_id = front.commit(session_info)
+    session_id = workdir.checkin()
     print "Checked in session id", session_id
 
 def cmd_co(front, args): 
