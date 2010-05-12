@@ -58,6 +58,7 @@ class Workdir:
         session_info["timestamp"] = int(time.time())
         session_info["date"] = time.ctime()
         self.revision = front.commit(session_info)
+        self.write_metadata()
         return self.revision
 
     def get_front(self):
