@@ -1,11 +1,9 @@
 #!/usr/bin/python
 from __future__ import with_statement
+
 import sys
 import os
-import stat
-import sys
-import time
-import base64
+from time import time
 
 import repository
 import bloblist
@@ -29,7 +27,6 @@ mkrepo <dir to create>
 list [session_name [revision_id]]
 find <filename>
 """
-
 
 def list_sessions(front):
     sessions_count = {}
@@ -84,8 +81,16 @@ def cmd_status(args):
     for f in filenames:
         print filestats[f], f
 
-def cmd_info(front, args):
-    pass
+def cmd_info(args):
+    workdir = init_workdir(os.getcwd())
+    if workdir:
+        print "Using a work directory:"
+        print "   Workdir root:", workdir.root
+        print "   Repository:", workdir.repoUrl
+        print "   Session:", workdir.sessionName
+        print "   Revision:", workdir.revision
+        
+    #env_front = init_repo_from_env()
 
 def cmd_mkrepo(args):
     repository.create_repository(args[0])
@@ -167,7 +172,6 @@ def init_repo_from_env():
     elif repopath and repourl:
         msg = "Both REPO_PATH and REPO_URL was set. Only one allowed"
     elif repopath:
-        print "Using repo at '%s'" % (repopath)
         front = Front(repository.Repo(repopath))
     elif repourl:
         print "Using remote repo at '%s'" % (repourl)
@@ -195,9 +199,9 @@ def init_repo_from_meta(path):
     msg = None
     meta = find_meta(path)
     if meta:
-        print "Found meta data at", meta
+        pass # print "Found meta data at", meta
     else:
-        print "No metadata found"
+        print "No workdir found at", path
         return None
 
     info = load_meta_info(meta)
@@ -205,13 +209,14 @@ def init_repo_from_meta(path):
     session_name = info['session_name']
     session_id = info['session_id']
 
-    print "Using repo at", repo_path, "with session", session_name
+    # print "Using repo at", repo_path, "with session", session_name
     front = Front(repository.Repo(repo_path))
     return front
 
 def init_workdir(path):
     front = init_repo_from_meta(path)
-    assert front, "No workdir found here"
+    if not front:
+        return None
     metapath = find_meta(os.getcwd())
     info = load_meta_info(metapath)
     root = os.path.split(metapath)[0]    
@@ -228,7 +233,6 @@ def main():
     elif sys.argv[1] == "mkrepo":
         cmd_mkrepo(sys.argv[2:])
         return
-
     if sys.argv[1] == "import":
         front = init_repo_from_env()
         cmd_import(front, sys.argv[2:])
@@ -241,8 +245,7 @@ def main():
     elif sys.argv[1] == "status":
         cmd_status(sys.argv[2:])
     elif sys.argv[1] == "info":
-        front = init_repo_from_meta(os.getcwd())
-        cmd_info(front, sys.argv[2:])
+        cmd_info(sys.argv[2:])
     elif sys.argv[1] == "ci":
         wd = init_workdir(os.getcwd())
         cmd_ci(wd, sys.argv[2:])
@@ -254,7 +257,7 @@ def main():
         return
 
 if __name__ == "__main__":
-    t1 = time.time()
+    t1 = time()
     main()
-    t2 = time.time()
+    t2 = time()
     print "Finished in", round(t2-t1, 2), "seconds"
