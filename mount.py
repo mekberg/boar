@@ -47,7 +47,7 @@ class HelloFS(Fuse):
             dirname = os.path.dirname(i['filename'])
             if dirname and dirname not in self.files: # Don't add an empty top dir name
                 self.files[dirname] = { 'filename': dirname, 'type': 'directory', 'size': 0, 'dir': "/" + os.path.dirname(dirname) }
-        print self.files
+        
 
     def getattr(self, path):
         st = MyStat()

@@ -5,12 +5,13 @@ How to create a repository in the current directory named "REPO":
 $ cmd.py mkrepo REPO
 
 To work with a repository, set the environment parameter REPO_PATH
+(The path to the repo must be absolute)
 
-$ export REPO_PATH=./REPO
+$ export REPO_PATH=~+/REPO
 
-To check in a directory my_files with session name MyFiles:
+To import directory my_files with session name MyFiles:
 
-$ cmd.py ci my_files MyFiles
+$ cmd.py import my_files MyFiles
 Adding my_files/IMG_2600.jpg
 Adding my_files/IMG_2602.jpg
 Adding my_files/IMG_2603.jpg
@@ -41,5 +42,10 @@ IMG_2602.jpg
 IMG_2603.jpg
 IMG_2608.jpg
 
-To check in a new revision of an existing session, just perform a checkin just as the first time.
-cmd.py ci my_files MyFiles
+To check in a new revision of an checked-out session:
+(make sure your cwd is the work directory)
+$ cmd.py ci 
+
+To mount a session as a file system:
+$ mount.py <path to repository> <session name> <mount point>
+
