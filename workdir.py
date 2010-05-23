@@ -34,10 +34,11 @@ class Workdir:
                        'session_name': self.sessionName,
                        'session_id': self.revision}, f, indent = 4)    
 
-    def checkout(self):
+    def checkout(self, write_meta = True):
         assert os.path.exists(self.root) and os.path.isdir(self.root)
         front = self.get_front()
-        self.write_metadata()
+        if write_meta:
+            self.write_metadata()
         for info in front.get_session_bloblist(self.revision):
             print info['filename']
             data = b64decode(front.get_blob_b64(info['md5sum']))
@@ -48,17 +49,18 @@ class Workdir:
             with open(filename, "wb") as f:            
                 f.write(data)
 
-    def checkin(self):
+    def checkin(self, write_meta = True, base_session = None):
         front = self.get_front()
         assert os.path.exists(self.root)
-        front.create_session()
+        front.create_session(base_session)
         check_in_tree(front, self.root)
         session_info = {}
         session_info["name"] = self.sessionName
         session_info["timestamp"] = int(time.time())
         session_info["date"] = time.ctime()
         self.revision = front.commit(session_info)
-        self.write_metadata()
+        if write_meta:
+            self.write_metadata()
         return self.revision
 
     def get_front(self):
