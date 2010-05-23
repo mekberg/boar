@@ -31,7 +31,12 @@ class Front:
 
     def get_session_bloblist(self, id):
         session_reader = self.repo.get_session(id)
-        return list(session_reader.get_all_files())
+        bloblist = list(session_reader.get_all_blob_infos())
+        seen = set()
+        for b in bloblist:
+            assert b['filename'] not in seen, "Duplicate file found in bloblist - internal error"
+            seen.add(b['filename'])
+        return bloblist
 
     def create_session(self, base_session = None):
         self.new_session = self.repo.create_session(base_session)
