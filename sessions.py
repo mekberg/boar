@@ -88,10 +88,6 @@ class SessionWriter:
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
 
-    def remove(self, filename):
-        assert filename in self.metadatas
-        del self.metadatas['filename']
-
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
         sessioninfo['base_session'] = self.base_session
@@ -143,19 +139,22 @@ class SessionReader:
                 checked_blobs[sum] = is_ok
             print blobinfo['filename'], is_ok
             
-    def get_all_files(self):
+    def get_all_blob_infos(self):
+        seen = set()
+        for blobinfo in self.bloblist:
+            assert blobinfo['filename'] not in seen, \
+                "Internal error - duplicate file entry in a single session"
+            seen.add(blobinfo['filename'])
+            yield copy.copy(blobinfo)
+
         base_session_id = self.session_info.get("base_session", None)
         if base_session_id:
             base_session_reader = SessionReader(self.repo, base_session_id)
-            for info in base_session_reader.get_all_files():
-                yield info
+            for info in base_session_reader.get_all_blob_infos():
+                if info['filename'] not in seen:
+                    # Later entries overrides earlier ones
+                    yield info
             
-        for blobinfo in self.bloblist:
-            info = copy.copy(blobinfo)
-            with open(self.repo.get_blob_path(info['md5sum']), "r") as f:
-                info['data'] = f.read()
-            assert md5sum(info['data']) == info['md5sum']
-            yield info
     
 if __name__ == "__main__":
     main()
