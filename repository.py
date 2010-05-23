@@ -100,13 +100,13 @@ class Repo:
     def get_session(self, id):
         return sessions.SessionReader(self, id)
 
-    def create_session(self):
-        return sessions.SessionWriter(self)
+    def create_session(self, base_session = None):
+        return sessions.SessionWriter(self, base_session = base_session)
 
     def find_next_session_id(self):
         assert os.path.exists(self.repopath)
         session_dirs = self.get_all_sessions()
-        session_dirs.append(-1)
+        session_dirs.append(0)
         return max(session_dirs) + 1            
 
     def verify_all(self):

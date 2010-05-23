@@ -16,7 +16,6 @@ else:
 import base64
 
 class Front:
-
     def __init__(self, repo):
         self.repo = repo
 
@@ -32,10 +31,10 @@ class Front:
 
     def get_session_bloblist(self, id):
         session_reader = self.repo.get_session(id)
-        return session_reader.bloblist
+        return list(session_reader.get_all_files())
 
-    def create_session(self):
-        self.new_session = self.repo.create_session()
+    def create_session(self, base_session = None):
+        self.new_session = self.repo.create_session(base_session)
 
     def add(self, b64data, metadata, original_sum):
         """ Must be called after a create_session()  """

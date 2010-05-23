@@ -1,6 +1,5 @@
 #!/usr/bin/python
 from __future__ import with_statement
-
 import sys
 import os
 from time import time
@@ -107,12 +106,18 @@ def cmd_list(front, args):
         print "Duuuh?"
 
 def cmd_import(front, args):
+    base_session = None
+    update_import = False
+    if "-u" in args:
+        args.remove("-u")
+        update_import = True
     path_to_ci = args[0]
     session_name = args[1]
+    if update_import:
+        base_session = front.find_last_revision(session_name)
     assert os.path.exists(path_to_ci)
-    front.create_session()
     wd = Workdir(front.get_repo_path(), session_name, None, path_to_ci)
-    session_id = wd.checkin()
+    session_id = wd.checkin(write_meta = False, base_session = base_session)
     print "Checked in session id", session_id
 
 
