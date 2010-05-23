@@ -33,8 +33,8 @@ change:   Required by the session when creating a derived session. Can
 The sessioninfo object also is mostly filled by the client, but a few
 keywords are reserved.
 
-base_id: The revision id of the revision that this revision is based
-        on. May be null in case of a non-incremental revision.
+base_session: The revision id of the revision that this revision is
+        based on. May be null in case of a non-incremental revision.
 
 
 """
@@ -49,9 +49,9 @@ def bloblist_to_dict(bloblist):
     return d
 
 class SessionWriter:
-    def __init__(self, repo, base_id = None):
+    def __init__(self, repo, base_session = None):
         self.repo = repo
-        self.base_id = base_id
+        self.base_session = base_session
         self.session_path = None
         self.metadatas = {}
         assert os.path.exists(self.repo.repopath)
@@ -61,9 +61,9 @@ class SessionWriter:
         
         self.base_session_info = {}
         self.base_bloblist_dict = {}
-        if self.base_id != None:
-            self.base_session_info = self.repo.get_session(self.base_id).session_info
-            self.base_bloblist_dict = bloblist_to_dict(self.repo.get_session(self.base_id).bloblist)
+        if self.base_session != None:
+            self.base_session_info = self.repo.get_session(self.base_session).session_info
+            self.base_bloblist_dict = bloblist_to_dict(self.repo.get_session(self.base_session).bloblist)
 
     def add(self, data, metadata, original_sum):
         assert data != None
@@ -94,7 +94,7 @@ class SessionWriter:
 
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
-        sessioninfo['base_id'] = self.base_id
+        sessioninfo['base_session'] = self.base_session
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
         assert not os.path.exists(bloblist_filename)
         with open(bloblist_filename, "wb") as f:
@@ -144,6 +144,12 @@ class SessionReader:
             print blobinfo['filename'], is_ok
             
     def get_all_files(self):
+        base_session_id = self.session_info.get("base_session", None)
+        if base_session_id:
+            base_session_reader = SessionReader(self.repo, base_session_id)
+            for info in base_session_reader.get_all_files():
+                yield info
+            
         for blobinfo in self.bloblist:
             info = copy.copy(blobinfo)
             with open(self.repo.get_blob_path(info['md5sum']), "r") as f:
