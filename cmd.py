@@ -58,7 +58,8 @@ def list_files(front, session_name, revision):
 def cmd_status(args):
     verbose = ("-v" in args)
     workdir = init_workdir(os.getcwd())
-    unchanged_files, new_files, modified_files, deleted_files = workdir.get_changes()
+    unchanged_files, new_files, modified_files, deleted_files, ignored_files \
+        = workdir.get_changes()
     filestats = {}
     def in_session(f):
         return "C" if workdir.exists_in_session(workdir.cached_md5sum(f)) else " "
@@ -75,6 +76,8 @@ def cmd_status(args):
     if verbose:
         for f in unchanged_files:
             filestats[f] = " "
+        for f in ignored_files:
+            filestats[f] = "i"
     filenames = filestats.keys()
     filenames.sort()
     for f in filenames:
