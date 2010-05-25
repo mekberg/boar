@@ -116,10 +116,11 @@ checked_blobs = {}
 
 class SessionReader:
     def __init__(self, repo, session_id):
+        assert session_id, "Session id must be given"
         self.path = repo.get_session_path(session_id)
         self.session_id = session_id
         self.repo = repo
-        assert os.path.exists(self.path)
+        assert os.path.exists(self.path), "No such repo:" + self.path
 
         path = os.path.join(self.path, "bloblist.json")
         with open(path, "rb") as f:
