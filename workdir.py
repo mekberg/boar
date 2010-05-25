@@ -52,8 +52,12 @@ class Workdir:
     def checkin(self, write_meta = True, base_session = None):
         front = self.get_front()
         assert os.path.exists(self.root)
+        unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
+            self.get_changes()
         front.create_session(base_session)
+
         check_in_tree(front, self.root)
+
         session_info = {}
         session_info["name"] = self.sessionName
         session_info["timestamp"] = int(time.time())
@@ -111,7 +115,9 @@ class Workdir:
                 names.remove(settings.metadir)
             for name in names:
                 name = unicode(name, encoding="utf_8")
-                out_list.append(os.path.join(dirname, name))
+                fullpath = os.path.join(dirname, name)
+                if not os.path.isdir(fullpath):
+                    out_list.append(fullpath)
         all_files = []
         os.path.walk(self.root, visitor, all_files)
         remove_rootpath = lambda fn: my_relpath(fn, self.root)
@@ -131,9 +137,11 @@ class Workdir:
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
         existing_files_list = self.get_tree()
-        #print existing_files_list
-        bloblist = front.get_session_bloblist(self.revision)
-        unchanged_files, new_files, modified_files, deleted_files = [], [], [], []
+        print existing_files_list
+        bloblist = []
+        if self.revision != None:
+            bloblist = front.get_session_bloblist(self.revision)
+        unchanged_files, new_files, modified_files, deleted_files, ignored_files = [], [], [], [], []
         for info in bloblist:
             fname = info['filename']
             if fname in existing_files_list:
@@ -144,6 +152,10 @@ class Workdir:
                     modified_files.append(fname)                    
             if not os.path.exists(fname):
                 deleted_files.append(fname)
+        for f in existing_files_list:
+            if is_ignored(f):
+                existing_files_list.remove(f)
+                ignored_files.append(f)
         new_files.extend(existing_files_list)
 
         remove_rootpath = lambda fn: my_relpath(fn, self.root)
@@ -151,43 +163,54 @@ class Workdir:
         new_files = map(remove_rootpath, new_files)
         modified_files = map(remove_rootpath, modified_files)
         deleted_files = map(remove_rootpath, deleted_files)
+        ignored_files = map(remove_rootpath, ignored_files)
+        if self.revision == None:
+            assert not unchanged_files
+            assert not modified_files
+            assert not deleted_files
+        return unchanged_files, new_files, modified_files, deleted_files, ignored_files
 
-        return unchanged_files, new_files, modified_files, deleted_files
+def is_ignored(dirname, entryname = None):
+    if entryname == None:
+        entryname = os.path.basename(dirname)
+        dirname = os.path.dirname(dirname)
+    if settings.metadir == entryname:
+        return True
+    full_path = os.path.join(dirname, entryname)
+    if os.path.isdir(full_path):
+        return False
+    elif not os.path.isfile(full_path):
+        return True
+    elif os.path.islink(full_path):
+        return True
+    return False
+
+def check_in_file(sessionwriter, root, path):
+    blobinfo = bloblist.create_blobinfo(path, root)
+    if sessionwriter.has_blob(blobinfo["md5sum"]):
+        sessionwriter.add_existing(blobinfo, blobinfo["md5sum"])
+    else:
+        with open(path, "rb") as f:
+            data = f.read()
+        assert len(data) == blobinfo["size"]
+        assert md5sum(data) == blobinfo["md5sum"]
+        sessionwriter.add(b64encode(data), blobinfo, blobinfo["md5sum"])
 
 
-def check_in_tree(sessionwriter, path):
-    """ Walks the tree starting at path, and checks in all found files
+def check_in_tree(sessionwriter, root):
+    """ Walks the tree starting at root, and checks in all found files
     in the given session writer """
 
-    if path != get_relative_path(path):
+    if root != get_relative_path(root):
         print "Warning: stripping leading slashes from given path"
-
-    def visitor(arg, dirname, names):
-        if settings.metadir in names:
-            print "Ignoring meta directory", os.path.join(dirname, settings.metadir)
-            names.remove(settings.metadir)
-        for name in names:
-            full_path = os.path.join(dirname, name)
-            if os.path.isdir(full_path):
-                # print "Skipping directory:", full_path
-                continue
-            elif not os.path.isfile(full_path):
-                print "Skipping non-file:", full_path
-                continue
-            elif os.path.islink(full_path):
-                print "Skipping symbolic link:", full_path
-                continue                
-
-            print "Adding", full_path
-            blobinfo = bloblist.create_blobinfo(full_path, path)
-            
-            if sessionwriter.has_blob(blobinfo["md5sum"]):
-                sessionwriter.add_existing(blobinfo, blobinfo["md5sum"])
-            else:
-                with open(full_path, "rb") as f:
-                    data = f.read()
-                assert len(data) == blobinfo["size"]
-                assert md5sum(data) == blobinfo["md5sum"]
-                sessionwriter.add(b64encode(data), blobinfo, blobinfo["md5sum"])
-        # End of visitor()
-    os.path.walk(path, visitor, None)
+        
+    tree = TreeWalker(root)
+    for dirname, entryname in tree:
+        if is_ignored(dirname, entryname):
+            tree.skip_dir()
+            continue
+        full_path = os.path.join(dirname, entryname)
+        if os.path.isdir(full_path):
+            continue
+        check_in_file(sessionwriter, root, full_path)
+        
