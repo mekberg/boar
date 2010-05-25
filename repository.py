@@ -98,6 +98,7 @@ class Repo:
         return session_dirs
 
     def get_session(self, id):
+        assert id
         return sessions.SessionReader(self, id)
 
     def create_session(self, base_session = None):
