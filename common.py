@@ -85,3 +85,32 @@ def my_relpath(path, start=curdir):
     if not rel_list:
         return curdir
     return join(*rel_list)
+
+
+class TreeWalker:
+    def __init__(self, path):
+        assert os.path.exists(path)
+        self.queue = [path]
+        self.nextdir = None
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        """ Returns the next entry as a tuple, (dirname, entryname) """
+        if self.nextdir:
+            for name in os.listdir(self.nextdir):
+                self.queue.append(os.path.join(self.nextdir, name))
+            self.nextdir = None
+        if not self.queue:
+            raise StopIteration()
+        item = self.queue.pop(0)
+        if os.path.isdir(item):
+            self.nextdir = item
+        return os.path.dirname(item), os.path.basename(item)
+
+    def skip_dir(self):
+        """ Prevents descent into the directory that was returned by
+        next() the last time it was called. 
+        """
+        self.nextdir = None
