@@ -125,7 +125,7 @@ class Repo:
         queued_item = self.get_queue_path("queued_session")
         if not os.path.exists(queued_item):
             return
-        print "Processing queue"
+        #print "Processing queue"
         items = os.listdir(queued_item)
         for filename in items:
             if not is_md5sum(filename):
@@ -137,12 +137,12 @@ class Repo:
             if not os.path.exists(dir):
                 os.mkdir(dir)
             os.rename(blob_to_move, destination_path)
-            print "Moving", os.path.join(queued_item, filename),"to", destination_path
-        assert set(os.listdir(queued_item)) == set(["session.json", "bloblist.json"]), \
+            #print "Moving", os.path.join(queued_item, filename),"to", destination_path
+        assert set(os.listdir(queued_item)) == set(["session.json", "bloblist.json", "meta.json"]), \
             "Unexpected or missing files in queue dir"
         id = self.find_next_session_id()
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
         shutil.move(queued_item, session_path)
         assert not os.path.exists(queued_item), "Queue should be empty after processing"
-        print "Done"
+        #print "Done"
         return id

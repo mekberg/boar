@@ -90,7 +90,7 @@ class SessionWriter:
 
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
-        sessioninfo['base_session'] = self.base_session
+        metainfo = { 'base_session': self.base_session }
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
         assert not os.path.exists(bloblist_filename)
         with open(bloblist_filename, "wb") as f:
@@ -101,15 +101,16 @@ class SessionWriter:
         with open(session_filename, "wb") as f:
             json.dump(sessioninfo, f, indent = 4)
 
+        meta_filename = os.path.join(self.session_path, "meta.json")
+        assert not os.path.exists(meta_filename)
+        with open(meta_filename, "wb") as f:
+            json.dump(metainfo, f, indent = 4)
+
         queue_dir = self.repo.get_queue_path("queued_session")
         assert not os.path.exists(queue_dir)
-
-        print "Committing to", queue_dir, "from", self.session_path, "..."
+        
         shutil.move(self.session_path, queue_dir)
-        print "Done committing."
-        print "Consolidating changes..."
         id = self.repo.process_queue()
-        print "Consolidating changes complete"
         return id
 
 checked_blobs = {}
