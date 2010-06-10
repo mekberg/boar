@@ -4,7 +4,7 @@ import os, stat, errno, sys
 import fuse
 from fuse import Fuse
 
-import repository
+from blobrepo import repository
 from front import Front
 from common import *
 

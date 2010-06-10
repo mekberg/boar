@@ -4,7 +4,7 @@ import sys
 import os
 from time import time
 
-import repository
+from blobrepo import repository
 import bloblist
 import client
 
