@@ -6,7 +6,7 @@ serialized easily.
 """
 
 
-import repository
+from blobrepo import repository
 import sys
 
 if sys.version_info >= (2, 6):

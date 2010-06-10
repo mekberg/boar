@@ -1,4 +1,4 @@
-import repository
+from blobrepo import repository
 import jsonrpc
 import os
 import front
