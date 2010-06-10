@@ -114,7 +114,7 @@ def cmd_import(front, args):
     if "-u" in args:
         args.remove("-u")
         update_import = True
-    path_to_ci = args[0]
+    path_to_ci = os.path.abspath(args[0])
     session_name = args[1]
     if update_import:
         base_session = front.find_last_revision(session_name)
@@ -134,9 +134,9 @@ def cmd_co(front, args):
     session_name = args[0]
 
     if len(args) <= 1:
-        workdir_path = session_name
+        workdir_path = os.path.abspath(session_name)
     else:
-        workdir_path = args[1]
+        workdir_path = os.path.abspath(args[1])
     print "Exporting to workdir", "./" + workdir_path
 
     for sid in session_ids:

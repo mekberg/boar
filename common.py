@@ -74,7 +74,10 @@ from os.path import curdir, sep, pardir, join
 def my_relpath(path, start=curdir):
     """Return a relative version of a path"""
     if sys.version_info >= (2, 6):
-        return os.path.relpath(path, start)
+        
+        result = os.path.relpath(path, start)
+        print "my_relpath(%s, %s) => %s" % (path, start, result)
+        return result
     if not path:
         raise ValueError("no path specified")
     start_list = posixpath.abspath(start).split(sep)
@@ -107,7 +110,9 @@ class TreeWalker:
         item = self.queue.pop(0)
         if os.path.isdir(item):
             self.nextdir = item
-        return os.path.dirname(item), os.path.basename(item)
+        result = os.path.dirname(item), os.path.basename(item)
+        print "TreeWalker yielding", result
+        return result
 
     def skip_dir(self):
         """ Prevents descent into the directory that was returned by
