@@ -16,6 +16,7 @@ else:
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, revision, root):
+        assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
         self.repoUrl = repoUrl
         self.sessionName = sessionName
         self.revision = revision
@@ -54,9 +55,15 @@ class Workdir:
         assert os.path.exists(self.root)
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
+        #print "Changes:", unchanged_files, new_files, modified_files, deleted_files, ignored_files
         front.create_session(base_session)
 
         check_in_tree(front, self.root)
+        # for f in new_files:
+        #     check_in_file(front, self.root, f)
+        # for f in modified_files:
+        #     check_in_file(front, self.root, f)
+        ## here
 
         session_info = {}
         session_info["name"] = self.sessionName
@@ -119,10 +126,12 @@ class Workdir:
                 if not os.path.isdir(fullpath):
                     out_list.append(fullpath)
         all_files = []
+        print "Walking", self.root
         os.path.walk(self.root, visitor, all_files)
-        remove_rootpath = lambda fn: my_relpath(fn, self.root)
-        relative_paths = map(remove_rootpath, all_files)
-        return relative_paths
+        #remove_rootpath = lambda fn: my_relpath(fn, os.path.dirname(self.root))
+        #remove_rootpath = lambda fn: my_relpath(fn, os.path.dirname(self.root))
+        #relative_paths = map(remove_rootpath, all_files)
+        return all_files
 
     def rel_to_abs(self, relpath):
         return os.path.join(self.root, relpath)
@@ -137,7 +146,7 @@ class Workdir:
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
         existing_files_list = self.get_tree()
-        print existing_files_list
+        print "All existing files:", existing_files_list
         bloblist = []
         if self.revision != None:
             bloblist = front.get_session_bloblist(self.revision)
@@ -186,6 +195,7 @@ def is_ignored(dirname, entryname = None):
     return False
 
 def check_in_file(sessionwriter, root, path):
+    print root, path
     blobinfo = bloblist.create_blobinfo(path, root)
     if sessionwriter.has_blob(blobinfo["md5sum"]):
         sessionwriter.add_existing(blobinfo, blobinfo["md5sum"])
