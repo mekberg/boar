@@ -65,15 +65,15 @@ class SessionWriter:
             self.base_session_info = self.repo.get_session(self.base_session).session_info
             self.base_bloblist_dict = bloblist_to_dict(self.repo.get_session(self.base_session).bloblist)
 
-    def add(self, data, metadata, original_sum):
+    def add(self, data, metadata):
         assert data != None
         assert metadata != None
-        assert is_md5sum(original_sum)
         assert self.session_path != None
+        assert metadata.has_key('md5sum')
+        assert metadata.has_key('filename')
         sum = md5sum(data)
-        if original_sum and (sum != original_sum):
+        if sum != metadata['md5sum']:
             raise AddException("Calculated checksum did not match client provided checksum")
-        metadata["md5sum"] = sum
         fname = os.path.join(self.session_path, sum)
         existing_blob = self.repo.has_blob(sum)
         if not existing_blob and not os.path.exists(fname):
@@ -82,9 +82,9 @@ class SessionWriter:
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
 
-    def add_existing(self, metadata, sum):
-        assert self.repo.has_blob(sum)
-        metadata["md5sum"] = sum
+    def add_existing(self, metadata):
+        assert self.repo.has_blob(metadata['md5sum'])
+        assert metadata.has_key('md5sum')
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
 

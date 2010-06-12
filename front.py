@@ -41,14 +41,16 @@ class Front:
     def create_session(self, base_session = None):
         self.new_session = self.repo.create_session(base_session)
 
-    def add(self, b64data, metadata, original_sum):
+    def add(self, b64data, metadata):
         """ Must be called after a create_session()  """
-        self.new_session.add(base64.b64decode(b64data), metadata, original_sum)
+        assert metadata.has_key("md5sum")
+        self.new_session.add(base64.b64decode(b64data), metadata)
 
-    def add_existing(self, metadata, sum):
+    def add_existing(self, metadata):
         """ Must be called after a create_session(). Adds a link to a existing
         blob. Will throw an exception if there is no such blob """
-        self.new_session.add_existing(metadata, sum)
+        assert metadata.has_key("md5sum")
+        self.new_session.add_existing(metadata)
 
     def commit(self, sessioninfo = {}):
         id = self.new_session.commit(sessioninfo)
