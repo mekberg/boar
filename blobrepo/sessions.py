@@ -131,6 +131,10 @@ class SessionReader:
         with open(path, "rb") as f:
             self.session_info = json.load(f)
 
+        path = os.path.join(self.path, "meta.json")
+        with open(path, "rb") as f:
+            self.meta_info = json.load(f)
+
     def verify(self):
         for blobinfo in self.bloblist:
             sum = blobinfo['md5sum']
@@ -148,8 +152,7 @@ class SessionReader:
                 "Internal error - duplicate file entry in a single session"
             seen.add(blobinfo['filename'])
             yield copy.copy(blobinfo)
-
-        base_session_id = self.session_info.get("base_session", None)
+        base_session_id = self.meta_info.get("base_session", None)
         if base_session_id:
             base_session_reader = SessionReader(self.repo, base_session_id)
             for info in base_session_reader.get_all_blob_infos():
