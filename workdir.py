@@ -198,13 +198,13 @@ def check_in_file(sessionwriter, root, path):
     print root, path
     blobinfo = bloblist.create_blobinfo(path, root)
     if sessionwriter.has_blob(blobinfo["md5sum"]):
-        sessionwriter.add_existing(blobinfo, blobinfo["md5sum"])
+        sessionwriter.add_existing(blobinfo)
     else:
         with open(path, "rb") as f:
             data = f.read()
         assert len(data) == blobinfo["size"]
         assert md5sum(data) == blobinfo["md5sum"]
-        sessionwriter.add(b64encode(data), blobinfo, blobinfo["md5sum"])
+        sessionwriter.add(b64encode(data), blobinfo)
 
 
 def check_in_tree(sessionwriter, root):
