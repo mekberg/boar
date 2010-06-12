@@ -46,6 +46,9 @@ bloblist.
 
 """
 
+class MisuseException(Exception):
+    pass
+
 def create_repository(repopath):
     os.mkdir(repopath)
     os.mkdir(os.path.join(repopath, QUEUE_DIR))
