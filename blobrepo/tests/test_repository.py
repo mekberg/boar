@@ -58,5 +58,22 @@ class TestBlobRepo(unittest.TestCase):
         blobinfos = list(reader.get_all_blob_infos())
         self.assertEqual(blobinfos, [expected_info])
 
+    def test_secondary_session(self):
+        expected_info1 = {"filename": "testfilename.txt",
+                          "md5sum": DATA1_MD5}
+        expected_info2 = {"filename": "testfilename2.txt",
+                          "md5sum": DATA2_MD5}
+        writer1 = self.repo.create_session()
+        writer1.add(DATA1, expected_info1)
+        id1 = writer1.commit()
+        writer2 = self.repo.create_session(base_session = id1)
+        writer2.add(DATA2, expected_info2)
+        id2 = writer2.commit()
+        reader = self.repo.get_session(id2)
+        blobinfos = list(reader.get_all_blob_infos())
+        self.assertEquals(len(blobinfos), 2)
+        self.assert_(expected_info1 in blobinfos)
+        self.assert_(expected_info2 in blobinfos)
+
 if __name__ == '__main__':
     unittest.main()
