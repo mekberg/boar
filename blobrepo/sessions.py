@@ -88,6 +88,12 @@ class SessionWriter:
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
 
+    def remove(self, filename):
+        assert self.base_bloblist_dict.has_key(filename)
+        metadata = {'filename': filename,
+                    'action': 'remove'}
+        self.metadatas[filename] = metadata
+
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
         metainfo = { 'base_session': self.base_session }
@@ -151,7 +157,8 @@ class SessionReader:
             assert blobinfo['filename'] not in seen, \
                 "Internal error - duplicate file entry in a single session"
             seen.add(blobinfo['filename'])
-            yield copy.copy(blobinfo)
+            if blobinfo.get("action", None) != "remove":
+                yield copy.copy(blobinfo)
         base_session_id = self.meta_info.get("base_session", None)
         if base_session_id:
             base_session_reader = SessionReader(self.repo, base_session_id)

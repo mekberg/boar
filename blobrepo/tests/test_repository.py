@@ -18,9 +18,21 @@ class TestBlobRepo(unittest.TestCase):
         self.repopath = tempfile.mktemp(dir=TMPDIR)
         repository.create_repository(self.repopath)
         self.repo = repository.Repo(self.repopath)
+        self.sessioninfo1 = {"foo": "bar"}
+        self.fileinfo1 = {"filename": "testfilename.txt",
+                          "md5sum": DATA1_MD5}
+        self.fileinfo2 = {"filename": "testfilename2.txt",
+                          "md5sum": DATA2_MD5}
 
     def tearDown(self):
         shutil.rmtree(self.repopath, ignore_errors = True)
+
+    def assertListsEqualAsSets(self, lst1, lst2):
+        self.assertEqual(len(lst1), len(lst2))
+        for i in lst1:
+            self.assert_(i in lst2)
+        for i in lst2:
+            self.assert_(i in lst1)
 
     def test_empty_commit(self):
         writer = self.repo.create_session()
@@ -35,45 +47,50 @@ class TestBlobRepo(unittest.TestCase):
         self.assertRaises(Exception, writer.commit)        
         
     def test_session_info(self):
-        expected_info = {"testkey": "testvalue"}
-        committed_info = copy(expected_info)
+        committed_info = copy(self.sessioninfo1)
         writer = self.repo.create_session()
         id = writer.commit(committed_info)
-        self.assertEqual(committed_info, expected_info,
+        self.assertEqual(committed_info, self.sessioninfo1,
                          "Given info dict was changed during commit")
         reader = self.repo.get_session(id)
-        self.assertEqual(expected_info, reader.session_info,
+        self.assertEqual(self.sessioninfo1, reader.session_info,
                          "Read info differs from committed info")
 
     def test_simple_blob(self):
-        expected_info = {"filename": "testfilename.txt",
-                         "md5sum": DATA1_MD5}
-        committed_info = copy(expected_info)
+        committed_info = copy(self.fileinfo1)
         writer = self.repo.create_session()
-        #def add(self, data, metadata, original_sum):
         writer.add(DATA1, committed_info)
-        self.assertEqual(committed_info, expected_info)
+        self.assertEqual(committed_info, self.fileinfo1)
         id = writer.commit()
         reader = self.repo.get_session(id)
         blobinfos = list(reader.get_all_blob_infos())
-        self.assertEqual(blobinfos, [expected_info])
+        self.assertEqual(blobinfos, [self.fileinfo1])
 
     def test_secondary_session(self):
-        expected_info1 = {"filename": "testfilename.txt",
-                          "md5sum": DATA1_MD5}
-        expected_info2 = {"filename": "testfilename2.txt",
-                          "md5sum": DATA2_MD5}
         writer1 = self.repo.create_session()
-        writer1.add(DATA1, expected_info1)
+        writer1.add(DATA1, self.fileinfo1)
         id1 = writer1.commit()
         writer2 = self.repo.create_session(base_session = id1)
-        writer2.add(DATA2, expected_info2)
+        writer2.add(DATA2, self.fileinfo2)
         id2 = writer2.commit()
         reader = self.repo.get_session(id2)
         blobinfos = list(reader.get_all_blob_infos())
-        self.assertEquals(len(blobinfos), 2)
-        self.assert_(expected_info1 in blobinfos)
-        self.assert_(expected_info2 in blobinfos)
+        self.assertListsEqualAsSets(blobinfos, [self.fileinfo1, self.fileinfo2])
+
+    def test_remove(self):
+        writer1 = self.repo.create_session()
+        writer1.add(DATA1, self.fileinfo1)
+        id1 = writer1.commit()
+        writer2 = self.repo.create_session(base_session = id1)
+        writer2.remove(self.fileinfo1['filename'])
+        id2 = writer2.commit()
+        blobinfos = list(self.repo.get_session(id1).get_all_blob_infos())
+        self.assertEqual(blobinfos, [self.fileinfo1])
+        blobinfos = list(self.repo.get_session(id2).get_all_blob_infos())
+        self.assertEqual(blobinfos, [])
+        
+        #def test_secondary_session_replace(self):
+        
 
 if __name__ == '__main__':
     unittest.main()
