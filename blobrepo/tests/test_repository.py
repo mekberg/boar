@@ -88,8 +88,13 @@ class TestBlobRepo(unittest.TestCase):
         self.assertEqual(blobinfos, [self.fileinfo1])
         blobinfos = list(self.repo.get_session(id2).get_all_blob_infos())
         self.assertEqual(blobinfos, [])
-        
-        #def test_secondary_session_replace(self):
+
+    def test_remove_nonexisting(self):
+        writer1 = self.repo.create_session()
+        id1 = writer1.commit()
+        writer2 = self.repo.create_session(base_session = id1)
+        self.assertRaises(Exception, writer2.remove, "doesnotexist.txt")
+
         
 
 if __name__ == '__main__':
