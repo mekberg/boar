@@ -91,11 +91,7 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_remove_nonexisting(self):
         writer1 = self.repo.create_session()
-        id1 = writer1.commit()
-        writer2 = self.repo.create_session(base_session = id1)
-        self.assertRaises(Exception, writer2.remove, "doesnotexist.txt")
-
-        
+        self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")        
 
 if __name__ == '__main__':
     unittest.main()
