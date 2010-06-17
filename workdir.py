@@ -1,5 +1,6 @@
-import os
+from __future__ import with_statement
 
+import os
 from front import Front
 from blobrepo.repository import Repo
 from common import *
