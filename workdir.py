@@ -146,8 +146,8 @@ class Workdir:
             has been changed. """
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
-        existing_files_list = self.get_tree()
-        print "All existing files:", existing_files_list
+        remove_rootpath = lambda fn: my_relpath(fn, self.root)
+        existing_files_list = map(remove_rootpath, self.get_tree())
         bloblist = []
         if self.revision != None:
             bloblist = front.get_session_bloblist(self.revision)
