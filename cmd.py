@@ -14,7 +14,7 @@ else:
     import simplejson as json
 
 from front import Front
-from workdir import Workdir
+import workdir
 from common import *
 import settings
 
@@ -57,15 +57,15 @@ def list_files(front, session_name, revision):
 
 def cmd_status(args):
     verbose = ("-v" in args)
-    workdir = init_workdir(os.getcwd())
+    wd = workdir.init_workdir(os.getcwd())
     unchanged_files, new_files, modified_files, deleted_files, ignored_files \
-        = workdir.get_changes()
+        = wd.get_changes()
     filestats = {}
     def in_session(f):
-        return "C" if workdir.exists_in_session(workdir.cached_md5sum(f)) else " "
+        return "C" if wd.exists_in_session(wd.cached_md5sum(f)) else " "
     def in_workdir(f):
-        csum = workdir.get_blobinfo(f)['md5sum']
-        return "C" if workdir.exists_in_workdir(csum) else " "
+        csum = wd.get_blobinfo(f)['md5sum']
+        return "C" if wd.exists_in_workdir(csum) else " "
 
     for f in new_files:
         filestats[f] = "A" + in_session(f)
@@ -84,13 +84,13 @@ def cmd_status(args):
         print filestats[f], f
 
 def cmd_info(args):
-    workdir = init_workdir(os.getcwd())
-    if workdir:
+    wd = workdir.init_workdir(os.getcwd())
+    if wd:
         print "Using a work directory:"
-        print "   Workdir root:", workdir.root
-        print "   Repository:", workdir.repoUrl
-        print "   Session:", workdir.sessionName
-        print "   Revision:", workdir.revision
+        print "   Workdir root:", wd.root
+        print "   Repository:", wd.repoUrl
+        print "   Session:", wd.sessionName
+        print "   Revision:", wd.revision
         
     #env_front = init_repo_from_env()
 
@@ -119,13 +119,13 @@ def cmd_import(front, args):
     if update_import:
         base_session = front.find_last_revision(session_name)
     assert os.path.exists(path_to_ci)
-    wd = Workdir(front.get_repo_path(), session_name, None, path_to_ci)
+    wd = workdir.Workdir(front.get_repo_path(), session_name, None, path_to_ci)
     session_id = wd.checkin(write_meta = False, base_session = base_session)
     print "Checked in session id", session_id
 
 
-def cmd_ci(workdir, args):
-    session_id = workdir.checkin()
+def cmd_ci(wd, args):
+    session_id = wd.checkin()
     print "Checked in session id", session_id
 
 def cmd_co(front, args): 
@@ -150,7 +150,7 @@ def cmd_co(front, args):
 
     assert not os.path.exists(workdir_path)
     os.mkdir(workdir_path)
-    wd = Workdir(front.get_repo_path(), session_name, sid, workdir_path)
+    wd = workdir.Workdir(front.get_repo_path(), session_name, sid, workdir_path)
     wd.checkout()
 
 def cmd_find(front, args):
@@ -188,51 +188,6 @@ def init_repo_from_env():
         raise Exception(msg)
     return front
 
-def find_meta(path):
-    meta = os.path.join(path, settings.metadir)
-    if os.path.exists(meta):
-        return meta
-    head, tail = os.path.split(path)
-    if head == path:
-        return None
-    return find_meta(head)
-
-def load_meta_info(metapath):
-    with open(os.path.join(metapath, "info"), "rb") as f:
-        info = json.load(f)
-    return info
-
-def init_repo_from_meta(path):
-    front = None
-    msg = None
-    meta = find_meta(path)
-    if meta:
-        pass # print "Found meta data at", meta
-    else:
-        print "No workdir found at", path
-        return None
-
-    info = load_meta_info(meta)
-    repo_path = info['repo_path']
-    session_name = info['session_name']
-    session_id = info['session_id']
-
-    # print "Using repo at", repo_path, "with session", session_name
-    front = Front(repository.Repo(repo_path))
-    return front
-
-def init_workdir(path):
-    front = init_repo_from_meta(path)
-    if not front:
-        return None
-    metapath = find_meta(os.getcwd())
-    info = load_meta_info(metapath)
-    root = os.path.split(metapath)[0]    
-    wd = Workdir(repoUrl=info['repo_path'], 
-                 sessionName=info['session_name'], 
-                 revision=info['session_id'],
-                 root=root) 
-    return wd
 
 def main():    
     if len(sys.argv) <= 1:
@@ -255,7 +210,7 @@ def main():
     elif sys.argv[1] == "info":
         cmd_info(sys.argv[2:])
     elif sys.argv[1] == "ci":
-        wd = init_workdir(os.getcwd())
+        wd = workdir.init_workdir(os.getcwd())
         cmd_ci(wd, sys.argv[2:])
     elif sys.argv[1] == "find":
         front = init_repo_from_env()

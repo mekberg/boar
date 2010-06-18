@@ -225,3 +225,51 @@ def check_in_tree(sessionwriter, root):
             continue
         check_in_file(sessionwriter, root, full_path)
         
+def init_workdir(path):
+    """ Tries to find a workdir root directory at the given path or
+    above. Returns a workdir object if successful, or None if not. """
+    front = init_repo_from_meta(path)
+    if not front:
+        return None
+    metapath = find_meta(os.getcwd())
+    info = load_meta_info(metapath)
+    root = os.path.split(metapath)[0]    
+    wd = Workdir(repoUrl=info['repo_path'], 
+                 sessionName=info['session_name'], 
+                 revision=info['session_id'],
+                 root=root) 
+    return wd
+
+
+def find_meta(path):
+    meta = os.path.join(path, settings.metadir)
+    if os.path.exists(meta):
+        return meta
+    head, tail = os.path.split(path)
+    if head == path:
+        return None
+    return find_meta(head)
+
+def load_meta_info(metapath):
+    with open(os.path.join(metapath, "info"), "rb") as f:
+        info = json.load(f)
+    return info
+
+def init_repo_from_meta(path):
+    front = None
+    msg = None
+    meta = find_meta(path)
+    if meta:
+        pass # print "Found meta data at", meta
+    else:
+        print "No workdir found at", path
+        return None
+
+    info = load_meta_info(meta)
+    repo_path = info['repo_path']
+    session_name = info['session_name']
+    session_id = info['session_id']
+
+    # print "Using repo at", repo_path, "with session", session_name
+    front = Front(Repo(repo_path))
+    return front
