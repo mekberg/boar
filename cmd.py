@@ -60,6 +60,7 @@ def cmd_status(args):
     wd = workdir.init_workdir(os.getcwd())
     unchanged_files, new_files, modified_files, deleted_files, ignored_files \
         = wd.get_changes()
+    #print unchanged_files, new_files, modified_files, deleted_files, ignored_files
     filestats = {}
     def in_session(f):
         return "C" if wd.exists_in_session(wd.cached_md5sum(f)) else " "

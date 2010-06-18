@@ -89,6 +89,7 @@ class SessionWriter:
         self.metadatas[metadata['filename']] = metadata
 
     def remove(self, filename):
+        assert self.base_session
         assert self.base_bloblist_dict.has_key(filename)
         metadata = {'filename': filename,
                     'action': 'remove'}
