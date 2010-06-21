@@ -127,11 +127,8 @@ class Workdir:
                 if not os.path.isdir(fullpath):
                     out_list.append(fullpath)
         all_files = []
-        print "Walking", self.root
+        #print "Walking", self.root
         os.path.walk(self.root, visitor, all_files)
-        #remove_rootpath = lambda fn: my_relpath(fn, os.path.dirname(self.root))
-        #remove_rootpath = lambda fn: my_relpath(fn, os.path.dirname(self.root))
-        #relative_paths = map(remove_rootpath, all_files)
         return all_files
 
     def rel_to_abs(self, relpath):
@@ -193,7 +190,6 @@ def is_ignored(dirname, entryname = None):
     return False
 
 def check_in_file(sessionwriter, root, path):
-    print root, path
     blobinfo = bloblist.create_blobinfo(path, root)
     if sessionwriter.has_blob(blobinfo["md5sum"]):
         sessionwriter.add_existing(blobinfo)
@@ -209,9 +205,6 @@ def check_in_tree(sessionwriter, root):
     """ Walks the tree starting at root, and checks in all found files
     in the given session writer """
 
-    if root != get_relative_path(root):
-        print "Warning: stripping leading slashes from given path"
-        
     tree = TreeWalker(root)
     for dirname, entryname in tree:
         if is_ignored(dirname, entryname):

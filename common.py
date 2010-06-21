@@ -76,7 +76,7 @@ def my_relpath(path, start=curdir):
     assert os.path.isabs(path)
     if sys.version_info >= (2, 6):
         result = os.path.relpath(path, start)
-        print "relpath(path=%s, start=%s) => %s" % (path, start, result)
+        #print "relpath(path=%s, start=%s) => %s" % (path, start, result)
         return result
     if not path:
         raise ValueError("no path specified")
@@ -89,7 +89,7 @@ def my_relpath(path, start=curdir):
         result = curdir
     else:
         result = join(*rel_list)
-    print "my_relpath(path=%s, start=%s) => %s" % (path, start, result)
+    #print "my_relpath(path=%s, start=%s) => %s" % (path, start, result)
     return result
 
 
@@ -114,7 +114,6 @@ class TreeWalker:
         if os.path.isdir(item):
             self.nextdir = item
         result = os.path.dirname(item), os.path.basename(item)
-        print "TreeWalker yielding", result
         return result
 
     def skip_dir(self):
