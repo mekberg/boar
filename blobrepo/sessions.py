@@ -149,12 +149,11 @@ class SessionWriter:
 checked_blobs = {}
 
 class SessionReader:
-    def __init__(self, repo, session_id):
-        assert session_id, "Session id must be given"
-        self.path = repo.get_session_path(session_id)
-        self.session_id = session_id
+    def __init__(self, repo, session_path):
+        assert session_path, "Session path must be given"
+        self.path = session_path
         self.repo = repo
-        assert os.path.exists(self.path), "No such repo:" + self.path
+        assert os.path.exists(self.path), "No such session path:" + self.path
 
         path = os.path.join(self.path, "bloblist.json")
         with open(path, "rb") as f:
@@ -188,7 +187,7 @@ class SessionReader:
                 yield copy.copy(blobinfo)
         base_session_id = self.meta_info.get("base_session", None)
         if base_session_id:
-            base_session_reader = SessionReader(self.repo, base_session_id)
+            base_session_reader = self.repo.get_session(base_session_id)
             for info in base_session_reader.get_all_blob_infos():
                 if info['filename'] not in seen:
                     # Later entries overrides earlier ones
