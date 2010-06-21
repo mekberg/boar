@@ -51,20 +51,26 @@ class Workdir:
             with open(filename, "wb") as f:            
                 f.write(data)
 
-    def checkin(self, write_meta = True, base_session = None):
+    def checkin(self, write_meta = True, force_primary_session = False, add_only = False):
         front = self.get_front()
-        assert os.path.exists(self.root)
-        unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes()
-        #print "Changes:", unchanged_files, new_files, modified_files, deleted_files, ignored_files
+        assert os.path.exists(self.root) and os.path.isdir(self.root)
+
+        base_session = None
+        if not force_primary_session:
+            base_session = front.find_last_revision(self.sessionName)
+        
         front.create_session(base_session)
 
-        check_in_tree(front, self.root)
-        # for f in new_files:
-        #     check_in_file(front, self.root, f)
-        # for f in modified_files:
-        #     check_in_file(front, self.root, f)
-        ## here
+        if not base_session:
+            check_in_tree(front, self.root)
+        else:
+            unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
+                self.get_changes()
+            for f in new_files + modified_files:
+                check_in_file(front, self.root, os.path.join(self.root, f))
+            if not add_only:
+                for f in deleted_files:
+                    front.remove(f)
 
         session_info = {}
         session_info["name"] = self.sessionName
@@ -190,6 +196,8 @@ def is_ignored(dirname, entryname = None):
     return False
 
 def check_in_file(sessionwriter, root, path):
+    assert os.path.isabs(path), \
+        "path must be absolute here. Was: '%s'" % (path)
     blobinfo = bloblist.create_blobinfo(path, root)
     if sessionwriter.has_blob(blobinfo["md5sum"]):
         sessionwriter.add_existing(blobinfo)
@@ -205,10 +213,10 @@ def check_in_tree(sessionwriter, root):
     """ Walks the tree starting at root, and checks in all found files
     in the given session writer """
 
-    tree = TreeWalker(root)
-    for dirname, entryname in tree:
+    treewalker = TreeWalker(root)
+    for dirname, entryname in treewalker:
         if is_ignored(dirname, entryname):
-            tree.skip_dir()
+            treewalker.skip_dir()
             continue
         full_path = os.path.join(dirname, entryname)
         if os.path.isdir(full_path):

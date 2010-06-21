@@ -117,11 +117,9 @@ def cmd_import(front, args):
         update_import = True
     path_to_ci = os.path.abspath(args[0])
     session_name = args[1]
-    if update_import:
-        base_session = front.find_last_revision(session_name)
     assert os.path.exists(path_to_ci)
     wd = workdir.Workdir(front.get_repo_path(), session_name, None, path_to_ci)
-    session_id = wd.checkin(write_meta = False, base_session = base_session)
+    session_id = wd.checkin(write_meta = False, add_only = update_import)
     print "Checked in session id", session_id
 
 
