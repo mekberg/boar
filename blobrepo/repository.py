@@ -10,7 +10,15 @@ import re
 import shutil
 import sessions
 
+#TODO: use/modify the session reader so that we don't have to use json here
+import sys
+if sys.version_info >= (2, 6):
+    import json
+else:
+    import simplejson as json
+
 from common import *
+
 
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
@@ -141,8 +149,14 @@ class Repo:
                 os.mkdir(dir)
             os.rename(blob_to_move, destination_path)
             #print "Moving", os.path.join(queued_item, filename),"to", destination_path
-        assert set(os.listdir(queued_item)) == set(["session.json", "bloblist.json", "meta.json"]), \
-            "Unexpected or missing files in queue dir"
+
+    
+        with open(os.path.join(queued_item, "meta.json"), "rb") as f:
+            meta_info = json.load(f)
+        contents = os.listdir(queued_item)
+        assert set(contents) == set([meta_info['fingerprint']+".mark", "session.json", "bloblist.json", "meta.json"]), \
+            "Missing or unexpected files in queue dir: "+str(contents)
+        
         id = self.find_next_session_id()
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
         shutil.move(queued_item, session_path)
