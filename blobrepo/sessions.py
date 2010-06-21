@@ -13,6 +13,7 @@ import copy
 
 import repository
 import shutil
+import hashlib
 
 from common import *
 
@@ -48,6 +49,22 @@ def bloblist_to_dict(bloblist):
         d[b['filename']] = b
     return d
 
+def bloblist_fingerprint(bloblist):
+    """Returns a hexadecimal string that is unique for a set of
+    files."""
+    md5 = hashlib.md5()
+    blobdict = bloblist_to_dict(bloblist)
+    filenames = blobdict.keys()
+    filenames.sort()
+    sep = "!SEPARATOR!"
+    for fn in filenames:
+        md5.update(fn)
+        md5.update(sep)
+        print blobdict[fn]
+        md5.update(blobdict[fn]['md5sum'])
+        md5.update(sep)
+    return md5.hexdigest()
+
 class SessionWriter:
     def __init__(self, repo, base_session = None):
         self.repo = repo
@@ -57,13 +74,13 @@ class SessionWriter:
         assert os.path.exists(self.repo.repopath)
         self.session_path = tempfile.mkdtemp( \
             prefix = "tmp_", 
-            dir = os.path.join(self.repo.repopath, repository.TMP_DIR)) 
-        
+            dir = os.path.join(self.repo.repopath, repository.TMP_DIR))         
         self.base_session_info = {}
         self.base_bloblist_dict = {}
         if self.base_session != None:
             self.base_session_info = self.repo.get_session(self.base_session).session_info
-            self.base_bloblist_dict = bloblist_to_dict(self.repo.get_session(self.base_session).bloblist)
+            self.base_bloblist_dict = bloblist_to_dict(self.repo.get_session(self.base_session).get_all_blob_infos())
+        self.resulting_blobdict = self.base_bloblist_dict
 
     def add(self, data, metadata):
         assert data != None
@@ -81,12 +98,14 @@ class SessionWriter:
                 f.write(data)
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
+        self.resulting_blobdict[metadata['filename']] = metadata
 
     def add_existing(self, metadata):
         assert self.repo.has_blob(metadata['md5sum'])
         assert metadata.has_key('md5sum')
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
+        self.resulting_blobdict[metadata['filename']] = metadata
 
     def remove(self, filename):
         assert self.base_session
@@ -94,10 +113,13 @@ class SessionWriter:
         metadata = {'filename': filename,
                     'action': 'remove'}
         self.metadatas[filename] = metadata
+        del self.resulting_blobdict[metadata['filename']]
 
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
-        metainfo = { 'base_session': self.base_session }
+        fingerprint = bloblist_fingerprint(self.resulting_blobdict.values())
+        metainfo = { 'base_session': self.base_session,
+                     'fingerprint': fingerprint }
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
         assert not os.path.exists(bloblist_filename)
         with open(bloblist_filename, "wb") as f:
@@ -112,6 +134,10 @@ class SessionWriter:
         assert not os.path.exists(meta_filename)
         with open(meta_filename, "wb") as f:
             json.dump(metainfo, f, indent = 4)
+
+        fingerprint_marker = os.path.join(self.session_path, fingerprint + ".mark")
+        with open(fingerprint_marker, "wb") as f:
+            pass
 
         queue_dir = self.repo.get_queue_path("queued_session")
         assert not os.path.exists(queue_dir)
