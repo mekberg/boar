@@ -110,7 +110,7 @@ class Repo:
 
     def get_session(self, id):
         assert id
-        return sessions.SessionReader(self, id)
+        return sessions.SessionReader(self, self.get_session_path(id))
 
     def create_session(self, base_session = None):
         return sessions.SessionWriter(self, base_session = base_session)
