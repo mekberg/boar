@@ -52,6 +52,12 @@ class Front:
         assert metadata.has_key("md5sum")
         self.new_session.add_existing(metadata)
 
+    def remove(self, filename):
+        """ Remove the given file in the workdir from the current
+        session. Requires that the current session has a base
+        session""" 
+        self.new_session.remove(filename)
+
     def commit(self, sessioninfo = {}):
         id = self.new_session.commit(sessioninfo)
         self.new_session = None
