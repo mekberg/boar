@@ -147,6 +147,7 @@ class Workdir:
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
         remove_rootpath = lambda fn: my_relpath(fn, self.root)
+        # existing_files_list is root-relative
         existing_files_list = map(remove_rootpath, self.get_tree())
         bloblist = []
         if self.revision != None:
@@ -159,21 +160,16 @@ class Workdir:
                 if self.cached_md5sum(info['filename']) == info['md5sum']:
                     unchanged_files.append(fname)
                 else:
-                    modified_files.append(fname)                    
-            if not os.path.exists(fname):
+                    modified_files.append(fname)
+            if not os.path.exists(os.path.join(self.root, fname)):
                 deleted_files.append(fname)
         for f in existing_files_list:
-            if is_ignored(f):
+            if is_ignored(os.path.join(self.root, f)):
+                print "Ignoring file", f
                 existing_files_list.remove(f)
                 ignored_files.append(f)
         new_files.extend(existing_files_list)
 
-        remove_rootpath = lambda fn: my_relpath(fn, self.root)
-        unchanged_files = map(remove_rootpath, unchanged_files)
-        new_files = map(remove_rootpath, new_files)
-        modified_files = map(remove_rootpath, modified_files)
-        deleted_files = map(remove_rootpath, deleted_files)
-        ignored_files = map(remove_rootpath, ignored_files)
         if self.revision == None:
             assert not unchanged_files
             assert not modified_files
@@ -184,9 +180,10 @@ def is_ignored(dirname, entryname = None):
     if entryname == None:
         entryname = os.path.basename(dirname)
         dirname = os.path.dirname(dirname)
+    full_path = os.path.join(dirname, entryname)
+    assert os.path.exists(full_path), "Path '%s' does not exist " % (full_path)
     if settings.metadir == entryname:
         return True
-    full_path = os.path.join(dirname, entryname)
     if os.path.isdir(full_path):
         return False
     elif not os.path.isfile(full_path):

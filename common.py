@@ -73,7 +73,8 @@ from os.path import curdir, sep, pardir, join
 # http://www.saltycrane.com/blog/2010/03/ospathrelpath-source-code-python-25/
 def my_relpath(path, start=curdir):
     """Return a relative version of a path"""
-    if sys.version_info >= (2, 6):        
+    assert os.path.isabs(path)
+    if sys.version_info >= (2, 6):
         result = os.path.relpath(path, start)
         print "relpath(path=%s, start=%s) => %s" % (path, start, result)
         return result
