@@ -22,7 +22,8 @@ class TestWorkdir(unittest.TestCase):
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, "TestSession", None, self.workdir)
-        self.wd.checkin()
+        id = self.wd.checkin()
+        assert id == 1
 
     def tearDown(self):
         shutil.rmtree(self.workdir, ignore_errors = True)

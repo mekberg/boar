@@ -60,7 +60,6 @@ def bloblist_fingerprint(bloblist):
     for fn in filenames:
         md5.update(fn)
         md5.update(sep)
-        print blobdict[fn]
         md5.update(blobdict[fn]['md5sum'])
         md5.update(sep)
     return md5.hexdigest()
@@ -79,7 +78,8 @@ class SessionWriter:
         self.base_bloblist_dict = {}
         if self.base_session != None:
             self.base_session_info = self.repo.get_session(self.base_session).session_info
-            self.base_bloblist_dict = bloblist_to_dict(self.repo.get_session(self.base_session).get_all_blob_infos())
+            self.base_bloblist_dict = bloblist_to_dict(\
+                self.repo.get_session(self.base_session).get_all_blob_infos())
         self.resulting_blobdict = self.base_bloblist_dict
 
     def add(self, data, metadata):
@@ -146,8 +146,6 @@ class SessionWriter:
         id = self.repo.process_queue()
         return id
 
-checked_blobs = {}
-
 class SessionReader:
     def __init__(self, repo, session_path):
         assert session_path, "Session path must be given"
@@ -166,25 +164,29 @@ class SessionReader:
         path = os.path.join(self.path, "meta.json")
         with open(path, "rb") as f:
             self.meta_info = json.load(f)
+        self.verify()        
 
     def verify(self):
-        for blobinfo in self.bloblist:
-            sum = blobinfo['md5sum']
-            if checked_blobs.has_key(sum):
-                is_ok = checked_blobs[sum]
-            else:
-                is_ok = self.repo.verify_blob(blobinfo['md5sum'])
-                checked_blobs[sum] = is_ok
-            print blobinfo['filename'], is_ok
-            
+        bloblist = self.get_all_blob_infos()
+        expected_fingerprint = bloblist_fingerprint(bloblist)
+        assert self.meta_info['fingerprint'] == expected_fingerprint
+        contents = os.listdir(self.path)
+        assert set(contents) == \
+            set([expected_fingerprint+".mark",\
+                     "session.json", "bloblist.json", "meta.json"]), \
+                     "Missing or unexpected files in session dir: "+self.path
+        for blobinfo in bloblist:
+            assert repo.has_blob(blobinfo['md5sum'])
+        
     def get_all_blob_infos(self):
         seen = set()
         for blobinfo in self.bloblist:
             assert blobinfo['filename'] not in seen, \
                 "Internal error - duplicate file entry in a single session"
             seen.add(blobinfo['filename'])
-            if blobinfo.get("action", None) != "remove":
-                yield copy.copy(blobinfo)
+            if blobinfo.get("action", None) == "remove":
+                continue
+            yield copy.copy(blobinfo)
         base_session_id = self.meta_info.get("base_session", None)
         if base_session_id:
             base_session_reader = self.repo.get_session(base_session_id)
@@ -192,8 +194,3 @@ class SessionReader:
                 if info['filename'] not in seen:
                     # Later entries overrides earlier ones
                     yield info
-            
-    
-if __name__ == "__main__":
-    main()
-
