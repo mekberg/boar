@@ -154,9 +154,10 @@ class Repo:
         with open(os.path.join(queued_item, "meta.json"), "rb") as f:
             meta_info = json.load(f)
         contents = os.listdir(queued_item)
-        assert set(contents) == set([meta_info['fingerprint']+".mark", "session.json", "bloblist.json", "meta.json"]), \
-            "Missing or unexpected files in queue dir: "+str(contents)
-        
+        assert set(contents) == \
+            set([meta_info['fingerprint']+".mark",\
+                     "session.json", "bloblist.json", "meta.json"]), \
+                     "Missing or unexpected files in queue dir: "+str(contents)        
         id = self.find_next_session_id()
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
         shutil.move(queued_item, session_path)
