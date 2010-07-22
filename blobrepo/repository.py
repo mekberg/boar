@@ -89,11 +89,12 @@ class Repo:
         path = self.get_blob_path(sum)
         return os.path.exists(path)
 
-    def get_blob(self, sum):
+    def get_blob(self, sum, offset = 0, size = -1):
         """ Returns None if there is no such blob """
         path = self.get_blob_path(sum)
-        data = read_file(path)
-        assert sum == md5sum(data)
+        with open(path, "rb") as f:
+            f.seek(offset)
+            data = f.read(size)
         return data
             
 
@@ -128,8 +129,7 @@ class Repo:
 
     def verify_blob(self, sum):
         path = self.get_blob_path(sum)
-        with open(path, "rb") as f:
-            verified_ok = (sum == md5sum(f.read()))
+        verified_ok = (sum == md5sum_file(path))
         return verified_ok 
 
     def process_queue(self):        

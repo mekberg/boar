@@ -16,13 +16,6 @@ def is_md5sum(str):
 
 assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 
-def read_file(filename):
-    if not os.path.exists(filename):
-        return None
-    with open(filename, "rb") as f:
-        data = f.read()
-    return data
-
 def md5sum(data):
     m = hashlib.md5()
     m.update(data)
@@ -31,8 +24,11 @@ def md5sum(data):
 def md5sum_file(path):
     m = hashlib.md5()
     with open(path, "rb") as f:
-        data = f.read()
-    m.update(data)
+        while True:
+            data = f.read(2 ** 20)
+            m.update(data)
+            if data == "":
+                break
     return m.hexdigest()
 
 def convert_win_path_to_unix(path):
