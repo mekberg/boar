@@ -94,7 +94,7 @@ class SessionWriter:
         assert metadata.has_key('md5sum')
         new_blob_filename = os.path.join(self.session_path, metadata['md5sum'])
         assert self.repo.has_blob(metadata['md5sum']) \
-            or os.path.exists(new_blob_filename), "Tried to add blob info, but no such blob exists"
+            or os.path.exists(new_blob_filename), "Tried to add blob info, but no such blob exists: "+new_blob_filename
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
         self.resulting_blobdict[metadata['filename']] = metadata
