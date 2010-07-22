@@ -15,10 +15,36 @@ if __name__ == '__main__':
 import workdir
 from blobrepo import repository
 
-class TestWorkdir(unittest.TestCase):
+class WorkdirHelper:
+    def mkdir(self, path):
+        assert not os.path.isabs(path)
+        dirpath = os.path.join(self.workdir, path)
+        os.makedirs(dirpath)
+
+    def addWorkdirFile(self, path, content):
+        assert not os.path.isabs(path)
+        filepath = os.path.join(self.workdir, path)
+        with open(filepath, "w") as f:
+            f.write(content)
+    
+    def rmWorkdirFile(self, path):
+        assert not os.path.isabs(path)
+        filepath = os.path.join(self.workdir, path)
+        os.unlink(filepath)
+
+    def createTmpName(self):
+        filename = tempfile.mktemp(prefix='workdir_repo_', dir=TMPDIR)
+        self.remove_at_teardown.append(filename)
+        return filename
+
+
+
+
+class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def setUp(self):
-        self.workdir = tempfile.mktemp(prefix='workdir_', dir=TMPDIR)
-        self.repopath = tempfile.mktemp(prefix='workdir_repo_', dir=TMPDIR)
+        self.remove_at_teardown = []
+        self.workdir = self.createTmpName()
+        self.repopath = self.createTmpName()
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, "TestSession", None, self.workdir)
@@ -26,17 +52,8 @@ class TestWorkdir(unittest.TestCase):
         assert id == 1
 
     def tearDown(self):
-        shutil.rmtree(self.workdir, ignore_errors = True)
-        shutil.rmtree(self.repopath, ignore_errors = True)
-
-    def addWorkdirFile(self, path, content):
-        filepath = os.path.join(self.workdir, path)
-        with open(filepath, "w") as f:
-            f.write(content)
-    
-    def rmWorkdirFile(self, path):
-        filepath = os.path.join(self.workdir, path)
-        os.unlink(filepath)
+        for d in self.remove_at_teardown:
+            shutil.rmtree(d, ignore_errors = True)
 
     #
     # Actual tests start here
@@ -65,6 +82,28 @@ class TestWorkdir(unittest.TestCase):
         changes = self.wd.get_changes()
         self.assertEqual(changes, ([], [], [], ["tjosan.txt"], []))
 
+
+class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
+    def setUp(self):
+        self.remove_at_teardown = []
+        self.workdir = self.createTmpName()
+        self.repopath = self.createTmpName()
+        repository.create_repository(self.repopath)
+        os.mkdir(self.workdir)
+        self.wd = workdir.Workdir(self.repopath, "TestSession", None, self.workdir)
+        id = self.wd.checkin()
+        assert id == 1
+        self.addWorkdirFile("onlyintopdir.txt", "nothing")
+        self.mkdir("mysubdir")
+        self.addWorkdirFile("mysubdir/insubdir.txt", "nothing2")
+
+    def tearDown(self):
+        for d in self.remove_at_teardown:
+            shutil.rmtree(d, ignore_errors = True)
+
+
+    def testPartialCheckout(self):
+        pass
 
 if __name__ == '__main__':
     unittest.main()
