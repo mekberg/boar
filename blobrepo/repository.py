@@ -25,12 +25,12 @@ BLOB_DIR = "blobs"
 SESSIONS_DIR = "sessions"
 TMP_DIR = "tmp"
 
-recoverytext = """
+recoverytext = """Repository format 0.1
+
 This is a versioned repository of files. It is designed to be easy to
-recover in case the original software is lost or not available on
-modern hardware. This document describes the layout of the repository,
-so that a programmer can construct a simple program that recovers the
-data.
+recover in case the original software is unavailable. This document
+describes the layout of the repository, so that a programmer can
+construct a simple program that recovers the data.
 
 All files are stored verbatim in the "blobs" directory, named after
 their md5 checksum, and sorted in sub directories based on the start
@@ -151,12 +151,12 @@ class Repo:
             #print "Moving", os.path.join(queued_item, filename),"to", destination_path
 
     
-        with open(os.path.join(queued_item, "meta.json"), "rb") as f:
+        with open(os.path.join(queued_item, "session.json"), "rb") as f:
             meta_info = json.load(f)
         contents = os.listdir(queued_item)
         assert set(contents) == \
             set([meta_info['fingerprint']+".mark",\
-                     "session.json", "bloblist.json", "meta.json"]), \
+                     "session.json", "bloblist.json"]), \
                      "Missing or unexpected files in queue dir: "+str(contents)        
         id = self.find_next_session_id()
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
