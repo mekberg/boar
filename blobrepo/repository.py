@@ -156,7 +156,7 @@ class Repo:
         contents = os.listdir(queued_item)
         assert set(contents) == \
             set([meta_info['fingerprint']+".fingerprint",\
-                     "session.json", "bloblist.json"]), \
+                     "session.json", "bloblist.json", "session.md5"]), \
                      "Missing or unexpected files in queue dir: "+str(contents)        
         id = self.find_next_session_id()
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(id))

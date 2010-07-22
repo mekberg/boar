@@ -131,6 +131,11 @@ class SessionWriter:
         with open(session_filename, "wb") as f:
             json.dump(metainfo, f, indent = 4)
 
+        md5_filename = os.path.join(self.session_path, "session.md5")
+        with open(md5_filename, "wb") as f:
+            f.write(md5sum_file(bloblist_filename) + " *bloblist.json\n")
+            f.write(md5sum_file(session_filename) + " *session.json\n")
+        
         fingerprint_marker = os.path.join(self.session_path, fingerprint + ".fingerprint")
         with open(fingerprint_marker, "wb") as f:
             pass
@@ -168,7 +173,7 @@ class SessionReader:
         contents = os.listdir(self.path)
         assert set(contents) == \
             set([expected_fingerprint+".fingerprint",\
-                     "session.json", "bloblist.json"]), \
+                     "session.json", "bloblist.json", "session.md5"]), \
                      "Missing or unexpected files in session dir: "+self.path
         for blobinfo in bloblist:
             assert repo.has_blob(blobinfo['md5sum'])
