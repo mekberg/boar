@@ -59,7 +59,8 @@ class TestBlobRepo(unittest.TestCase):
     def test_simple_blob(self):
         committed_info = copy(self.fileinfo1)
         writer = self.repo.create_session()
-        writer.add(DATA1, committed_info)
+        writer.add_blob_data(DATA1_MD5, DATA1)
+        writer.add(committed_info)
         self.assertEqual(committed_info, self.fileinfo1)
         id = writer.commit()
         reader = self.repo.get_session(id)
@@ -68,10 +69,12 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_secondary_session(self):
         writer1 = self.repo.create_session()
-        writer1.add(DATA1, self.fileinfo1)
+        writer1.add_blob_data(DATA1_MD5, DATA1)
+        writer1.add(self.fileinfo1)
         id1 = writer1.commit()
         writer2 = self.repo.create_session(base_session = id1)
-        writer2.add(DATA2, self.fileinfo2)
+        writer2.add_blob_data(DATA2_MD5, DATA2)
+        writer2.add(self.fileinfo2)
         id2 = writer2.commit()
         reader = self.repo.get_session(id2)
         blobinfos = list(reader.get_all_blob_infos())
@@ -79,7 +82,8 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_remove(self):
         writer1 = self.repo.create_session()
-        writer1.add(DATA1, self.fileinfo1)
+        writer1.add_blob_data(DATA1_MD5, DATA1)
+        writer1.add(self.fileinfo1)
         id1 = writer1.commit()
         writer2 = self.repo.create_session(base_session = id1)
         writer2.remove(self.fileinfo1['filename'])

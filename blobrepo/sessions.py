@@ -82,27 +82,19 @@ class SessionWriter:
                 self.repo.get_session(self.base_session).get_all_blob_infos())
         self.resulting_blobdict = self.base_bloblist_dict
 
-    def add(self, data, metadata):
-        assert data != None
-        assert metadata != None
-        assert self.session_path != None
-        assert metadata.has_key('md5sum')
-        assert metadata.has_key('filename')
-        sum = md5sum(data)
-        if sum != metadata['md5sum']:
-            raise AddException("Calculated checksum did not match client provided checksum")
-        fname = os.path.join(self.session_path, sum)
-        existing_blob = self.repo.has_blob(sum)
-        if not existing_blob and not os.path.exists(fname):
-            with open(fname, "wb") as f:
-                f.write(data)
-        assert metadata['filename'] not in self.metadatas
-        self.metadatas[metadata['filename']] = metadata
-        self.resulting_blobdict[metadata['filename']] = metadata
+    def add_blob_data(self, blob_md5, fragment):
+        """ Adds the given fragment to the end of the new blob with the given checksum."""
+        assert is_md5sum(blob_md5)
+        assert not self.repo.has_blob(blob_md5), "blob already exists"
+        fname = os.path.join(self.session_path, blob_md5)
+        with open(fname, "ab") as f:
+            f.write(fragment)
 
-    def add_existing(self, metadata):
-        assert self.repo.has_blob(metadata['md5sum'])
+    def add(self, metadata):
         assert metadata.has_key('md5sum')
+        new_blob_filename = os.path.join(self.session_path, metadata['md5sum'])
+        assert self.repo.has_blob(metadata['md5sum']) \
+            or os.path.exists(new_blob_filename), "Tried to add blob info, but no such blob exists"
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
         self.resulting_blobdict[metadata['filename']] = metadata
