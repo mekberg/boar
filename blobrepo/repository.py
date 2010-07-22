@@ -155,7 +155,7 @@ class Repo:
             meta_info = json.load(f)
         contents = os.listdir(queued_item)
         assert set(contents) == \
-            set([meta_info['fingerprint']+".mark",\
+            set([meta_info['fingerprint']+".fingerprint",\
                      "session.json", "bloblist.json"]), \
                      "Missing or unexpected files in queue dir: "+str(contents)        
         id = self.find_next_session_id()
