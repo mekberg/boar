@@ -202,10 +202,10 @@ def check_in_file(sessionwriter, root, path):
     if not sessionwriter.has_blob(blobinfo["md5sum"]):
         with open(path, "rb") as f:            
             while True:
-                data = f.read(100000)
+                data = f.read(1048576) # 1048576 = 2^20
+                sessionwriter.add_blob_data(blobinfo["md5sum"], b64encode(data))
                 if data == "":
                     break
-                sessionwriter.add_blob_data(blobinfo["md5sum"], b64encode(data))                
     sessionwriter.add(blobinfo)
 
 
