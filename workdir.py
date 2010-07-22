@@ -199,15 +199,14 @@ def check_in_file(sessionwriter, root, path):
     assert os.path.isabs(path), \
         "path must be absolute here. Was: '%s'" % (path)
     blobinfo = bloblist.create_blobinfo(path, root)
-    if sessionwriter.has_blob(blobinfo["md5sum"]):
-        sessionwriter.add(blobinfo)
-    else:
-        with open(path, "rb") as f:
-            data = f.read()
-        assert len(data) == blobinfo["size"]
-        assert md5sum(data) == blobinfo["md5sum"]
-        sessionwriter.add_blob_data(blobinfo["md5sum"], b64encode(data))
-        sessionwriter.add(blobinfo)
+    if not sessionwriter.has_blob(blobinfo["md5sum"]):
+        with open(path, "rb") as f:            
+            while True:
+                data = f.read(100000)
+                if data == "":
+                    break
+                sessionwriter.add_blob_data(blobinfo["md5sum"], b64encode(data))                
+    sessionwriter.add(blobinfo)
 
 
 def check_in_tree(sessionwriter, root):
