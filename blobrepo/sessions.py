@@ -131,7 +131,7 @@ class SessionWriter:
         with open(session_filename, "wb") as f:
             json.dump(metainfo, f, indent = 4)
 
-        fingerprint_marker = os.path.join(self.session_path, fingerprint + ".mark")
+        fingerprint_marker = os.path.join(self.session_path, fingerprint + ".fingerprint")
         with open(fingerprint_marker, "wb") as f:
             pass
 
@@ -167,7 +167,7 @@ class SessionReader:
         assert self.meta_info['fingerprint'] == expected_fingerprint
         contents = os.listdir(self.path)
         assert set(contents) == \
-            set([expected_fingerprint+".mark",\
+            set([expected_fingerprint+".fingerprint",\
                      "session.json", "bloblist.json"]), \
                      "Missing or unexpected files in session dir: "+self.path
         for blobinfo in bloblist:
