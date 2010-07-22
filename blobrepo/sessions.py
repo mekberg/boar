@@ -119,7 +119,8 @@ class SessionWriter:
         assert self.session_path != None
         fingerprint = bloblist_fingerprint(self.resulting_blobdict.values())
         metainfo = { 'base_session': self.base_session,
-                     'fingerprint': fingerprint }
+                     'fingerprint': fingerprint,
+                     'client_data': sessioninfo}
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
         assert not os.path.exists(bloblist_filename)
         with open(bloblist_filename, "wb") as f:
@@ -128,11 +129,6 @@ class SessionWriter:
         session_filename = os.path.join(self.session_path, "session.json")
         assert not os.path.exists(session_filename)
         with open(session_filename, "wb") as f:
-            json.dump(sessioninfo, f, indent = 4)
-
-        meta_filename = os.path.join(self.session_path, "meta.json")
-        assert not os.path.exists(meta_filename)
-        with open(meta_filename, "wb") as f:
             json.dump(metainfo, f, indent = 4)
 
         fingerprint_marker = os.path.join(self.session_path, fingerprint + ".mark")
@@ -159,11 +155,10 @@ class SessionReader:
 
         path = os.path.join(self.path, "session.json")
         with open(path, "rb") as f:
-            self.session_info = json.load(f)
-
-        path = os.path.join(self.path, "meta.json")
-        with open(path, "rb") as f:
             self.meta_info = json.load(f)
+
+        self.session_info = self.meta_info['client_data']
+
         self.verify()        
 
     def verify(self):
@@ -173,7 +168,7 @@ class SessionReader:
         contents = os.listdir(self.path)
         assert set(contents) == \
             set([expected_fingerprint+".mark",\
-                     "session.json", "bloblist.json", "meta.json"]), \
+                     "session.json", "bloblist.json"]), \
                      "Missing or unexpected files in session dir: "+self.path
         for blobinfo in bloblist:
             assert repo.has_blob(blobinfo['md5sum'])
