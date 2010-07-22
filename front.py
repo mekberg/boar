@@ -41,16 +41,15 @@ class Front:
     def create_session(self, base_session = None):
         self.new_session = self.repo.create_session(base_session)
 
-    def add(self, b64data, metadata):
+    def add_blob_data(self, blob_md5, b64data):
         """ Must be called after a create_session()  """
-        assert metadata.has_key("md5sum")
-        self.new_session.add(base64.b64decode(b64data), metadata)
+        self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))
 
-    def add_existing(self, metadata):
+    def add(self, metadata):
         """ Must be called after a create_session(). Adds a link to a existing
         blob. Will throw an exception if there is no such blob """
         assert metadata.has_key("md5sum")
-        self.new_session.add_existing(metadata)
+        self.new_session.add(metadata)
 
     def remove(self, filename):
         """ Remove the given file in the workdir from the current
