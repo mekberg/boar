@@ -7,7 +7,7 @@ DATA1_MD5 = "5558e0551622725a5fa380caffa94c5d"
 DATA2 = "tjosan hejsan"
 DATA2_MD5 = "923574a1a36aebc7e1f586b7d363005e"
 
-TMPDIR="/tmp"
+TMPDIR=tempfile.gettempdir()
 
 if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
