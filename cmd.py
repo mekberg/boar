@@ -112,14 +112,20 @@ def cmd_list(front, args):
 def cmd_import(front, args):
     base_session = None
     update_import = False
+    create_workdir = False
     if "-u" in args:
         args.remove("-u")
         update_import = True
+    if "-w" in args:
+        args.remove("-w")
+        create_workdir = True
     path_to_ci = os.path.abspath(args[0])
-    session_name = args[1]
+    session_name = os.path.basename(args[0])
+    if len(args) > 1:
+        session_name = args[1]
     assert os.path.exists(path_to_ci)
     wd = workdir.Workdir(front.get_repo_path(), session_name, None, path_to_ci)
-    session_id = wd.checkin(write_meta = False, add_only = update_import)
+    session_id = wd.checkin(write_meta = create_workdir, add_only = update_import)
     print "Checked in session id", session_id
 
 
