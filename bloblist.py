@@ -5,7 +5,7 @@ import stat
 def create_blobinfo(path, root):
     st = os.lstat(path)
     blobinfo = {}
-    blobinfo["filename"] = my_relpath(path, root)
+    blobinfo["filename"] = convert_win_path_to_unix(my_relpath(path, root))
     blobinfo["md5sum"] = md5sum_file(path)
     blobinfo["ctime"] = st[stat.ST_CTIME]
     blobinfo["mtime"] = st[stat.ST_MTIME]

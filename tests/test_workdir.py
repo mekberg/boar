@@ -82,6 +82,13 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         changes = self.wd.get_changes()
         self.assertEqual(changes, ([], [], [], ["tjosan.txt"], []))
 
+    def testGetChangesUnchangedFileSubdir(self):
+        self.mkdir("subdir")
+        self.addWorkdirFile("subdir/tjosan.txt", "tjosanhejsan")
+        self.wd.checkin()
+        changes = self.wd.get_changes()
+        self.assertEqual(changes, (["subdir/tjosan.txt"], [], [], [], []))
+
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def setUp(self):
