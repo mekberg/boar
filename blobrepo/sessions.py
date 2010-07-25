@@ -92,6 +92,9 @@ class SessionWriter:
 
     def add(self, metadata):
         assert metadata.has_key('md5sum')
+        assert metadata.has_key('filename')
+        assert metadata['filename'].find("\\") == -1, \
+            "Filenames must be in unix format"
         new_blob_filename = os.path.join(self.session_path, metadata['md5sum'])
         assert self.repo.has_blob(metadata['md5sum']) \
             or os.path.exists(new_blob_filename), "Tried to add blob info, but no such blob exists: "+new_blob_filename

@@ -149,7 +149,7 @@ class Workdir:
             has been changed. """
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
-        remove_rootpath = lambda fn: my_relpath(fn, self.root)
+        remove_rootpath = lambda fn: convert_win_path_to_unix(my_relpath(fn, self.root))
         # existing_files_list is root-relative
         existing_files_list = map(remove_rootpath, self.get_tree())
         bloblist = []
