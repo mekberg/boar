@@ -61,16 +61,14 @@ class Workdir:
         
         front.create_session(base_session)
 
-        if not base_session:
-            check_in_tree(front, self.root)
-        else:
-            unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-                self.get_changes()
-            for f in new_files + modified_files:
-                check_in_file(front, self.root, os.path.join(self.root, f))
-            if not add_only:
-                for f in deleted_files:
-                    front.remove(f)
+        unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
+            self.get_changes()
+        assert base_session or (not unchanged_files and not modified_files and not deleted_files)
+        for f in new_files + modified_files:
+            check_in_file(front, self.root, os.path.join(self.root, f))
+        if not add_only:
+            for f in deleted_files:
+                front.remove(f)
 
         session_info = {}
         session_info["name"] = self.sessionName
@@ -208,21 +206,6 @@ def check_in_file(sessionwriter, root, path):
                     break
     sessionwriter.add(blobinfo)
 
-
-def check_in_tree(sessionwriter, root):
-    """ Walks the tree starting at root, and checks in all found files
-    in the given session writer """
-
-    treewalker = TreeWalker(root)
-    for dirname, entryname in treewalker:
-        if is_ignored(dirname, entryname):
-            treewalker.skip_dir()
-            continue
-        full_path = os.path.join(dirname, entryname)
-        if os.path.isdir(full_path):
-            continue
-        check_in_file(sessionwriter, root, full_path)
-        
 def init_workdir(path):
     """ Tries to find a workdir root directory at the given path or
     above. Returns a workdir object if successful, or None if not. """
