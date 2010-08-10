@@ -209,6 +209,12 @@ def is_ignored(dirname, entryname = None):
     return False
 
 def check_in_file(sessionwriter, root, path, expected_md5sum):
+    """ Checks in the file found at the given "path" into the active
+    "sessionwriter". The actual filename checked in is determined by
+    subtracting the "root" from the path. The md5sum of the file has
+    to be provided. The checksum is compared to the file while it is
+    read, to ensure it is consistent."""
+
     assert os.path.isabs(path), \
         "path must be absolute here. Was: '%s'" % (path)
     blobinfo = create_blobinfo(path, root, expected_md5sum)
