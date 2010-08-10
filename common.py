@@ -88,6 +88,19 @@ def my_relpath(path, start=curdir):
     #print "my_relpath(path=%s, start=%s) => %s" % (path, start, result)
     return result
 
+def open_raw(filename):
+    """Try to read the file in such a way that the system file cache
+    is not used."""
+    # TODO: implement
+    return open(filename, "rb")
+    # This does not work for some reason:
+    # try:
+    #     fd = os.open(filename, os.O_DIRECT | os.O_RDONLY, 10000000)
+    #     print "Successfully using O_DIRECT"
+    #     return os.fdopen(fd, "rb", 10000000)
+    # except Exception, e:
+    #     print "Failed using O_DIRECT", e
+    #     return open(filename, "rb")
 
 class TreeWalker:
     def __init__(self, path):
@@ -117,3 +130,4 @@ class TreeWalker:
         next() the last time it was called. 
         """
         self.nextdir = None
+

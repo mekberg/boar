@@ -8,6 +8,8 @@ from base64 import b64decode, b64encode
 import bloblist
 import settings
 import time
+import hashlib
+import stat
 
 if sys.version_info >= (2, 6):
     import json
@@ -35,7 +37,6 @@ class Workdir:
             json.dump({'repo_path': self.repoUrl,
                        'session_name': self.sessionName,
                        'session_id': self.revision}, f, indent = 4)    
-
     def checkout(self, write_meta = True):
         assert os.path.exists(self.root) and os.path.isdir(self.root)
         front = self.get_front()
@@ -64,8 +65,22 @@ class Workdir:
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
         assert base_session or (not unchanged_files and not modified_files and not deleted_files)
+
         for f in new_files + modified_files:
-            check_in_file(front, self.root, os.path.join(self.root, f))
+            # A little hackish to store up the md5sums in one sweep
+            # before starting to check them in. An attempt to reduce
+            # the chance that the file is in disk cache when we read
+            # it again for check-in later. (To avoid the problem that
+            # a corrupted disk read is cached and not detected) TODO:
+            # This is really a broken way to do it, and it should be
+            # replaced with proper system-calls to read the file raw
+            # from disk. But that's complicated.
+            self.cached_md5sum(f)
+
+        for f in new_files + modified_files:
+            expected_md5sum = self.cached_md5sum(f)
+            check_in_file(front, self.root, os.path.join(self.root, f), expected_md5sum)
+
         if not add_only:
             for f in deleted_files:
                 front.remove(f)
@@ -193,16 +208,20 @@ def is_ignored(dirname, entryname = None):
         return True
     return False
 
-def check_in_file(sessionwriter, root, path):
+def check_in_file(sessionwriter, root, path, expected_md5sum):
     assert os.path.isabs(path), \
         "path must be absolute here. Was: '%s'" % (path)
-    blobinfo = bloblist.create_blobinfo(path, root)
-    if not sessionwriter.has_blob(blobinfo["md5sum"]):
-        with open(path, "rb") as f:            
+    blobinfo = create_blobinfo(path, root, expected_md5sum)
+    if not sessionwriter.has_blob(expected_md5sum):
+        with open_raw(path) as f:
+            m = hashlib.md5()
             while True:
                 data = f.read(1048576) # 1048576 = 2^20
-                sessionwriter.add_blob_data(blobinfo["md5sum"], b64encode(data))
+                m.update(data)
+                sessionwriter.add_blob_data(expected_md5sum, b64encode(data))
                 if data == "":
+                    assert m.hexdigest() == expected_md5sum, \
+                        "File changed during checkin process: " + path
                     break
     sessionwriter.add(blobinfo)
 
@@ -254,3 +273,15 @@ def init_repo_from_meta(path):
     # print "Using repo at", repo_path, "with session", session_name
     front = Front(Repo(repo_path))
     return front
+
+def create_blobinfo(path, root, md5sum):
+    assert is_md5sum(md5sum)
+    st = os.lstat(path)
+    blobinfo = {}
+    blobinfo["filename"] = convert_win_path_to_unix(my_relpath(path, root))
+    blobinfo["md5sum"] = md5sum
+    blobinfo["ctime"] = st[stat.ST_CTIME]
+    blobinfo["mtime"] = st[stat.ST_MTIME]
+    blobinfo["size"] = st[stat.ST_SIZE]
+    return blobinfo
+
