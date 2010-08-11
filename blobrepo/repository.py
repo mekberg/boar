@@ -136,28 +136,38 @@ class Repo:
         queued_item = self.get_queue_path("queued_session")
         if not os.path.exists(queued_item):
             return
-        #print "Processing queue"
+
         items = os.listdir(queued_item)
+
+        # Check the checksums of all blobs
+        for filename in items:
+            if not is_md5sum(filename):
+                continue
+            blob_path = os.path.join(queued_item, filename)
+            assert filename == md5sum_file(blob_path), "Invalid blob found in queue dir:" + blob_path
+    
+        # Check the existence of all required files
+        # TODO: check the contents for validity
+        with open(os.path.join(queued_item, "session.json"), "rb") as f:
+            meta_info = json.load(f)
+        contents = [x for x in os.listdir(queued_item) if not is_md5sum(x)]
+        assert set(contents) == \
+            set([meta_info['fingerprint']+".fingerprint",\
+                     "session.json", "bloblist.json", "session.md5"]), \
+                     "Missing or unexpected files in queue dir: "+str(contents)
+
+        # Everything seems OK, move the blobs and consolidate the session
         for filename in items:
             if not is_md5sum(filename):
                 continue
             blob_to_move = os.path.join(queued_item, filename)
             destination_path = self.get_blob_path(filename)
-            assert filename == md5sum_file(blob_to_move)
             dir = os.path.dirname(destination_path)
             if not os.path.exists(dir):
                 os.mkdir(dir)
             os.rename(blob_to_move, destination_path)
             #print "Moving", os.path.join(queued_item, filename),"to", destination_path
 
-    
-        with open(os.path.join(queued_item, "session.json"), "rb") as f:
-            meta_info = json.load(f)
-        contents = os.listdir(queued_item)
-        assert set(contents) == \
-            set([meta_info['fingerprint']+".fingerprint",\
-                     "session.json", "bloblist.json", "session.md5"]), \
-                     "Missing or unexpected files in queue dir: "+str(contents)        
         id = self.find_next_session_id()
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
         shutil.move(queued_item, session_path)
