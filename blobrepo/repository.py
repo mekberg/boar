@@ -70,7 +70,8 @@ class Repo:
     def __init__(self, repopath):
         # The path must be absolute to avoid problems with clients
         # that changes the cwd. For instance, fuse.
-        assert(os.path.isabs(repopath)), "The repo path must be absolute"
+        assert(os.path.isabs(repopath)), "The repo path must be absolute. "\
+            +"Was: " + repopath
         self.repopath = repopath
         assert os.path.exists(self.repopath), "No such directory: %s" % (self.repopath)
         self.process_queue()
@@ -96,6 +97,8 @@ class Repo:
 
     def get_blob(self, sum, offset = 0, size = -1):
         """ Returns None if there is no such blob """
+        if not self.has_blob(sum):
+            return None
         path = self.get_blob_path(sum)
         with open(path, "rb") as f:
             f.seek(offset)
