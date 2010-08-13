@@ -67,9 +67,12 @@ class Front:
 #    def get_blob(self, sum):
 #        return self.repo.get_blob(sum)
 
-    def get_blob_b64(self, sum):
-        blob = self.repo.get_blob(sum)
-        return base64.b64encode(blob)
+    def get_blob_size(self, sum):
+        return self.repo.get_blob_size(sum)
+
+    def get_blob_b64(self, sum, offset = 0, size = -1):
+        blobpart = self.repo.get_blob(sum, offset, size)
+        return base64.b64encode(blobpart)
 
     def has_blob(self, sum):
         return self.repo.has_blob(sum)
