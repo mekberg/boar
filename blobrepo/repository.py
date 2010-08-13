@@ -89,14 +89,18 @@ class Repo:
         path = self.get_blob_path(sum)
         return os.path.exists(path)
 
+    def get_blob_size(self, sum):
+        blobpath = self.get_blob_path(sum)
+        assert blobpath, "get_blob_size(): target blob must exist"
+        return os.path.getsize(blobpath)
+
     def get_blob(self, sum, offset = 0, size = -1):
         """ Returns None if there is no such blob """
         path = self.get_blob_path(sum)
         with open(path, "rb") as f:
             f.seek(offset)
             data = f.read(size)
-        return data
-            
+        return data            
 
     def get_session_path(self, session_id):
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))

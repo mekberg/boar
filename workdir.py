@@ -44,13 +44,8 @@ class Workdir:
             self.write_metadata()
         for info in front.get_session_bloblist(self.revision):
             print info['filename']
-            data = b64decode(front.get_blob_b64(info['md5sum']))
-            assert data or info['size'] == 0
-            filename = os.path.join(self.root, info['filename'])
-            if not os.path.exists(os.path.dirname(filename)):
-                os.makedirs(os.path.dirname(filename))
-            with open(filename, "wb") as f:            
-                f.write(data)
+            target_path = os.path.join(self.root, info['filename'])
+            fetch_blob(front, info['md5sum'], target_path)
 
     def checkin(self, write_meta = True, force_primary_session = False, add_only = False):
         front = self.get_front()
@@ -291,3 +286,16 @@ def create_blobinfo(path, root, md5sum):
     blobinfo["size"] = st[stat.ST_SIZE]
     return blobinfo
 
+def fetch_blob(front, blobname, target_path):
+    assert not os.path.exists(target_path)
+    if not os.path.exists(os.path.dirname(target_path)):
+        os.makedirs(os.path.dirname(target_path))
+    size = front.get_blob_size(blobname)
+    offset = 0
+    f = open(target_path, "wb")
+    while offset < size:
+        data = b64decode(front.get_blob_b64(blobname, offset, 1000000))
+        assert len(data) > 0
+        offset += len(data)
+        f.write(data)
+    f.close()
