@@ -5,7 +5,6 @@ import os
 from time import time
 
 from blobrepo import repository
-import bloblist
 import client
 
 if sys.version_info >= (2, 6):
