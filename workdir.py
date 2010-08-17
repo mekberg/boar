@@ -5,7 +5,6 @@ from front import Front
 from blobrepo.repository import Repo
 from common import *
 from base64 import b64decode, b64encode
-import bloblist
 import settings
 import time
 import hashlib
