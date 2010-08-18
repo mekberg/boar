@@ -70,6 +70,8 @@ class SessionWriter:
         self.base_session = base_session
         self.session_path = None
         self.metadatas = {}
+        # Summers for new blobs. { blobname: summer, ... }
+        self.blob_checksummers = {}
         assert os.path.exists(self.repo.repopath)
         self.session_path = tempfile.mkdtemp( \
             prefix = "tmp_", 
@@ -86,6 +88,11 @@ class SessionWriter:
         """ Adds the given fragment to the end of the new blob with the given checksum."""
         assert is_md5sum(blob_md5)
         assert not self.repo.has_blob(blob_md5), "blob already exists"
+        if self.blob_checksummers.has_key(blob_md5):
+            summer = self.blob_checksummers[blob_md5]
+        else:
+            summer = hashlib.md5()
+        summer.update(fragment)
         fname = os.path.join(self.session_path, blob_md5)
         with open(fname, "ab") as f:
             f.write(fragment)
@@ -112,6 +119,8 @@ class SessionWriter:
 
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
+        for name, summer in self.blob_checksummers.values():
+            assert name == summer.hexdigest()
         fingerprint = bloblist_fingerprint(self.resulting_blobdict.values())
         metainfo = { 'base_session': self.base_session,
                      'fingerprint': fingerprint,
