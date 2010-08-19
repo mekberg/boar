@@ -89,6 +89,15 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         changes = self.wd.get_changes()
         self.assertEqual(changes, (["subdir/tjosan.txt"], [], [], [], []))
 
+    def testTwoNewIdenticalFiles(self):
+        self.mkdir("subdir")
+        self.addWorkdirFile("subdir/tjosan1.txt", "tjosanhejsan")
+        self.addWorkdirFile("subdir/tjosan2.txt", "tjosanhejsan")
+        self.wd.checkin()
+        changes = self.wd.get_changes()
+        # Order doesnt matter below really, so this is fragile
+        self.assertEqual(changes, (["subdir/tjosan2.txt", "subdir/tjosan1.txt"], [], [], [], []))
+
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def setUp(self):

@@ -75,6 +75,8 @@ class Front:
         return base64.b64encode(blobpart)
 
     def has_blob(self, sum):
+        if self.new_session:
+            return self.repo.has_blob(sum) or self.new_session.has_blob(sum)
         return self.repo.has_blob(sum)
 
     def find_last_revision(self, session_name):

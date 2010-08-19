@@ -88,14 +88,17 @@ class SessionWriter:
         """ Adds the given fragment to the end of the new blob with the given checksum."""
         assert is_md5sum(blob_md5)
         assert not self.repo.has_blob(blob_md5), "blob already exists"
-        if self.blob_checksummers.has_key(blob_md5):
-            summer = self.blob_checksummers[blob_md5]
-        else:
-            summer = hashlib.md5()
+        if not self.blob_checksummers.has_key(blob_md5):
+            self.blob_checksummers[blob_md5] = hashlib.md5()
+        summer = self.blob_checksummers[blob_md5]
         summer.update(fragment)
         fname = os.path.join(self.session_path, blob_md5)
         with open(fname, "ab") as f:
             f.write(fragment)
+
+    def has_blob(self, csum):
+        fname = os.path.join(self.session_path, csum)
+        return os.path.exists(fname)
 
     def add(self, metadata):
         assert metadata.has_key('md5sum')
@@ -119,8 +122,8 @@ class SessionWriter:
 
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
-        for name, summer in self.blob_checksummers.values():
-            assert name == summer.hexdigest()
+        for name, summer in self.blob_checksummers.items():
+            assert name == summer.hexdigest(), "Corrupted blob found in new session. Commit aborted."
         fingerprint = bloblist_fingerprint(self.resulting_blobdict.values())
         metainfo = { 'base_session': self.base_session,
                      'fingerprint': fingerprint,
