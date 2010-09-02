@@ -19,7 +19,7 @@ import settings
 
 def print_help():
     print """Usage: 
-import <dir> <session_name>
+import [-w] [-u] <dir> <session_name>
 co <session_name> [destination]
 mkrepo <dir to create>
 list [session_name [revision_id]]
@@ -173,6 +173,8 @@ def cmd_find(front, args):
             if bi['md5sum'] == cs:
                 print info['name'] +":"+bi['filename']
 
+def cmd_export_md5(wd, args):
+    wd.export_md5()
 
 def init_repo_from_env():
     repopath = os.getenv("REPO_PATH")
@@ -219,6 +221,9 @@ def main():
     elif sys.argv[1] == "find":
         front = init_repo_from_env()
         cmd_find(front, sys.argv[2:])
+    elif sys.argv[1] == "exportmd5":
+        wd = workdir.init_workdir(os.getcwd())
+        cmd_export_md5(wd, sys.argv[2:])
     else:
         print_help()
         return
