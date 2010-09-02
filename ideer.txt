@@ -19,3 +19,5 @@ så att allt ser bra ut, och sedan checka in allt utan att behöva oroa
 sig över att något hunnit ändras.
 
 Utcheckning och hantering av subkataloger.
+
+
