@@ -49,6 +49,16 @@ def get_relative_path(p):
         else:
             return p
 
+# This method avoids an infinite loop when add_path_offset() and
+# strip_path_offset() verfies the results of each other.
+def __add_path_offset(offset, p):
+    return offset + "/" + p
+
+def add_path_offset(offset, p):
+    result = __add_path_offset(offset, p)
+    assert strip_path_offset(offset, result) == p
+    return result
+
 def strip_path_offset(offset, p):
     """ Removes the initial part of pathname p that is identical to
     the given offset. Example: strip_path_offset("myfiles",
@@ -59,7 +69,9 @@ def strip_path_offset(offset, p):
         return p
     assert p.startswith(offset)
     assert p[len(offset)] == "/"
-    return p[len(offset)+1:]
+    result = p[len(offset)+1:]
+    assert __add_path_offset(offset, result) == p
+    return result
 
 def remove_first_dirname(p):
     rel_path = get_relative_path(p)
