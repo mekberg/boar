@@ -55,10 +55,7 @@ class Workdir:
         for info in front.get_session_bloblist(self.revision):
             if not info['filename'].startswith(self.offset):
                 continue
-            target = info['filename'][len(self.offset):] # Remove the offset
-            if self.offset:
-                assert target.startswith("/")
-                target = target[1:]
+            target = strip_path_offset(self.offset, info['filename'])
             target_path = os.path.join(self.root, target)
             print target
             fetch_blob(front, info['md5sum'], target_path)
