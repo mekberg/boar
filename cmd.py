@@ -89,7 +89,7 @@ def cmd_info(args):
         print "Using a work directory:"
         print "   Workdir root:", wd.root
         print "   Repository:", wd.repoUrl
-        print "   Session:", wd.sessionName
+        print "   Session:", wd.sessionName, "/", wd.offset
         print "   Revision:", wd.revision
         
     #env_front = init_repo_from_env()
@@ -135,7 +135,7 @@ def cmd_ci(wd, args):
 def cmd_co(front, args): 
     session_ids = front.get_session_ids()
     session_ids.reverse()
-    session_name = args[0]
+    session_name, throwaway, offset = args[0].partition("/")
 
     if len(args) <= 1:
         workdir_path = os.path.abspath(session_name)
@@ -149,12 +149,12 @@ def cmd_co(front, args):
         if name == session_name:
             break
     if name != session_name:
-        print "No such session found"
+        print "No session named '%s' found" % (session_name)
         return
 
     assert not os.path.exists(workdir_path)
     os.mkdir(workdir_path)
-    wd = workdir.Workdir(front.get_repo_path(), session_name, sid, workdir_path)
+    wd = workdir.Workdir(front.get_repo_path(), session_name, offset, sid, workdir_path)
     wd.checkout()
 
 def cmd_find(front, args):

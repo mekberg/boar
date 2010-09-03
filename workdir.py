@@ -17,10 +17,11 @@ else:
 
 
 class Workdir:
-    def __init__(self, repoUrl, sessionName, revision, root):
+    def __init__(self, repoUrl, sessionName, offset, revision, root):
         assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
         self.repoUrl = repoUrl
         self.sessionName = sessionName
+        self.offset = offset
         self.revision = revision
         self.root = root
         self.front = None
@@ -35,6 +36,7 @@ class Workdir:
         with open(statusfile, "wb") as f:
             json.dump({'repo_path': self.repoUrl,
                        'session_name': self.sessionName,
+                       'offset': self.offset,
                        'session_id': self.revision}, f, indent = 4)    
 
     def export_md5(self):
@@ -51,8 +53,14 @@ class Workdir:
         if write_meta:
             self.write_metadata()
         for info in front.get_session_bloblist(self.revision):
-            print info['filename']
-            target_path = os.path.join(self.root, info['filename'])
+            if not info['filename'].startswith(self.offset):
+                continue
+            target = info['filename'][len(self.offset):] # Remove the offset
+            if self.offset:
+                assert target.startswith("/")
+                target = target[1:]
+            target_path = os.path.join(self.root, target)
+            print target
             fetch_blob(front, info['md5sum'], target_path)
 
     def checkin(self, write_meta = True, force_primary_session = False, add_only = False):
@@ -245,6 +253,7 @@ def init_workdir(path):
     root = os.path.split(metapath)[0]    
     wd = Workdir(repoUrl=info['repo_path'], 
                  sessionName=info['session_name'], 
+                 offset=info.get("offset", ""), 
                  revision=info['session_id'],
                  root=root) 
     return wd
