@@ -49,6 +49,18 @@ def get_relative_path(p):
         else:
             return p
 
+def strip_path_offset(offset, p):
+    """ Removes the initial part of pathname p that is identical to
+    the given offset. Example: strip_path_offset("myfiles",
+    "myfiles/dir1/file.txt") => "dir1/file.txt" """
+    # TODO: For our purposes, this function really is a dumber version
+    # of my_relpath(). One should replace the other.
+    if offset == "":
+        return p
+    assert p.startswith(offset)
+    assert p[len(offset)] == "/"
+    return p[len(offset)+1:]
+
 def remove_first_dirname(p):
     rel_path = get_relative_path(p)
     firstslash = rel_path.find("/")
