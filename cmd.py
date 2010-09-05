@@ -123,7 +123,7 @@ def cmd_import(front, args):
     if len(args) > 1:
         session_name = args[1]
     assert os.path.exists(path_to_ci)
-    wd = workdir.Workdir(front.get_repo_path(), session_name, None, path_to_ci)
+    wd = workdir.Workdir(front.get_repo_path(), session_name, "", None, path_to_ci)
     session_id = wd.checkin(write_meta = create_workdir, add_only = update_import)
     print "Checked in session id", session_id
 
