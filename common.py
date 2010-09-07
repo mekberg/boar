@@ -67,7 +67,7 @@ def strip_path_offset(offset, p):
     # of my_relpath(). One should replace the other.
     if offset == "":
         return p
-    assert p.startswith(offset)
+    assert p.startswith(offset), "'%s' does not begin with offset '%s'" % (p, offset)
     assert p[len(offset)] == "/"
     result = p[len(offset)+1:]
     assert __add_path_offset(offset, result) == p
