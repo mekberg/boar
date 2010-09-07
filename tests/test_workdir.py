@@ -47,7 +47,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.repopath = self.createTmpName()
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
-        self.wd = workdir.Workdir(self.repopath, "TestSession", None, self.workdir)
+        self.wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
         id = self.wd.checkin()
         assert id == 1
 
@@ -106,7 +106,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         self.repopath = self.createTmpName()
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
-        self.wd = workdir.Workdir(self.repopath, "TestSession", None, self.workdir)
+        self.wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
         id = self.wd.checkin()
         assert id == 1
         self.addWorkdirFile("onlyintopdir.txt", "nothing")
