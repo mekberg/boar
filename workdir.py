@@ -138,7 +138,7 @@ class Workdir:
     def cached_md5sum(self, relative_path):
         if relative_path in self.md5cache:
             return self.md5cache[relative_path]
-        csum = md5sum_file(os.path.join(self.root, relative_path))
+        csum = md5sum_file(self.abspath(relative_path))
         self.md5cache[relative_path] = csum
         return self.md5cache[relative_path]
 
@@ -188,7 +188,7 @@ class Workdir:
             fname = info['filename']
             if fname in existing_files_list:
                 existing_files_list.remove(fname)
-                if self.cached_md5sum(self.abspath(info['filename'])) == info['md5sum']:
+                if self.cached_md5sum(info['filename']) == info['md5sum']:
                     unchanged_files.append(fname)
                 else:
                     modified_files.append(fname)
