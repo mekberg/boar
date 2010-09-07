@@ -158,8 +158,13 @@ class Workdir:
         os.path.walk(self.root, visitor, all_files)
         return all_files
 
-    def rel_to_abs(self, relpath):
-        return os.path.join(self.root, relpath)
+    def abspath(self, path):
+        """Transforms the given path from a session-relative path to a
+        absolute path to the file in the current workdir. Takes path
+        offsets into account. The given path must be a child of the
+        current path offset, or an exception will be thrown."""
+        without_offset = strip_path_offset(self.offset, path)
+        return os.path.join(self.root, without_offset)
 
     def get_changes(self, skip_checksum = False):
         """ Compares the work dir with the checked out revision. Returns a
@@ -173,22 +178,24 @@ class Workdir:
         remove_rootpath = lambda fn: convert_win_path_to_unix(my_relpath(fn, self.root))
         # existing_files_list is root-relative
         existing_files_list = map(remove_rootpath, self.get_tree())
+        existing_files_list = map(lambda x: os.path.join(self.offset, x), existing_files_list)
         bloblist = []
         if self.revision != None:
             bloblist = front.get_session_bloblist(self.revision)
+            bloblist = [i for i in bloblist if is_child_path(self.offset, i['filename'])]
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = [], [], [], [], []
         for info in bloblist:
             fname = info['filename']
             if fname in existing_files_list:
                 existing_files_list.remove(fname)
-                if self.cached_md5sum(info['filename']) == info['md5sum']:
+                if self.cached_md5sum(self.abspath(info['filename'])) == info['md5sum']:
                     unchanged_files.append(fname)
                 else:
                     modified_files.append(fname)
-            if not os.path.exists(os.path.join(self.root, fname)):
+            if not os.path.exists(self.abspath(fname)):
                 deleted_files.append(fname)
         for f in existing_files_list:
-            if is_ignored(os.path.join(self.root, f)):
+            if is_ignored(self.abspath(f)):
                 print "Ignoring file", f
                 existing_files_list.remove(f)
                 ignored_files.append(f)
@@ -198,7 +205,8 @@ class Workdir:
             assert not unchanged_files
             assert not modified_files
             assert not deleted_files
-        return unchanged_files, new_files, modified_files, deleted_files, ignored_files
+        result = unchanged_files, new_files, modified_files, deleted_files, ignored_files
+        return result
 
 def is_ignored(dirname, entryname = None):
     if entryname == None:
