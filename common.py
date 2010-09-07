@@ -73,6 +73,11 @@ def strip_path_offset(offset, p):
     assert __add_path_offset(offset, result) == p
     return result
 
+def is_child_path(parent, child):
+    result = child.startswith(parent + "/")
+    print "is_child_path('%s', '%s') => %s" % (parent, child, result)
+    return result
+    
 def remove_first_dirname(p):
     rel_path = get_relative_path(p)
     firstslash = rel_path.find("/")
