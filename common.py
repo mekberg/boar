@@ -74,8 +74,10 @@ def strip_path_offset(offset, p):
     return result
 
 def is_child_path(parent, child):
+    if parent == "":
+        return True
     result = child.startswith(parent + "/")
-    # print "is_child_path('%s', '%s') => %s" % (parent, child, result)
+    #print "is_child_path('%s', '%s') => %s" % (parent, child, result)
     return result
     
 def remove_first_dirname(p):
