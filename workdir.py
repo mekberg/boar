@@ -61,7 +61,6 @@ class Workdir:
                 continue
             target = strip_path_offset(self.offset, info['filename'])
             target_path = os.path.join(self.root, target)
-            print target
             fetch_blob(front, info['md5sum'], target_path)
 
     def checkin(self, write_meta = True, force_primary_session = False, add_only = False):
