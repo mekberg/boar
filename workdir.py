@@ -88,9 +88,10 @@ class Workdir:
             # from disk. But that's complicated.
             self.cached_md5sum(f)
 
-        for f in new_files + modified_files:
-            expected_md5sum = self.cached_md5sum(f)
-            check_in_file(front, self.root, os.path.join(self.root, f), expected_md5sum)
+        for sessionpath in new_files + modified_files:
+            expected_md5sum = self.cached_md5sum(sessionpath)
+            abspath = os.path.join(self.root, sessionpath)
+            check_in_file(front, abspath, sessionpath, expected_md5sum)
 
         if not add_only:
             for f in deleted_files:
@@ -139,6 +140,7 @@ class Workdir:
         return None
 
     def cached_md5sum(self, relative_path):
+        assert not os.path.isabs(relative_path), "Path must be relative to the workdir"
         if relative_path in self.md5cache:
             return self.md5cache[relative_path]
         csum = md5sum_file(self.abspath(relative_path))
@@ -227,18 +229,18 @@ def is_ignored(dirname, entryname = None):
         return True
     return False
 
-def check_in_file(sessionwriter, root, path, expected_md5sum):
-    """ Checks in the file found at the given "path" into the active
-    "sessionwriter". The actual filename checked in is determined by
-    subtracting the "root" from the path. The md5sum of the file has
-    to be provided. The checksum is compared to the file while it is
-    read, to ensure it is consistent."""
-
-    assert os.path.isabs(path), \
-        "path must be absolute here. Was: '%s'" % (path)
-    blobinfo = create_blobinfo(path, root, expected_md5sum)
+def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum):
+    """ Checks in the file found at the given "abspath" into the
+    active "sessionwriter" with the path in the session given as
+    "sessionpath". The md5sum of the file has to be provided. The
+    checksum is compared to the file while it is read, to ensure it is
+    consistent."""
+    print "check_in_file(%s, %s, %s)" % (abspath, sessionpath, expected_md5sum)
+    assert os.path.isabs(abspath), \
+        "abspath must be absolute. Was: '%s'" % (path)
+    blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
     if not sessionwriter.has_blob(expected_md5sum):
-        with open_raw(path) as f:
+        with open_raw(abspath) as f:
             m = hashlib.md5()
             while True:
                 data = f.read(1048576) # 1048576 = 2^20
@@ -300,11 +302,13 @@ def init_repo_from_meta(path):
     front = Front(Repo(repo_path))
     return front
 
-def create_blobinfo(path, root, md5sum):
+def create_blobinfo(abspath, sessionpath, md5sum):
     assert is_md5sum(md5sum)
-    st = os.lstat(path)
+    assert sessionpath == convert_win_path_to_unix(sessionpath), \
+        "Session path not valid: " + sessionpath
+    st = os.lstat(abspath)
     blobinfo = {}
-    blobinfo["filename"] = convert_win_path_to_unix(my_relpath(path, root))
+    blobinfo["filename"] = sessionpath
     blobinfo["md5sum"] = md5sum
     blobinfo["ctime"] = st[stat.ST_CTIME]
     blobinfo["mtime"] = st[stat.ST_MTIME]
