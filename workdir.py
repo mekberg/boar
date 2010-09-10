@@ -90,7 +90,7 @@ class Workdir:
 
         for sessionpath in new_files + modified_files:
             expected_md5sum = self.cached_md5sum(sessionpath)
-            abspath = os.path.join(self.root, sessionpath)
+            abspath = self.abspath(sessionpath)
             check_in_file(front, abspath, sessionpath, expected_md5sum)
 
         if not add_only:
@@ -238,6 +238,7 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum):
     print "check_in_file(%s, %s, %s)" % (abspath, sessionpath, expected_md5sum)
     assert os.path.isabs(abspath), \
         "abspath must be absolute. Was: '%s'" % (path)
+    assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
     if not sessionwriter.has_blob(expected_md5sum):
         with open_raw(abspath) as f:
