@@ -133,7 +133,27 @@ def open_raw(filename):
     #     print "Failed using O_DIRECT", e
     #     return open(filename, "rb")
 
-class TreeWalker:
+def get_tree(root, skip = [], absolute_paths = False):
+    """ Returns a simple list of all the files and directories in the
+        workdir (except meta directories). """
+    def visitor(out_list, dirname, names):
+        for file_to_skip in skip:
+            if file_to_skip in names:
+                names.remove(file_to_skip)
+        for name in names:
+            name = unicode(name, encoding="utf_8")
+            fullpath = os.path.join(dirname, name)
+            if not os.path.isdir(fullpath):
+                out_list.append(fullpath)
+    all_files = []
+    os.path.walk(root, visitor, all_files)
+    remove_rootpath = lambda fn: convert_win_path_to_unix(my_relpath(fn, root))
+    if not absolute_paths:
+        all_files = map(remove_rootpath, all_files)
+    return all_files
+
+
+class UNUSED_TreeWalker:
     def __init__(self, path):
         assert os.path.exists(path)
         self.queue = [path]

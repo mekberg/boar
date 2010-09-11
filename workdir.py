@@ -123,7 +123,7 @@ class Workdir:
     def exists_in_workdir(self, csum):
         """ Returns true if at least one file with the given checksum exists
             in the workdir. """
-        tree = self.get_tree(absolute_paths = False)
+        tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
         for f in tree:
             if self.cached_md5sum(f) == csum:
                 return True
@@ -147,24 +147,6 @@ class Workdir:
         self.md5cache[relative_path] = csum
         return self.md5cache[relative_path]
 
-    def get_tree(self, absolute_paths = False):
-        """ Returns a simple list of all the files and directories in the
-            workdir (except meta directories). """
-        def visitor(out_list, dirname, names):
-            if settings.metadir in names:
-                names.remove(settings.metadir)
-            for name in names:
-                name = unicode(name, encoding="utf_8")
-                fullpath = os.path.join(dirname, name)
-                if not os.path.isdir(fullpath):
-                    out_list.append(fullpath)
-        all_files = []
-        os.path.walk(self.root, visitor, all_files)
-        remove_rootpath = lambda fn: convert_win_path_to_unix(my_relpath(fn, self.root))
-        if not absolute_paths:
-            all_files = map(remove_rootpath, all_files)
-        return all_files
-
     def abspath(self, path):
         """Transforms the given path from a session-relative path to a
         absolute path to the file in the current workdir. Takes path
@@ -182,7 +164,7 @@ class Workdir:
             has been changed. """
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
-        existing_files_list = self.get_tree(absolute_paths = False)
+        existing_files_list = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
         existing_files_list = map(lambda x: os.path.join(self.offset, x), existing_files_list)
         bloblist = []
         if self.revision != None:
