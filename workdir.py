@@ -125,6 +125,7 @@ class Workdir:
             in the workdir. """
         tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
         for f in tree:
+            #print "Checking for", f
             if self.cached_md5sum(f) == csum:
                 return True
         return False
@@ -143,17 +144,27 @@ class Workdir:
         assert not os.path.isabs(relative_path), "Path must be relative to the workdir"
         if relative_path in self.md5cache:
             return self.md5cache[relative_path]
-        csum = md5sum_file(self.abspath(relative_path))
+        csum = md5sum_file(self.wd_abspath(relative_path))
         self.md5cache[relative_path] = csum
         return self.md5cache[relative_path]
 
-    def abspath(self, path):
+    def wd_abspath(self, wd_path):
+        """Transforms the given workdir path into a system absolute
+        path"""
+        session_path = self.offset + "/" + wd_path
+        result = self.abspath(session_path)
+        #print "wd_abspath:", wd_path, result
+        return result
+
+    def abspath(self, session_path):
         """Transforms the given path from a session-relative path to a
         absolute path to the file in the current workdir. Takes path
         offsets into account. The given path must be a child of the
         current path offset, or an exception will be thrown."""
-        without_offset = strip_path_offset(self.offset, path)
-        return os.path.join(self.root, without_offset)
+        without_offset = strip_path_offset(self.offset, session_path)
+        result = os.path.join(self.root, without_offset)
+        #print "abspath(%s) => %s" % (session_path, result)
+        return result
 
     def get_changes(self, skip_checksum = False):
         """ Compares the work dir with the checked out revision. Returns a
@@ -175,7 +186,8 @@ class Workdir:
             fname = info['filename']
             if fname in existing_files_list:
                 existing_files_list.remove(fname)
-                if self.cached_md5sum(info['filename']) == info['md5sum']:
+                wd_path = strip_path_offset(self.offset, info['filename'])
+                if self.cached_md5sum(wd_path) == info['md5sum']:
                     unchanged_files.append(fname)
                 else:
                     modified_files.append(fname)
@@ -217,7 +229,7 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum):
     "sessionpath". The md5sum of the file has to be provided. The
     checksum is compared to the file while it is read, to ensure it is
     consistent."""
-    print "check_in_file(%s, %s, %s)" % (abspath, sessionpath, expected_md5sum)
+    #print "check_in_file(%s, %s, %s)" % (abspath, sessionpath, expected_md5sum)
     assert os.path.isabs(abspath), \
         "abspath must be absolute. Was: '%s'" % (path)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
