@@ -46,7 +46,20 @@ REPO_PATH=$REPO $CMD co MyTestSession/subdir test_tree || { echo "Couldn't check
 md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
 2490f86515a5a58067c2a1ca3e239299  test_tree/fil1.txt
 EOF
-test `find test_tree_subdir/ -type f -a ! -ipath *.meta*` == "test_tree_subdir/fil1.txt" || { echo "Couldn't check out tree"; exit 1; }
+test `find test_tree -type f -a ! -ipath *.meta*` == "test_tree/fil1.txt" || { echo "More files than expected in checkout"; exit 1; }
+
+# Test offset checkin
+echo "Some content" >test_tree/nysubfil.txt
+(cd test_tree && $CMD ci) || { echo "Couldn't check in tree"; exit 1; }
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+REPO_PATH=$REPO $CMD co MyTestSession/subdir test_tree || { echo "Couldn't check out tree"; exit 1; }
+md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
+2490f86515a5a58067c2a1ca3e239299  test_tree/fil1.txt
+581ab2d89f05c294d4fe69c623bdef83  test_tree/nysubfil.txt
+EOF
+#find test_tree -type f -a ! -ipath *.meta*` || { echo "More files than expected in checkout"; exit 1; }
+
+
 
 rm -r $REPO test_tree
 echo "All tests completed ok!"
