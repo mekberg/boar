@@ -40,8 +40,14 @@ REPO_PATH=$REPO $CMD co MyTestSession test_tree || { echo "Couldn't check out tr
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after addition"; exit 1; }
 md5sum -c test_tree_addition.md5 || { echo "Test tree addition failed md5 after addition"; exit 1; }
 
+# Test offset checkout
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+REPO_PATH=$REPO $CMD co MyTestSession/subdir test_tree || { echo "Couldn't check out tree"; exit 1; }
+md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
+2490f86515a5a58067c2a1ca3e239299  test_tree/fil1.txt
+EOF
+test `find test_tree_subdir/ -type f -a ! -ipath *.meta*` == "test_tree_subdir/fil1.txt" || { echo "Couldn't check out tree"; exit 1; }
+
 rm -r $REPO test_tree
 echo "All tests completed ok!"
-
-
 
