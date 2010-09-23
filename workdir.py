@@ -153,7 +153,6 @@ class Workdir:
         path"""
         assert not os.path.isabs(wd_path)
         result = self.root + "/" + wd_path
-        print "wd_abspath:", wd_path, result
         return result
 
     def abspath(self, session_path):
