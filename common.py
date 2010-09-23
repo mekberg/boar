@@ -101,10 +101,6 @@ from os.path import curdir, sep, pardir, join
 def my_relpath(path, start=curdir):
     """Return a relative version of a path"""
     assert os.path.isabs(path)
-    if sys.version_info >= (2, 6):
-        result = os.path.relpath(path, start)
-        #print "relpath(path=%s, start=%s) => %s" % (path, start, result)
-        return result
     if not path:
         raise ValueError("no path specified")
     start_list = posixpath.abspath(start).split(sep)
@@ -117,6 +113,10 @@ def my_relpath(path, start=curdir):
     else:
         result = join(*rel_list)
     #print "my_relpath(path=%s, start=%s) => %s" % (path, start, result)
+    if sys.version_info >= (2, 6):
+        real_relpath_result = os.path.relpath(path, start)
+        assert result == real_relpath_result, "my_relpath() gave different result (%s) than system relpath (%s)." % (result, real_relpath_result)
+        #print "relpath(path=%s, start=%s) => %s" % (path, start, result)
     return result
 
 def open_raw(filename):
