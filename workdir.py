@@ -86,10 +86,11 @@ class Workdir:
             # This is really a broken way to do it, and it should be
             # replaced with proper system-calls to read the file raw
             # from disk. But that's complicated.
-            self.cached_md5sum(f)
+            self.cached_md5sum(strip_path_offset(self.offset, f))
 
         for sessionpath in new_files + modified_files:
-            expected_md5sum = self.cached_md5sum(sessionpath)
+            wd_path = strip_path_offset(self.offset, sessionpath)
+            expected_md5sum = self.cached_md5sum(wd_path)
             abspath = self.abspath(sessionpath)
             check_in_file(front, abspath, sessionpath, expected_md5sum)
 

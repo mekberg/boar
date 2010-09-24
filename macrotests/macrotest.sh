@@ -16,13 +16,13 @@ rm -r test_tree || { echo "Couldn't remove test tree after import"; exit 1; }
 REPO_PATH=$REPO $CMD co MyTestSession test_tree || { echo "Couldn't check out tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after check-out"; exit 1; }
 
-# Test unchanged check-in
+echo Test unchanged check-in
 (cd test_tree && $CMD ci) || { echo "Couldn't check in tree"; exit 1; }
 rm -r test_tree || { echo "Couldn't remove test tree after check-in"; exit 1; }
 REPO_PATH=$REPO $CMD co MyTestSession test_tree || { echo "Couldn't check out tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after unmodified check-in"; exit 1; }
 
-# Test adding files to a base session
+echo Test adding files to a base session
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 tar -xvzf test_tree_addition.tar.gz || { echo "Couldn't create test tree for addition"; exit 1; }
 REPO_PATH=$REPO $CMD import -u test_tree MyTestSession || { echo "Couldn't import added files"; exit 1; }
@@ -31,7 +31,7 @@ REPO_PATH=$REPO $CMD co MyTestSession test_tree || { echo "Couldn't check out tr
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after addition"; exit 1; }
 md5sum -c test_tree_addition.md5 || { echo "Test tree addition failed md5 after addition"; exit 1; }
 
-# Test adding the same file again
+echo Test adding the same file again
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 tar -xvzf test_tree_addition.tar.gz || { echo "Couldn't create test tree for addition"; exit 1; }
 REPO_PATH=$REPO $CMD import -u test_tree MyTestSession || { echo "Couldn't import added files"; exit 1; }
@@ -40,7 +40,7 @@ REPO_PATH=$REPO $CMD co MyTestSession test_tree || { echo "Couldn't check out tr
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after addition"; exit 1; }
 md5sum -c test_tree_addition.md5 || { echo "Test tree addition failed md5 after addition"; exit 1; }
 
-# Test offset checkout
+echo Test offset checkout
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 REPO_PATH=$REPO $CMD co MyTestSession/subdir test_tree || { echo "Couldn't check out tree"; exit 1; }
 md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
@@ -48,7 +48,7 @@ md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
 EOF
 test `find test_tree -type f -a ! -ipath *.meta*` == "test_tree/fil1.txt" || { echo "More files than expected in checkout"; exit 1; }
 
-# Test offset checkin
+echo Test offset checkin
 echo "Some content" >test_tree/nysubfil.txt
 (cd test_tree && $CMD ci) || { echo "Couldn't check in tree"; exit 1; }
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
