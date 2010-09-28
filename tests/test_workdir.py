@@ -15,6 +15,7 @@ if __name__ == '__main__':
 
 import workdir
 from blobrepo import repository
+from common import get_tree
 
 class WorkdirHelper:
     def mkdir(self, path):
@@ -33,13 +34,16 @@ class WorkdirHelper:
         filepath = os.path.join(self.workdir, path)
         os.unlink(filepath)
 
-    def createTmpName(self):
-        filename = tempfile.mktemp(prefix='workdir_repo_', dir=TMPDIR)
+    def createTmpName(self, suffix = ""):
+        filename = tempfile.mktemp(prefix='testworkdir'+suffix+"_", dir=TMPDIR)
         self.remove_at_teardown.append(filename)
         return filename
 
-
-
+    def assertContents(self, path, expected_contents):
+        with open(path, "rb") as f:
+            file_contents = f.read()
+            self.assertEquals(file_contents, expected_contents)
+        
 
 class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def setUp(self):
@@ -110,24 +114,32 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def setUp(self):
         self.remove_at_teardown = []
-        self.workdir = self.createTmpName()
-        self.repopath = self.createTmpName()
+        self.workdir = self.createTmpName("_wd")
+        self.repopath = self.createTmpName("_repo")
         repository.create_repository(self.repopath)
+
+    def createTestRepo(self):
         os.mkdir(self.workdir)
-        self.wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
-        id = self.wd.checkin()
-        assert id == 1
+        wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
         self.addWorkdirFile("onlyintopdir.txt", "nothing")
         self.mkdir("mysubdir")
         self.addWorkdirFile("mysubdir/insubdir.txt", "nothing2")
+        id = wd.checkin()
+        assert id == 1
+        shutil.rmtree(self.workdir, ignore_errors = True)
 
     def tearDown(self):
         for d in self.remove_at_teardown:
             shutil.rmtree(d, ignore_errors = True)
 
-
     def testPartialCheckout(self):
-        pass
+        self.createTestRepo()
+        os.mkdir(self.workdir)
+        wd = workdir.Workdir(self.repopath, "TestSession", "mysubdir", None, self.workdir)
+        wd.checkout()
+        tree = get_tree(wd.root, absolute_paths = False)
+        #tree = wd.get_tree(absolute_paths = True)
+        self.assertEquals(set(tree), set(["insubdir.txt", '.meta/info']))
 
 if __name__ == '__main__':
     unittest.main()
