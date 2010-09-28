@@ -58,7 +58,7 @@ def bloblist_fingerprint(bloblist):
     filenames.sort()
     sep = "!SEPARATOR!"
     for fn in filenames:
-        md5.update(fn)
+        md5.update(fn.encode("utf-8"))
         md5.update(sep)
         md5.update(blobdict[fn]['md5sum'])
         md5.update(sep)
