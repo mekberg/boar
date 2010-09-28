@@ -119,11 +119,18 @@ def cmd_import(front, args):
         args.remove("-w")
         create_workdir = True
     path_to_ci = os.path.abspath(args[0])
+
     session_name = os.path.basename(args[0])
+    session_offset = ""
     if len(args) > 1:
-        session_name = args[1]
+        if "/" in args[1]:
+            # TODO: this won't work so well with windows paths
+            session_name, session_offset = args[1].split("/", 1)
+        else:
+            session_name = args[1]
+    print "Session name:", session_name, "Session offset:", session_offset
     assert os.path.exists(path_to_ci)
-    wd = workdir.Workdir(front.get_repo_path(), session_name, "", None, path_to_ci)
+    wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
     session_id = wd.checkin(write_meta = create_workdir, add_only = update_import)
     print "Checked in session id", session_id
 
@@ -151,7 +158,6 @@ def cmd_co(front, args):
     if name != session_name:
         print "No session named '%s' found" % (session_name)
         return
-
     assert not os.path.exists(workdir_path)
     os.mkdir(workdir_path)
     wd = workdir.Workdir(front.get_repo_path(), session_name, offset, sid, workdir_path)
