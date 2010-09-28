@@ -148,7 +148,7 @@ def cmd_co(front, args):
         workdir_path = os.path.abspath(session_name)
     else:
         workdir_path = os.path.abspath(args[1])
-    print "Exporting to workdir", "./" + workdir_path
+    print "Exporting to workdir", workdir_path
 
     for sid in session_ids:
         session_info = front.get_session_info(sid)
