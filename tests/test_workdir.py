@@ -81,7 +81,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEqual(changes, (["tjosan.txt"], [], [], [], []))
 
     def testGetChangesUnchangedFileWithFunkyName(self):        
-        name = "Tjosan_räk smörgås.txt"
+        name = u"Tjosan_räk smörgås.txt"
         self.addWorkdirFile(name, "tjosanhejsan")
         self.wd.checkin()
         changes = self.wd.get_changes()
