@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 from __future__ import with_statement
 import sys, os, unittest, tempfile, shutil
 from copy import copy
@@ -74,6 +75,13 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.wd.checkin()
         changes = self.wd.get_changes()
         self.assertEqual(changes, (["tjosan.txt"], [], [], [], []))
+
+    def testGetChangesUnchangedFileWithFunkyName(self):        
+        name = "Tjosan_räk smörgås.txt"
+        self.addWorkdirFile(name, "tjosanhejsan")
+        self.wd.checkin()
+        changes = self.wd.get_changes()
+        self.assertEqual(changes, ([name], [], [], [], []))
 
     def testGetChangesMissingFile(self):
         self.addWorkdirFile("tjosan.txt", "tjosanhejsan")
