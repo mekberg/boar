@@ -110,15 +110,15 @@ def cmd_list(front, args):
 
 def cmd_import(front, args):
     base_session = None
-    update_import = False
+    update_import = True
     create_workdir = False
     dry_run = False
     if "-n" in args:
         args.remove("-n")
         dry_run = True
-    if "-u" in args:
-        args.remove("-u")
-        update_import = True
+#    if "-r" in args:
+#        args.remove("-r")
+#        update_import = False
     if "-w" in args:
         args.remove("-w")
         create_workdir = True
