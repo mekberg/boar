@@ -1,7 +1,7 @@
 from __future__ import with_statement
 
 import os
-from front import Front
+from front import Front, DryRunFront
 from blobrepo.repository import Repo
 from common import *
 from base64 import b64decode, b64encode
@@ -63,8 +63,11 @@ class Workdir:
             target_path = os.path.join(self.root, target)
             fetch_blob(front, info['md5sum'], target_path)
 
-    def checkin(self, write_meta = True, force_primary_session = False, add_only = False):
+    def checkin(self, write_meta = True, force_primary_session = False, \
+                      add_only = False, dry_run = False):
         front = self.get_front()
+        if dry_run:
+            front = DryRunFront(front)
         assert os.path.exists(self.root) and os.path.isdir(self.root)
 
         base_session = None
