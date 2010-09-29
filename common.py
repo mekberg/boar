@@ -144,9 +144,14 @@ def get_tree(root, skip = [], absolute_paths = False):
         for file_to_skip in skip:
             if file_to_skip in names:
                 names.remove(file_to_skip)
+        dirname = unicode(dirname, encoding="mbcs")
         for name in names:
-            name = unicode(name, encoding="utf_8")
-            fullpath = os.path.join(dirname, name)
+            try:
+                name = unicode(name, encoding="mbcs")
+                fullpath = os.path.join(dirname, name)
+            except:
+                print "Failed on file:", dirname, name
+                raise
             if not os.path.isdir(fullpath):
                 out_list.append(fullpath)
     all_files = []
