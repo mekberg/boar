@@ -37,6 +37,9 @@ def convert_win_path_to_unix(path):
     nodrive = os.path.splitdrive(path)[1]
     return nodrive.replace("\\", "/")
 
+def is_windows_path(path):
+    return "\\" in path
+
 def get_relative_path(p):
     """ Normalizes the path to unix format and then removes drive letters
     and/or slashes from the given path """
@@ -69,7 +72,7 @@ def strip_path_offset(offset, p):
         return p
     assert not offset.endswith("/"), "Offset must be given without ending slash. Was: "+offset
     assert p.startswith(offset), "'%s' does not begin with offset '%s'" % (p, offset)
-    assert p[len(offset)] == "/"
+    assert p[len(offset)] == "/", "Offset was: "+offset+" Path was: "+p
     result = p[len(offset)+1:]
     assert __add_path_offset(offset, result) == p
     return result
@@ -151,6 +154,8 @@ def get_tree(root, skip = [], absolute_paths = False):
     remove_rootpath = lambda fn: convert_win_path_to_unix(my_relpath(fn, root))
     if not absolute_paths:
         all_files = map(remove_rootpath, all_files)
+    for f in all_files:
+        assert not is_windows_path(f), "Was:" + f
     return all_files
 
 
