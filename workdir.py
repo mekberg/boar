@@ -155,6 +155,7 @@ class Workdir:
     def wd_abspath(self, wd_path):
         """Transforms the given workdir path into a system absolute
         path"""
+        assert not is_windows_path(wd_path)
         assert not os.path.isabs(wd_path)
         result = self.root + "/" + wd_path
         return result
@@ -164,6 +165,7 @@ class Workdir:
         absolute path to the file in the current workdir. Takes path
         offsets into account. The given path must be a child of the
         current path offset, or an exception will be thrown."""
+        assert not is_windows_path(session_path)
         without_offset = strip_path_offset(self.offset, session_path)
         result = os.path.join(self.root, without_offset)
         #print "abspath(%s) => %s" % (session_path, result)
@@ -179,7 +181,7 @@ class Workdir:
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
         existing_files_list = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
-        existing_files_list = map(lambda x: os.path.join(self.offset, x), existing_files_list)
+        existing_files_list = [self.offset + "/" + f for f in existing_files_list]
         bloblist = []
         if self.revision != None:
             bloblist = front.get_session_bloblist(self.revision)
