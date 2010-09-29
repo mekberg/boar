@@ -18,6 +18,7 @@ import base64
 class Front:
     def __init__(self, repo):
         self.repo = repo
+        self.new_session = None
 
     def get_repo_path(self):
         return self.repo.get_repo_path()
@@ -89,3 +90,48 @@ class Front:
             if name == session_name:
                 return sid
         return None
+
+
+class DryRunFront:
+
+    def __init__(self, front):
+        self.realfront = front
+
+    def get_repo_path(self):
+        return self.realfront.get_repo_path()
+
+    def get_session_ids(self, filter = {}):
+        return self.realfront.get_session_ids(filter)
+
+    def get_session_info(self, id):
+        return self.realfront.get_session_info(id)
+
+    def get_session_bloblist(self, id):
+        return self.realfront.get_session_bloblist(id)
+
+    def create_session(self, base_session = None):
+        pass
+
+    def add_blob_data(self, blob_md5, b64data):
+        pass
+
+    def add(self, metadata):
+        pass
+
+    def remove(self, filename):
+        pass
+
+    def commit(self, sessioninfo = {}):
+        return 0
+
+    def get_blob_size(self, sum):
+        return self.realfront.get_blob_size(sum)
+
+    def get_blob_b64(self, sum, offset = 0, size = -1):
+        return self.realfront.get_blob_b64(sum, offset, size)
+
+    def has_blob(self, sum):
+        return self.realfront.has_blob(sum)
+
+    def find_last_revision(self, session_name):
+        return self.realfront.find_last_revision(session_name)
