@@ -145,7 +145,7 @@ class Workdir:
         return None
 
     def cached_md5sum(self, relative_path):
-        assert not os.path.isabs(relative_path), "Path must be relative to the workdir"
+        assert not os.path.isabs(relative_path), "Path must be relative to the workdir. Was: "+relative_path
         if relative_path in self.md5cache:
             return self.md5cache[relative_path]
         csum = md5sum_file(self.wd_abspath(relative_path))
@@ -167,7 +167,7 @@ class Workdir:
         current path offset, or an exception will be thrown."""
         assert not is_windows_path(session_path)
         without_offset = strip_path_offset(self.offset, session_path)
-        result = os.path.join(self.root, without_offset)
+        result = self.root + "/" + without_offset
         #print "abspath(%s) => %s" % (session_path, result)
         return result
 
@@ -181,7 +181,11 @@ class Workdir:
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
         existing_files_list = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
-        existing_files_list = [self.offset + "/" + f for f in existing_files_list]
+        if self.offset:
+            existing_files_list = [self.offset + "/" + f for f in existing_files_list]
+        for f in existing_files_list:
+            assert not is_windows_path(f), "Was:" + f
+            assert not os.path.isabs(f)
         bloblist = []
         if self.revision != None:
             bloblist = front.get_session_bloblist(self.revision)
@@ -235,6 +239,7 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum):
     checksum is compared to the file while it is read, to ensure it is
     consistent."""
     #print "check_in_file(%s, %s, %s)" % (abspath, sessionpath, expected_md5sum)
+    print sessionpath
     assert os.path.isabs(abspath), \
         "abspath must be absolute. Was: '%s'" % (path)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
