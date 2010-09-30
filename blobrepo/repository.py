@@ -73,6 +73,7 @@ class Repo:
         assert(os.path.isabs(repopath)), "The repo path must be absolute. "\
             +"Was: " + repopath
         self.repopath = repopath
+        self.session_readers = {}
         assert os.path.exists(self.repopath), "No such directory: %s" % (self.repopath)
         self.process_queue()
 
@@ -118,7 +119,9 @@ class Repo:
 
     def get_session(self, id):
         assert id
-        return sessions.SessionReader(self, self.get_session_path(id))
+        if id not in self.session_readers:
+            self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
+        return self.session_readers[id]
 
     def create_session(self, base_session = None):
         return sessions.SessionWriter(self, base_session = base_session)
