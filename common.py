@@ -4,6 +4,7 @@ import hashlib
 import re
 import os
 import sys
+import platform
 
 """ This file contains code that is generally useful, without being
 specific for any project """
@@ -144,10 +145,13 @@ def get_tree(root, skip = [], absolute_paths = False):
         for file_to_skip in skip:
             if file_to_skip in names:
                 names.remove(file_to_skip)
-        dirname = unicode(dirname)
+        encoding = "ascii"
+        if platform.system() == "Windows":
+            encoding = "mbcs"
+        dirname = unicode(dirname, encoding)
         for name in names:
             try:
-                name = unicode(name)
+                name = unicode(name, encoding)
                 fullpath = os.path.join(dirname, name)
             except:
                 print "Failed on file:", dirname, name
