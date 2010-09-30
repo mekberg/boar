@@ -3,6 +3,7 @@ from __future__ import with_statement
 import sys
 import os
 from time import time
+import cProfile
 
 from blobrepo import repository
 import client
@@ -133,7 +134,7 @@ def cmd_import(front, args):
         else:
             session_name = args[1]
     print "Session name:", session_name, "Session offset:", session_offset
-    assert os.path.exists(path_to_ci)
+    assert os.path.exists(path_to_ci), "Did not exist: " + path_to_ci
     wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
     session_id = wd.checkin(write_meta = create_workdir, add_only = update_import, dry_run = dry_run)
     print "Checked in session id", session_id
@@ -240,6 +241,7 @@ def main():
 
 if __name__ == "__main__":
     t1 = time()
+    #cProfile.run('main()')
     main()
     t2 = time()
     print "Finished in", round(t2-t1, 2), "seconds"
