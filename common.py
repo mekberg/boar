@@ -145,13 +145,11 @@ def get_tree(root, skip = [], absolute_paths = False):
         for file_to_skip in skip:
             if file_to_skip in names:
                 names.remove(file_to_skip)
-        encoding = "ascii"
-        if platform.system() == "Windows":
-            encoding = "mbcs"
-        dirname = unicode(dirname, encoding)
+        encoding = sys.getfilesystemencoding()
+        dirname = dirname.decode(encoding)
         for name in names:
             try:
-                name = unicode(name, encoding)
+                name = name.decode(encoding)
                 fullpath = os.path.join(dirname, name)
             except:
                 print "Failed on file:", dirname, name
