@@ -9,6 +9,7 @@ import settings
 import time
 import hashlib
 import stat
+import anydbm
 
 if sys.version_info >= (2, 6):
     import json
@@ -19,19 +20,23 @@ else:
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
         assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
+        assert os.path.exists(root)
         self.repoUrl = repoUrl
         self.sessionName = sessionName
         self.offset = offset
         self.revision = revision
         self.root = root
+        self.metadir = os.path.join(self.root, settings.metadir)
         self.front = None
-        self.md5cache = {}
-
+        if os.path.exists(self.metadir):
+            self.md5cache = anydbm.open(self.metadir + "/" + 'md5sumcache', 'c')
+        else:
+            self.md5cache = {}
         assert self.revision == None or self.revision > 0
 
     def write_metadata(self):
         workdir_path = self.root
-        metadir = os.path.join(workdir_path, settings.metadir)        
+        metadir = self.metadir
         if not os.path.exists(metadir):
             os.mkdir(metadir)
         statusfile = os.path.join(workdir_path, settings.metadir, "info")
@@ -146,11 +151,14 @@ class Workdir:
 
     def cached_md5sum(self, relative_path):
         assert not os.path.isabs(relative_path), "Path must be relative to the workdir. Was: "+relative_path
-        if relative_path in self.md5cache:
-            return self.md5cache[relative_path]
-        csum = md5sum_file(self.wd_abspath(relative_path))
-        self.md5cache[relative_path] = csum
-        return self.md5cache[relative_path]
+        abspath = self.wd_abspath(relative_path)
+        stat = os.stat(abspath)
+        key = relative_path.encode("utf-8") + "!" + str(int(stat.st_mtime))
+        if key in self.md5cache:
+            return self.md5cache[key]
+        csum = md5sum_file(abspath)
+        self.md5cache[key] = csum
+        return self.md5cache[key]
 
     def wd_abspath(self, wd_path):
         """Transforms the given workdir path into a system absolute
