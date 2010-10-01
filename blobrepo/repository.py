@@ -113,12 +113,13 @@ class Repo:
         session_dirs = []
         for dir in os.listdir(os.path.join(self.repopath, SESSIONS_DIR)):
             if re.match("^[0-9]+$", dir) != None:
+                assert int(dir) > 0, "No session 0 allowed in repo"
                 session_dirs.append(int(dir))
         session_dirs.sort()
         return session_dirs
 
     def get_session(self, id):
-        assert id
+        assert id, "Id was: "+ str(id)
         if id not in self.session_readers:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]
