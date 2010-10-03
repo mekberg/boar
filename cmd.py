@@ -114,6 +114,7 @@ def cmd_import(front, args):
     update_import = True
     create_workdir = False
     dry_run = False
+    new_session = False
     if "-n" in args:
         args.remove("-n")
         dry_run = True
@@ -123,6 +124,9 @@ def cmd_import(front, args):
     if "-w" in args:
         args.remove("-w")
         create_workdir = True
+    if "--new-session" in args:
+        args.remove("--new-session")
+        new_session = True
 
     path_to_ci = os.path.abspath(args[0])
     session_name = os.path.basename(args[0])
@@ -135,10 +139,15 @@ def cmd_import(front, args):
             session_name = args[1]
     print "Session name:", session_name, "Session offset:", session_offset
     assert os.path.exists(path_to_ci), "Did not exist: " + path_to_ci
+    if new_session:
+        assert not front.find_last_revision(session_name), \
+            "There already exists a session named '"+session_name+"'"
+    else:
+        assert front.find_last_revision(session_name), "No session with the name '"+session_name+\
+            "' exists. Add --new-session to create a new session."
     wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
     session_id = wd.checkin(write_meta = create_workdir, add_only = update_import, dry_run = dry_run)
     print "Checked in session id", session_id
-
 
 def cmd_ci(wd, args):
     session_id = wd.checkin()
