@@ -57,6 +57,15 @@ md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
 2490f86515a5a58067c2a1ca3e239299  test_tree/fil1.txt
 581ab2d89f05c294d4fe69c623bdef83  test_tree/nysubfil.txt
 EOF
+
+
+echo Test offset import / add file / status
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
+REPO_PATH=$REPO $CMD import -w test_tree MyTestSession/new_import || { echo "Couldn't import dir"; exit 1; }
+(cd test_tree && $CMD status) || { echo "Status command 1 failed"; exit 1; }
+echo "Some new content" >test_tree/new_file.txt
+(cd test_tree && $CMD status) || { echo "Status command 2 failed"; exit 1; }
 #find test_tree -type f -a ! -ipath *.meta*` || { echo "More files than expected in checkout"; exit 1; }
 
 
