@@ -63,7 +63,8 @@ def cmd_status(args):
     #print unchanged_files, new_files, modified_files, deleted_files, ignored_files
     filestats = {}
     def in_session(f):
-        return "C" if wd.exists_in_session(wd.cached_md5sum(f)) else " "
+        f_wd = strip_path_offset(wd.offset, f)
+        return "C" if wd.exists_in_session(wd.cached_md5sum(f_wd)) else " "
     def in_workdir(f):
         csum = wd.get_blobinfo(f)['md5sum']
         return "C" if wd.exists_in_workdir(csum) else " "
