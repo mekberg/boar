@@ -176,7 +176,6 @@ class Workdir:
         assert not is_windows_path(session_path)
         without_offset = strip_path_offset(self.offset, session_path)
         result = self.root + "/" + without_offset
-        #print "abspath(%s) => %s" % (session_path, result)
         return result
 
     def get_changes(self, skip_checksum = False):
@@ -246,8 +245,6 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum):
     "sessionpath". The md5sum of the file has to be provided. The
     checksum is compared to the file while it is read, to ensure it is
     consistent."""
-    #print "check_in_file(%s, %s, %s)" % (abspath, sessionpath, expected_md5sum)
-    print sessionpath
     assert os.path.isabs(abspath), \
         "abspath must be absolute. Was: '%s'" % (path)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
