@@ -11,6 +11,7 @@ import hashlib
 import stat
 import anydbm
 import copy
+import cPickle
 
 if sys.version_info >= (2, 6):
     import json
@@ -36,9 +37,10 @@ class Workdir:
         assert self.revision == None or self.revision > 0
 
         self.blobinfos = None
+        self.bloblist_csums = None
         self.tree = None
 
-    def reload_tree(self):
+    def __reload_tree(self):
         self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
 
     def write_metadata(self):
@@ -131,21 +133,26 @@ class Workdir:
     def exists_in_session(self, csum):
         """ Returns true if a file with the given checksum exists in the
             current session. """
-        for info in self.get_bloblist():
-            if info['md5sum'] == csum:
-                return True
-        return False
+        self.get_bloblist() # ensure self.bloblist_csums is initialized
+        return csum in self.bloblist_csums
 
     def get_bloblist(self):
+        assert self.revision
         if self.blobinfos == None:
-            self.blobinfos = self.get_front().get_session_bloblist(self.revision)
+            bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
+            if os.path.exists(bloblist_file):
+                self.blobinfos = cPickle.load(open(bloblist_file, "rb"))
+            else:
+                self.blobinfos = self.get_front().get_session_bloblist(self.revision)
+                cPickle.dump(self.blobinfos, open(bloblist_file, "wb"))
+            self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
         return self.blobinfos
 
     def exists_in_workdir(self, csum):
         """ Returns true if at least one file with the given checksum exists
             in the workdir. """
         if self.tree == None:
-            self.reload_tree()
+            self.__reload_tree()
         for f in self.tree:
             #print "Checking for", f
             if self.cached_md5sum(f) == csum:
@@ -200,7 +207,7 @@ class Workdir:
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
         if self.tree == None:
-            self.reload_tree()
+            self.__reload_tree()
         existing_files_list = copy.copy(self.tree)
         if self.offset:
             existing_files_list = [self.offset + "/" + f for f in existing_files_list]
@@ -209,7 +216,7 @@ class Workdir:
             assert not os.path.isabs(f)
         bloblist = []
         if self.revision != None:
-            bloblist = front.get_session_bloblist(self.revision)
+            bloblist = self.get_bloblist()
             bloblist = [i for i in bloblist if is_child_path(self.offset, i['filename'])]
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = [], [], [], [], []
         for info in bloblist:
