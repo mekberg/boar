@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 import os
 from front import Front, DryRunFront
+from blobrepo.sessions import bloblist_fingerprint
 from blobrepo.repository import Repo
 from common import *
 from base64 import b64decode, b64encode
@@ -136,16 +137,23 @@ class Workdir:
         self.get_bloblist() # ensure self.bloblist_csums is initialized
         return csum in self.bloblist_csums
 
-    def get_bloblist(self):
+    def __load_bloblist(self):
         assert self.revision
+        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
+        if os.path.exists(bloblist_file):
+            self.blobinfos = cPickle.load(open(bloblist_file, "rb"))
+        else:
+            self.blobinfos = self.get_front().get_session_bloblist(self.revision)
+            cPickle.dump(self.blobinfos, open(bloblist_file, "wb"))
+        self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
+        sessioninfo = self.get_front().get_session_info(self.revision)
+        calc_fingerprint = bloblist_fingerprint(self.blobinfos)
+        assert calc_fingerprint == sessioninfo['fingerprint'], \
+            "Cached bloblist did not match repo bloblist"
+
+    def get_bloblist(self):
         if self.blobinfos == None:
-            bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
-            if os.path.exists(bloblist_file):
-                self.blobinfos = cPickle.load(open(bloblist_file, "rb"))
-            else:
-                self.blobinfos = self.get_front().get_session_bloblist(self.revision)
-                cPickle.dump(self.blobinfos, open(bloblist_file, "wb"))
-            self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
+            self.__load_bloblist()
         return self.blobinfos
 
     def exists_in_workdir(self, csum):

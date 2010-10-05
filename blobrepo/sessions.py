@@ -175,6 +175,7 @@ class SessionReader:
             self.meta_info = json.load(f)
 
         self.session_info = self.meta_info['client_data']
+        self.session_info['fingerprint'] = self.meta_info['fingerprint']
 
     def verify(self):
         if self.verified:
