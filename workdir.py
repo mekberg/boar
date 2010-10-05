@@ -10,6 +10,7 @@ import time
 import hashlib
 import stat
 import anydbm
+import copy
 
 if sys.version_info >= (2, 6):
     import json
@@ -33,6 +34,12 @@ class Workdir:
         else:
             self.md5cache = {}
         assert self.revision == None or self.revision > 0
+
+        self.blobinfos = None
+        self.tree = None
+
+    def reload_tree(self):
+        self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
 
     def write_metadata(self):
         workdir_path = self.root
@@ -111,6 +118,7 @@ class Workdir:
         session_info["timestamp"] = int(time.time())
         session_info["date"] = time.ctime()
         self.revision = front.commit(session_info)
+        self.bloblist = None
         if write_meta:
             self.write_metadata()
         return self.revision
@@ -123,17 +131,22 @@ class Workdir:
     def exists_in_session(self, csum):
         """ Returns true if a file with the given checksum exists in the
             current session. """
-        blobinfos = self.get_front().get_session_bloblist(self.revision)
-        for info in blobinfos:
+        for info in self.get_bloblist():
             if info['md5sum'] == csum:
                 return True
         return False
 
+    def get_bloblist(self):
+        if self.blobinfos == None:
+            self.blobinfos = self.get_front().get_session_bloblist(self.revision)
+        return self.blobinfos
+
     def exists_in_workdir(self, csum):
         """ Returns true if at least one file with the given checksum exists
             in the workdir. """
-        tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
-        for f in tree:
+        if self.tree == None:
+            self.reload_tree()
+        for f in self.tree:
             #print "Checking for", f
             if self.cached_md5sum(f) == csum:
                 return True
@@ -143,8 +156,7 @@ class Workdir:
         """ Returns the info dictionary for the given path and the current
             session. The given file does not need to exist, the information is
             fetched from the repository"""
-        blobinfos = self.get_front().get_session_bloblist(self.revision)
-        for info in blobinfos:
+        for info in self.get_bloblist():
             if info['filename'] == relpath:
                 return info
         return None
@@ -187,7 +199,9 @@ class Workdir:
             has been changed. """
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
-        existing_files_list = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
+        if self.tree == None:
+            self.reload_tree()
+        existing_files_list = copy.copy(self.tree)
         if self.offset:
             existing_files_list = [self.offset + "/" + f for f in existing_files_list]
         for f in existing_files_list:
