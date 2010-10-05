@@ -167,9 +167,8 @@ class SessionReader:
         self.repo = repo
         assert os.path.exists(self.path), "No such session path:" + self.path
 
-        path = os.path.join(self.path, "bloblist.json")
-        with open(path, "rb") as f:
-            self.bloblist = json.load(f)
+        self.bloblist = None
+        self.verified = False
 
         path = os.path.join(self.path, "session.json")
         with open(path, "rb") as f:
@@ -177,9 +176,9 @@ class SessionReader:
 
         self.session_info = self.meta_info['client_data']
 
-        self.verify()        
-
     def verify(self):
+        if self.verified:
+            return
         bloblist = self.get_all_blob_infos()
         expected_fingerprint = bloblist_fingerprint(bloblist)
         assert self.meta_info['fingerprint'] == expected_fingerprint
@@ -190,8 +189,18 @@ class SessionReader:
                      "Missing or unexpected files in session dir: "+self.path
         for blobinfo in bloblist:
             assert repo.has_blob(blobinfo['md5sum'])
+        self.verified = True
         
+
+    def __load_bloblist(self):
+        if self.bloblist == None:
+            path = os.path.join(self.path, "bloblist.json")
+            with open(path, "rb") as f:
+                self.bloblist = json.load(f)
+        return self.bloblist
+
     def get_all_blob_infos(self):
+        self.__load_bloblist()
         seen = set()
         for blobinfo in self.bloblist:
             assert blobinfo['filename'] not in seen, \
