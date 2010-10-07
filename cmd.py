@@ -60,7 +60,6 @@ def cmd_status(args):
     wd = workdir.init_workdir(os.getcwd())
     unchanged_files, new_files, modified_files, deleted_files, ignored_files \
         = wd.get_changes()
-    #print unchanged_files, new_files, modified_files, deleted_files, ignored_files
     filestats = {}
     def in_session(f):
         f_wd = strip_path_offset(wd.offset, f)
@@ -149,6 +148,9 @@ def cmd_import(front, args):
     wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
     session_id = wd.checkin(write_meta = create_workdir, add_only = update_import, dry_run = dry_run)
     print "Checked in session id", session_id
+
+def cmd_update(wd, args):
+    wd.update()
 
 def cmd_ci(wd, args):
     session_id = wd.checkin()
@@ -239,6 +241,9 @@ def main():
     elif sys.argv[1] == "ci":
         wd = workdir.init_workdir(os.getcwd())
         cmd_ci(wd, sys.argv[2:])
+    elif sys.argv[1] == "update":
+        wd = workdir.init_workdir(os.getcwd())
+        cmd_update(wd, sys.argv[2:])
     elif sys.argv[1] == "find":
         front = init_repo_from_env()
         cmd_find(front, sys.argv[2:])
@@ -251,7 +256,10 @@ def main():
 
 if __name__ == "__main__":
     t1 = time()
-    #cProfile.run('main()')
+    #cProfile.run('main()', "prof.txt")
+    #import pstats
+    #p = pstats.Stats('prof.txt')
+    #p.sort_stats('cum').print_stats(10)
     main()
     t2 = time()
     print "Finished in", round(t2-t1, 2), "seconds"
