@@ -78,6 +78,38 @@ class Workdir:
             target_path = os.path.join(self.root, target)
             fetch_blob(front, info['md5sum'], target_path)
 
+    def update(self):
+        assert self.revision
+        unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
+            self.get_changes()
+        assert not modified_files, "There must be no modified files when performing an update"
+        front = self.get_front()
+        new_revision = front.find_last_revision(self.sessionName)
+        new_bloblist = front.get_session_bloblist(new_revision)
+        new_bloblist_dict = bloblist_to_dict(new_bloblist)
+        old_bloblist = self.get_bloblist()
+        to_delete = []
+        for b in new_bloblist:
+            if not b['filename'].startswith(self.offset):
+                continue
+            target_wdpath = strip_path_offset(self.offset, b['filename'])
+            target_abspath = os.path.join(self.root, target_wdpath)
+            if not os.path.exists(target_abspath) or self.cached_md5sum(target_wdpath) != b['md5sum']:
+                print "Updating:", b['filename']
+                fetch_blob(front, b['md5sum'], target_abspath, overwrite = True)
+        for b in old_bloblist:
+            if b['filename'] not in new_bloblist_dict:
+                try:
+                    os.remove(self.abspath(b['filename']))
+                    print "Deleted:", b['filename']
+                except:
+                    print "Deletion failed:", b['filename']
+        self.revision = new_revision
+        self.blobinfos = None
+        self.bloblist_csums = None
+        self.tree = None
+        self.write_metadata()
+
     def checkin(self, write_meta = True, force_primary_session = False, \
                       add_only = False, dry_run = False):
         front = self.get_front()
@@ -354,8 +386,8 @@ def create_blobinfo(abspath, sessionpath, md5sum):
     blobinfo["size"] = st[stat.ST_SIZE]
     return blobinfo
 
-def fetch_blob(front, blobname, target_path):
-    assert not os.path.exists(target_path)
+def fetch_blob(front, blobname, target_path, overwrite = False):
+    assert overwrite or not os.path.exists(target_path)
     if not os.path.exists(os.path.dirname(target_path)):
         os.makedirs(os.path.dirname(target_path))
     size = front.get_blob_size(blobname)
@@ -367,3 +399,14 @@ def fetch_blob(front, blobname, target_path):
         offset += len(data)
         f.write(data)
     f.close()
+
+def bloblist_to_dict(bloblist):
+    d = {}
+    for b in bloblist:
+        d[b['filename']] = b
+    assert(len(d) == len(bloblist)), \
+        "All filenames must be unique in the revision"
+    return d
+    
+    
+    
