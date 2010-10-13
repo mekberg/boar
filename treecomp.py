@@ -6,9 +6,9 @@ class TreeComparer:
         {filename: fingerprint} """
         self.basetree = basetree
         self.newtree = newtree
-        self.compare()
+        self.__compare()
 
-    def compare(self):
+    def __compare(self):
         basefilenames = set(self.basetree.keys())
         newfilenames = set(self.newtree.keys())
         basepairs = set(self.basetree.items())
@@ -19,8 +19,10 @@ class TreeComparer:
         self.unchanged_files = tuple(dict(identical_pairs).keys())
         self.modified_files = tuple(newfilenames.difference(self.new_files, self.unchanged_files))
 
-def selftest():
+    def as_tuple(self):
+        return self.unchanged_files, self.new_files, self.modified_files, self.deleted_files        
 
+def __selftest():
     oldlist = {"deleted.txt": "deleted content",
                "modified.txt": "modified content1",
                "unchanged.txt": "unchanged content",
@@ -37,4 +39,4 @@ def selftest():
     assert comp.new_files == ("new.txt",), comp.new_files
     assert comp.modified_files == ("modified.txt",), comp.modified_files
 
-selftest()
+__selftest()
