@@ -153,7 +153,7 @@ class Workdir:
         session_info["timestamp"] = int(time.time())
         session_info["date"] = time.ctime()
         self.revision = front.commit(session_info)
-        self.bloblist = None
+        self.blobinfos = None
         if write_meta:
             self.write_metadata()
         return self.revision
@@ -246,8 +246,7 @@ class Workdir:
             has been changed. """
         assert not skip_checksum, "skip_checksum is not yet implemented"
         front = self.get_front()
-        if self.tree == None:
-            self.__reload_tree()
+        self.__reload_tree()
         existing_files_list = copy.copy(self.tree)
         if self.offset:
             existing_files_list = [self.offset + "/" + f for f in existing_files_list]
