@@ -255,7 +255,7 @@ class Workdir:
         filelist = {}
         for fn in existing_files_list:
             f = prefix + fn
-            filelist[f] = self.cached_md5sum(f)
+            filelist[f] = self.cached_md5sum(fn)
             assert not is_windows_path(f), "Was:" + f
             assert not os.path.isabs(f)
         
