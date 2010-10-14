@@ -4,6 +4,7 @@ import os
 from front import Front, DryRunFront
 from blobrepo.sessions import bloblist_fingerprint
 from blobrepo.repository import Repo
+from treecomp import TreeComparer
 from common import *
 from base64 import b64decode, b64encode
 import settings
@@ -42,7 +43,7 @@ class Workdir:
         self.tree = None
 
     def __reload_tree(self):
-        self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
+        self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)        
 
     def write_metadata(self):
         workdir_path = self.root
@@ -76,7 +77,7 @@ class Workdir:
                 continue
             target = strip_path_offset(self.offset, info['filename'])
             target_path = os.path.join(self.root, target)
-            fetch_blob(front, info['md5sum'], target_path)
+            fetch_blob(front, info['md5sum'], target_path, overwrite = False)
 
     def update(self):
         assert self.revision
@@ -248,38 +249,29 @@ class Workdir:
         front = self.get_front()
         self.__reload_tree()
         existing_files_list = copy.copy(self.tree)
+        prefix = ""
         if self.offset:
-            existing_files_list = [self.offset + "/" + f for f in existing_files_list]
-        for f in existing_files_list:
+            prefix = self.offset + "/"
+        filelist = {}
+        for fn in existing_files_list:
+            f = prefix + fn
+            filelist[f] = self.cached_md5sum(f)
             assert not is_windows_path(f), "Was:" + f
             assert not os.path.isabs(f)
-        bloblist = []
+        
+        bloblist = {}
         if self.revision != None:
-            bloblist = self.get_bloblist()
-            bloblist = [i for i in bloblist if is_child_path(self.offset, i['filename'])]
-        unchanged_files, new_files, modified_files, deleted_files, ignored_files = [], [], [], [], []
-        for info in bloblist:
-            fname = info['filename']
-            if fname in existing_files_list:
-                existing_files_list.remove(fname)
-                wd_path = strip_path_offset(self.offset, info['filename'])
-                if self.cached_md5sum(wd_path) == info['md5sum']:
-                    unchanged_files.append(fname)
-                else:
-                    modified_files.append(fname)
-            if not os.path.exists(self.abspath(fname)):
-                deleted_files.append(fname)
-        for f in existing_files_list:
-            if is_ignored(self.abspath(f)):
-                print "Ignoring file", f
-                existing_files_list.remove(f)
-                ignored_files.append(f)
-        new_files.extend(existing_files_list)
-
+            for i in self.get_bloblist():
+                if is_child_path(self.offset, i['filename']):
+                    bloblist[i['filename']] = i['md5sum']
+            
+        comp = TreeComparer(bloblist, filelist)
+        unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
+        ignored_files = ()
         if self.revision == None:
             assert not unchanged_files
             assert not modified_files
-            assert not deleted_files
+            assert not deleted_files, deleted_files
         result = unchanged_files, new_files, modified_files, deleted_files, ignored_files
         return result
 
