@@ -10,6 +10,11 @@ DATA2_MD5 = "923574a1a36aebc7e1f586b7d363005e"
 
 TMPDIR=tempfile.gettempdir()
 
+""" 
+note: to execute a single test, do something like:
+python tests/test_workdir.py TestWorkdir.testGetChangesMissingFile
+"""
+
 if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -66,40 +71,40 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
 
     def testEmpty(self):
         changes = self.wd.get_changes()
-        self.assertEqual(changes, ([], [], [], [], []))
+        self.assertEqual(changes, ((), (), (), (), ()))
 
     def testGetChangesUnversionedFile(self):
         # Test unversioned file
         self.addWorkdirFile("tjosan.txt", "tjosanhejsan")
         changes = self.wd.get_changes()
-        self.assertEqual(changes, ([], ["tjosan.txt"], [], [], []))
+        self.assertEqual(changes, ((), ("tjosan.txt",), (), (), ()))
 
     def testGetChangesUnchangedFile(self):        
         self.addWorkdirFile("tjosan.txt", "tjosanhejsan")
         self.wd.checkin()
         changes = self.wd.get_changes()
-        self.assertEqual(changes, (["tjosan.txt"], [], [], [], []))
+        self.assertEqual(changes, (("tjosan.txt",), (), (), (), ()))
 
     def testGetChangesUnchangedFileWithFunkyName(self):        
         name = u"Tjosan_räk smörgås.txt"
         self.addWorkdirFile(name, "tjosanhejsan")
         self.wd.checkin()
         changes = self.wd.get_changes()
-        self.assertEqual(changes, ([name], [], [], [], []))
+        self.assertEqual(changes, ((name,), (), (), (), ()))
 
     def testGetChangesMissingFile(self):
         self.addWorkdirFile("tjosan.txt", "tjosanhejsan")
         self.wd.checkin()
         self.rmWorkdirFile("tjosan.txt")
         changes = self.wd.get_changes()
-        self.assertEqual(changes, ([], [], [], ["tjosan.txt"], []))
+        self.assertEqual(changes, ((), (), (), ("tjosan.txt",), ()))
 
     def testGetChangesUnchangedFileSubdir(self):
         self.mkdir("subdir")
         self.addWorkdirFile("subdir/tjosan.txt", "tjosanhejsan")
         self.wd.checkin()
         changes = self.wd.get_changes()
-        self.assertEqual(changes, (["subdir/tjosan.txt"], [], [], [], []))
+        self.assertEqual(changes, (("subdir/tjosan.txt",), (), (), (), ()))
 
     def testTwoNewIdenticalFiles(self):
         self.mkdir("subdir")
@@ -108,7 +113,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.wd.checkin()
         changes = self.wd.get_changes()
         # Order doesnt matter below really, so this is fragile
-        self.assertEqual(changes, (["subdir/tjosan2.txt", "subdir/tjosan1.txt"], [], [], [], []))
+        self.assertEqual(changes, (tuple(["subdir/tjosan2.txt", "subdir/tjosan1.txt"]), (), (), (), ()))
 
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):

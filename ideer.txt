@@ -21,3 +21,18 @@ sig över att något hunnit ändras.
 Utcheckning och hantering av subkataloger.
 
 
+--
+
+
+Update:
+
+Kolla vilka filer som har förändrats i den gamla arbetskatalogen. Om
+inga har förändrats så är det bara att ersätta alla filer med de nya,
+och ta bort / lägga till vid behov.
+
+Filer som inte berörs av uppdateringen lämnas därhän, ändrade eller ej.
+
+För filer som har förändrats och som berörs av uppdateringen: 
+    Varna och avbryt. Alternativt, kopiera de förändrade filerna till en särskild katalog innan de skrivs över.
+
+1. Få en lista på ändrade filer mellan två existerande revisioner.
