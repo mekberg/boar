@@ -179,9 +179,9 @@ class Workdir:
             self.blobinfos = self.get_front().get_session_bloblist(self.revision)
             cPickle.dump(self.blobinfos, open(bloblist_file, "wb"))
         self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
-        sessioninfo = self.get_front().get_session_info(self.revision)
+        expected_fingerprint = self.get_front().get_session_property(self.revision, 'fingerprint')
         calc_fingerprint = bloblist_fingerprint(self.blobinfos)
-        assert calc_fingerprint == sessioninfo['fingerprint'], \
+        assert calc_fingerprint == expected_fingerprint, \
             "Cached bloblist did not match repo bloblist"
 
     def get_bloblist(self):
