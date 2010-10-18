@@ -79,7 +79,7 @@ class SessionWriter:
         self.base_session_info = {}
         self.base_bloblist_dict = {}
         if self.base_session != None:
-            self.base_session_info = self.repo.get_session(self.base_session).session_info
+            self.base_session_info = self.repo.get_session(self.base_session).get_properties()['client_data']
             self.base_bloblist_dict = bloblist_to_dict(\
                 self.repo.get_session(self.base_session).get_all_blob_infos())
         self.resulting_blobdict = self.base_bloblist_dict
@@ -172,17 +172,17 @@ class SessionReader:
 
         path = os.path.join(self.path, "session.json")
         with open(path, "rb") as f:
-            self.meta_info = json.load(f)
+            self.properties = json.load(f)
 
-        self.session_info = self.meta_info['client_data']
-        self.session_info['fingerprint'] = self.meta_info['fingerprint']
+    def get_properties(self):
+        return copy.copy(self.properties)
 
     def verify(self):
         if self.verified:
             return
         bloblist = self.get_all_blob_infos()
         expected_fingerprint = bloblist_fingerprint(bloblist)
-        assert self.meta_info['fingerprint'] == expected_fingerprint
+        assert self.properties['fingerprint'] == expected_fingerprint
         contents = os.listdir(self.path)
         assert set(contents) == \
             set([expected_fingerprint+".fingerprint",\
@@ -210,7 +210,7 @@ class SessionReader:
             if blobinfo.get("action", None) == "remove":
                 continue
             yield copy.copy(blobinfo)
-        base_session_id = self.meta_info.get("base_session", None)
+        base_session_id = self.properties.get("base_session", None)
         if base_session_id:
             base_session_reader = self.repo.get_session(base_session_id)
             for info in base_session_reader.get_all_blob_infos():

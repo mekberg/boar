@@ -53,7 +53,7 @@ class TestBlobRepo(unittest.TestCase):
         self.assertEqual(committed_info, self.sessioninfo1,
                          "Given info dict was changed during commit")
         reader = self.repo.get_session(id)
-        self.assertEqual(self.sessioninfo1, reader.session_info,
+        self.assertEqual(self.sessioninfo1, reader.get_properties()['client_data'],
                          "Read info differs from committed info")
 
     def test_simple_blob(self):
