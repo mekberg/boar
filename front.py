@@ -27,8 +27,13 @@ class Front:
         return self.repo.get_all_sessions()
 
     def get_session_info(self, id):
-        session_reader = self.repo.get_session(id)
-        return session_reader.session_info
+        return self.get_session_property(id, 'client_data')
+
+    def get_session_property(self, id, property_name):
+        session_reader = self.repo.get_session(id)        
+        properties = session_reader.get_properties()
+        assert property_name in properties
+        return properties[property_name]
 
     def get_session_bloblist(self, id):
         session_reader = self.repo.get_session(id)
@@ -104,7 +109,7 @@ class DryRunFront:
         return self.realfront.get_session_ids(filter)
 
     def get_session_info(self, id):
-        return self.realfront.get_session_info(id)
+        return self.realfront.get_session_properties(id)['client_data']
 
     def get_session_bloblist(self, id):
         return self.realfront.get_session_bloblist(id)
