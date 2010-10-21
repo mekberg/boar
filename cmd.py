@@ -69,7 +69,9 @@ def cmd_locate(front, args):
         if not in_session:
             print "Missing:", f
         else:
-            print "OK:", f, list(wd.get_filesnames(csum))
+            print "OK:", f
+            for p in wd.get_filesnames(csum)):
+                print "   " + p
 
 def cmd_status(args):
     verbose = ("-v" in args)
