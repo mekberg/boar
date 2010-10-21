@@ -63,15 +63,25 @@ def cmd_locate(front, args):
     tree = get_tree(root)
     tree.sort()
     wd = workdir.Workdir(front.get_repo_path(), sessionName, "", None, root)
+    common_paths = None
     for f in tree:
         csum = md5sum_file(f)
-        in_session = wd.exists_in_session(csum)
-        if not in_session:
+        session_filenames = list(wd.get_filesnames(csum))
+        session_dirs = [os.path.dirname(fn) for fn in session_filenames]
+        if common_paths == None:
+            common_paths = set(session_dirs)
+        common_paths = common_paths.intersection(session_dirs)
+        if not session_filenames:
             print "Missing:", f
-        else:
+            continue
+        if session_filenames:
             print "OK:", f
-            for p in wd.get_filesnames(csum):
+            for p in session_filenames:
                 print "   " + p
+    if common_paths:
+        print "All files occured in these dirs:", common_paths
+    else:
+        print "No session dir contained all files"
 
 def cmd_status(args):
     verbose = ("-v" in args)
