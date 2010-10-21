@@ -167,8 +167,16 @@ class Workdir:
     def exists_in_session(self, csum):
         """ Returns true if a file with the given checksum exists in the
             current session. """
+        assert is_md5sum(csum)
         self.get_bloblist() # ensure self.bloblist_csums is initialized
         return csum in self.bloblist_csums
+
+    def get_filesnames(self, csum):
+        assert is_md5sum(csum)
+        bloblist = self.get_bloblist()
+        for b in bloblist:
+            if b['md5sum'] == csum:
+                yield b['filename']
 
     def __load_bloblist(self):
         if not self.revision:

@@ -64,11 +64,12 @@ def cmd_locate(front, args):
     tree.sort()
     wd = workdir.Workdir(front.get_repo_path(), sessionName, "", None, root)
     for f in tree:
-        in_session = wd.exists_in_session(md5sum_file(f))
+        csum = md5sum_file(f)
+        in_session = wd.exists_in_session(csum)
         if not in_session:
             print "Missing:", f
         else:
-            print "OK:", f
+            print "OK:", f, list(wd.get_filesnames(csum))
 
 def cmd_status(args):
     verbose = ("-v" in args)
