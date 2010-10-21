@@ -55,9 +55,25 @@ def list_files(front, session_name, revision):
     for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
+def cmd_locate(front, args):
+    assert len(args) == 1, "Session name must be given"
+    sessionName = args[0]
+    repo_path = os.getenv("REPO_PATH")
+    root = os.getcwd()
+    tree = get_tree(root)
+    tree.sort()
+    wd = workdir.Workdir(front.get_repo_path(), sessionName, "", None, root)
+    for f in tree:
+        in_session = wd.exists_in_session(md5sum_file(f))
+        if not in_session:
+            print "Missing:", f
+        else:
+            print "OK:", f
+
 def cmd_status(args):
     verbose = ("-v" in args)
     wd = workdir.init_workdir(os.getcwd())
+    assert wd, "No workdir found here"
     unchanged_files, new_files, modified_files, deleted_files, ignored_files \
         = wd.get_changes()
     filestats = {}
@@ -247,6 +263,9 @@ def main():
     elif sys.argv[1] == "find":
         front = init_repo_from_env()
         cmd_find(front, sys.argv[2:])
+    elif sys.argv[1] == "locate":
+        front = init_repo_from_env()
+        cmd_locate(front, sys.argv[2:])
     elif sys.argv[1] == "exportmd5":
         wd = workdir.init_workdir(os.getcwd())
         cmd_export_md5(wd, sys.argv[2:])
