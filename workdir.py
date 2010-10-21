@@ -171,13 +171,16 @@ class Workdir:
         return csum in self.bloblist_csums
 
     def __load_bloblist(self):
-        assert self.revision
+        if not self.revision:
+            front = self.get_front()
+            self.revision = front.find_last_revision(self.sessionName)
         bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
         if os.path.exists(bloblist_file):
             self.blobinfos = cPickle.load(open(bloblist_file, "rb"))
         else:
             self.blobinfos = self.get_front().get_session_bloblist(self.revision)
-            cPickle.dump(self.blobinfos, open(bloblist_file, "wb"))
+            if os.path.exists(self.metadir):
+                cPickle.dump(self.blobinfos, open(bloblist_file, "wb"))
         self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
         expected_fingerprint = self.get_front().get_session_property(self.revision, 'fingerprint')
         calc_fingerprint = bloblist_fingerprint(self.blobinfos)
