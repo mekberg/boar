@@ -310,8 +310,11 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum):
     consistent."""
     assert os.path.isabs(abspath), \
         "abspath must be absolute. Was: '%s'" % (path)
+    assert ".." not in sessionpath, \
+           "'..' not allowed in paths or filenames. Was: " + sessionpath
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
+    #print "CI: %s => %s" % (abspath, sessionpath)
     if not sessionwriter.has_blob(expected_md5sum):
         with open_raw(abspath) as f:
             m = hashlib.md5()
