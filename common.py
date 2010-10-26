@@ -36,7 +36,9 @@ def convert_win_path_to_unix(path):
     """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
         Has no effect on unix style paths. """
     nodrive = os.path.splitdrive(path)[1]
-    return nodrive.replace("\\", "/")
+    result = nodrive.replace("\\", "/")
+    #print "convert_win_path_to_unix: " + path + " => " + result
+    return result
 
 def is_windows_path(path):
     return "\\" in path
@@ -108,21 +110,12 @@ def my_relpath(path, start=curdir):
     assert os.path.isabs(path)
     if not path:
         raise ValueError("no path specified")
-    start_list = posixpath.abspath(start).split(sep)
-    path_list = posixpath.abspath(path).split(sep)
-    # Work out how much of the filepath is shared by start and path.
-    i = len(posixpath.commonprefix([start_list, path_list]))
-    rel_list = [pardir] * (len(start_list)-i) + path_list[i:]
-    if not rel_list:
-        result = curdir
-    else:
-        result = join(*rel_list)
-    #print "my_relpath(path=%s, start=%s) => %s" % (path, start, result)
-    if sys.version_info >= (2, 6):
-        real_relpath_result = os.path.relpath(path, start)
-        assert result == real_relpath_result, "my_relpath() gave different result (%s) than system relpath (%s)." % (result, real_relpath_result)
-        #print "relpath(path=%s, start=%s) => %s" % (path, start, result)
-    return result
+    absstart = posixpath.abspath(start)
+    abspath = posixpath.abspath(path)
+    if absstart[-1] != os.path.sep:
+        absstart += os.path.sep
+    assert abspath.startswith(absstart), abspath + " " + absstart    
+    return abspath[len(absstart):]
 
 def open_raw(filename):
     """Try to read the file in such a way that the system file cache
@@ -163,6 +156,7 @@ def get_tree(root, skip = [], absolute_paths = False):
         all_files = map(remove_rootpath, all_files)
     for f in all_files:
         assert not is_windows_path(f), "Was:" + f
+        assert not ".." in f, "Was:" + f
     return all_files
 
 
