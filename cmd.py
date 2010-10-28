@@ -92,10 +92,10 @@ def cmd_status(args):
     filestats = {}
     def in_session(f):
         f_wd = strip_path_offset(wd.offset, f)
-        return "C" if wd.exists_in_session(wd.cached_md5sum(f_wd)) else " "
+        return "S" if wd.exists_in_session(wd.cached_md5sum(f_wd)) else " "
     def in_workdir(f):
         csum = wd.get_blobinfo(f)['md5sum']
-        return "C" if wd.exists_in_workdir(csum) else " "
+        return "W" if wd.exists_in_workdir(csum) else " "
 
     for f in new_files:
         filestats[f] = "A" + in_session(f)
