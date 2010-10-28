@@ -40,10 +40,12 @@ class Workdir:
 
         self.blobinfos = None
         self.bloblist_csums = None
+        self.tree_csums = None
         self.tree = None
 
     def __reload_tree(self):
-        self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)        
+        self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
+        self.tree_csums == None
 
     def write_metadata(self):
         workdir_path = self.root
@@ -205,11 +207,11 @@ class Workdir:
             in the workdir. """
         if self.tree == None:
             self.__reload_tree()
-        for f in self.tree:
-            #print "Checking for", f
-            if self.cached_md5sum(f) == csum:
-                return True
-        return False
+        if self.tree_csums == None:
+            self.tree_csums = set()
+            for f in self.tree:
+                self.tree_csums.add(self.cached_md5sum(f))
+        return csum in self.tree_csums
 
     def get_blobinfo(self, relpath):
         """ Returns the info dictionary for the given path and the current
