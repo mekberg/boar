@@ -139,12 +139,14 @@ def cmd_list(front, args):
         print "Duuuh?"
 
 def cmd_verify(front, args):
+    print "Collecting a list of all blobs..."
     count = front.init_verify_blobs()
+    print "Verifying..."
     done = 0
     while done < count:
         done += len(front.verify_some_blobs())
         print done, "of "+str(count)+" blobs verified, "+ \
-            str(done/count * 100) + "% done."
+            str(round(1.0*done/count * 100,1)) + "% done."
 
 def cmd_import(front, args):
     base_session = None
