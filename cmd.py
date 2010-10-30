@@ -4,7 +4,7 @@ import sys
 import os
 from time import time
 import cProfile
-
+from optparse import OptionParser
 from blobrepo import repository
 import client
 
@@ -149,24 +149,16 @@ def cmd_verify(front, args):
             str(round(1.0*done/count * 100,1)) + "% done."
 
 def cmd_import(front, args):
+    parser = OptionParser(usage="usage: %prog [options] <folder to import> <snapshot name>[/imported name]")
+    parser.add_option("-n", "--dry-run", dest = "dry_run", action="store_true",
+                      help="Don't actually do anything. Just show what will happen.")
+    parser.add_option("-w", "--create-workdir", dest = "create_workdir", action="store_true",
+                      help="Turn the imported directory into a workdir.")
+    parser.add_option("--new-session", dest = "new_session", action="store_true",
+                      help="Create a new session")
     base_session = None
-    update_import = True
-    create_workdir = False
-    dry_run = False
-    new_session = False
-    if "-n" in args:
-        args.remove("-n")
-        dry_run = True
-#    if "-r" in args:
-#        args.remove("-r")
-#        update_import = False
-    if "-w" in args:
-        args.remove("-w")
-        create_workdir = True
-    if "--new-session" in args:
-        args.remove("--new-session")
-        new_session = True
-
+    (options, args) = parser.parse_args(args)
+    assert len(args) <= 2
     path_to_ci = os.path.abspath(args[0])
     session_name = os.path.basename(args[0])
     session_offset = ""
@@ -178,14 +170,15 @@ def cmd_import(front, args):
             session_name = args[1]
     print "Session name:", session_name, "Session offset:", session_offset
     assert os.path.exists(path_to_ci), "Did not exist: " + path_to_ci
-    if new_session:
+    if options.new_session:
         assert not front.find_last_revision(session_name), \
             "There already exists a session named '"+session_name+"'"
     else:
         assert front.find_last_revision(session_name), "No session with the name '"+session_name+\
             "' exists. Add --new-session to create a new session."
     wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
-    session_id = wd.checkin(write_meta = create_workdir, add_only = update_import, dry_run = dry_run)
+    session_id = wd.checkin(write_meta = options.create_workdir, 
+                            add_only = True, dry_run = options.dry_run)
     print "Checked in session id", session_id
 
 def cmd_update(wd, args):
