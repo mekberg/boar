@@ -138,6 +138,14 @@ def cmd_list(front, args):
     else:
         print "Duuuh?"
 
+def cmd_verify(front, args):
+    count = front.init_verify_blobs()
+    done = 0
+    while done < count:
+        done += len(front.verify_some_blobs())
+        print done, "of "+str(count)+" blobs verified, "+ \
+            str(done/count * 100) + "% done."
+
 def cmd_import(front, args):
     base_session = None
     update_import = True
@@ -260,6 +268,9 @@ def main():
     elif sys.argv[1] == "list":
         front = init_repo_from_env()
         cmd_list(front, sys.argv[2:])
+    elif sys.argv[1] == "verify":
+        front = init_repo_from_env()
+        cmd_verify(front, sys.argv[2:])
     elif sys.argv[1] == "co":
         front = init_repo_from_env()
         cmd_co(front, sys.argv[2:])
