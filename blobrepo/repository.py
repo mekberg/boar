@@ -138,6 +138,17 @@ class Repo:
             session = sessions.SessionReader(self, sid)
             session.verify()
 
+    def get_blob_names(self):
+        blobpattern = re.compile("/([0-9a-f]{32})$")
+        assert blobpattern.search("b5/b5fb453aeaaef8343353cc1b641644f9")
+        tree = get_tree(os.path.join(self.repopath, BLOB_DIR))
+        matches = []
+        for f in tree:
+            m = blobpattern.search(f)
+            if m:
+                matches.append(m.group(1))
+        return matches
+
     def verify_blob(self, sum):
         path = self.get_blob_path(sum)
         verified_ok = (sum == md5sum_file(path))

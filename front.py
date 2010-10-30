@@ -19,6 +19,7 @@ class Front:
     def __init__(self, repo):
         self.repo = repo
         self.new_session = None
+        self.blobs_to_verify = []
 
     def get_repo_path(self):
         return self.repo.get_repo_path()
@@ -96,6 +97,20 @@ class Front:
                 return sid
         return None
 
+    def init_verify_blobs(self):
+        assert self.blobs_to_verify == []
+        self.blobs_to_verify = self.repo.get_blob_names()
+        return len(self.blobs_to_verify)
+
+    def verify_some_blobs(self):
+        succeeded = []
+        count = min(100, len(self.blobs_to_verify))
+        for i in range(0, count):
+            blob_to_verify = self.blobs_to_verify.pop()
+            result = self.repo.verify_blob(blob_to_verify)
+            assert result, "Blob failed verification:" + blob_to_verify
+            succeeded.append(blob_to_verify)
+        return succeeded
 
 class DryRunFront:
 
