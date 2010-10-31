@@ -144,17 +144,18 @@ def cmd_verify(front, args):
     session_ids = front.get_session_ids()
     print "Verifying %s sessions" % (len(session_ids))
     for i in range(0, len(session_ids)):
-        bloblist = front.get_session_bloblist(session_ids[i])
+        id = session_ids[i]
+        bloblist = front.get_session_bloblist(id)
         calc_fingerpring = bloblist_fingerprint(bloblist)
-        assert calc_fingerpring == front.get_session_property(session_ids[i], "fingerprint"), \
-            "Fingerprint didn't match for session "+str(session_ids[i])
+        assert calc_fingerpring == front.get_session_property(id, "fingerprint"), \
+            "Fingerprint didn't match for session "+str(id)
         for bi in bloblist:
             assert front.has_blob(bi['md5sum']), "Session %s is missing blob %s" \
                 % (session_ids[i], bi['md5sum'])
-        print i, len(bloblist), "blobs ok"
+        print "Snapshot %s: All %s blobs ok" % (id, len(bloblist))
     print "Collecting a list of all blobs..."
     count = front.init_verify_blobs()
-    print "Verifying..."
+    print "Verifying %s blobs..." % (count)
     done = 0
     while done < count:
         done += len(front.verify_some_blobs())
