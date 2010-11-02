@@ -2,7 +2,7 @@ Howto:
 
 How to create a repository in the current directory named "REPO":
 
-$ cmd.py mkrepo REPO
+$ boar mkrepo REPO
 
 To work with a repository, set the environment parameter REPO_PATH
 (The path to the repo must be absolute)
@@ -11,7 +11,7 @@ $ export REPO_PATH=~+/REPO
 
 To import directory my_files with session name MyFiles:
 
-$ cmd.py import my_files MyFiles
+$ boar import my_files MyFiles
 Adding my_files/IMG_2600.jpg
 Adding my_files/IMG_2602.jpg
 Adding my_files/IMG_2603.jpg
@@ -19,23 +19,23 @@ Adding my_files/IMG_2608.jpg
 
 To list the sessions in a repo:
 
-$ cmd.py list
+$ boar list
 MyFiles (1 revs)
 
 To list the revisions in a repo:
 
-$ cmd.py list MyFiles
+$ boar list MyFiles
 Revision id 0 (Tue Apr 13 13:38:10 2010), 10 files
 
 To list the files in a revision:
-$ cmd.py list MyFiles 0
+$ boar list MyFiles 0
 IMG_2600.jpg 5627k
 IMG_2602.jpg 4594k
 IMG_2603.jpg 4852k
 IMG_2608.jpg 1k
 
 To check out the latest revision in a session:
-$ cmd.py co MyFiles
+$ boar co MyFiles
 Exporting to workdir ./MyFiles
 IMG_2600.jpg
 IMG_2602.jpg
@@ -44,7 +44,7 @@ IMG_2608.jpg
 
 To check in a new revision of an checked-out session:
 (make sure your cwd is the work directory)
-$ cmd.py ci 
+$ boar ci 
 
 To mount a session as a file system:
 $ mount.py <path to repository> <session name> <mount point>
