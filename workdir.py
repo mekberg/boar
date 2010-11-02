@@ -6,6 +6,8 @@ from blobrepo.sessions import bloblist_fingerprint
 from blobrepo.repository import Repo
 from treecomp import TreeComparer
 from common import *
+from boar_exceptions import *
+
 from base64 import b64decode, b64encode
 import settings
 import time
@@ -85,7 +87,9 @@ class Workdir:
         assert self.revision
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
-        assert not modified_files, "There must be no modified files when performing an update"
+        if modified_files:
+            raise UserError("There must be no modified files when performing an update.\n"+\
+                                "Run a 'status' command to see what files are modified.")
         front = self.get_front()
         new_revision = front.find_last_revision(self.sessionName)
         new_bloblist = front.get_session_bloblist(new_revision)
