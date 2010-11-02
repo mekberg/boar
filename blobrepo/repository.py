@@ -200,6 +200,7 @@ class Repo:
                 continue
             blob_to_move = os.path.join(queued_item, filename)
             destination_path = self.get_blob_path(filename)
+            assert not os.path.exists(destination_path)
             dir = os.path.dirname(destination_path)
             if not os.path.exists(dir):
                 os.mkdir(dir)
