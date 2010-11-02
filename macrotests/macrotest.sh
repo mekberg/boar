@@ -3,7 +3,7 @@ TESTDIR=~+/`dirname $0`
 cd $TESTDIR
 
 export PATH="$PATH:$TESTDIR/../"
-CMD="cmd.py"
+CMD="boar"
 REPO="$TESTDIR/TESTREPO"
 
 rm -r $REPO test_tree 2>/dev/null
