@@ -7,6 +7,7 @@ import cProfile
 from optparse import OptionParser
 from blobrepo import repository
 from blobrepo.sessions import bloblist_fingerprint
+from boar_exceptions import *
 import client
 
 if sys.version_info >= (2, 6):
@@ -315,6 +316,12 @@ if __name__ == "__main__":
     #import pstats
     #p = pstats.Stats('prof.txt')
     #p.sort_stats('cum').print_stats(10)
-    main()
+    return_code = 0
+    try:
+        main()
+    except UserError as e:
+        print "ERROR:", e.value
+        return_code = 1
     t2 = time()
     print "Finished in", round(t2-t1, 2), "seconds"
+    sys.exit(return_code)
