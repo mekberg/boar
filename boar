@@ -18,7 +18,7 @@
 from __future__ import with_statement
 import sys
 import os
-from time import time
+from time import time, ctime
 import cProfile
 from optparse import OptionParser
 from blobrepo import repository
@@ -185,13 +185,11 @@ def cmd_import(front, args):
                       help="Don't actually do anything. Just show what will happen.")
     parser.add_option("-w", "--create-workdir", dest = "create_workdir", action="store_true",
                       help="Turn the imported directory into a workdir.")
-    parser.add_option("--new-session", dest = "new_session", action="store_true",
-                      help="Create a new session")
     base_session = None
     (options, args) = parser.parse_args(args)
     assert len(args) <= 2
     path_to_ci = os.path.abspath(args[0])
-    session_name = os.path.basename(args[0])
+    session_name = os.path.basename(args[0]) #TODO: what happens when giving only one arg?
     session_offset = ""
     if len(args) > 1:
         if "/" in args[1]:
@@ -200,13 +198,10 @@ def cmd_import(front, args):
         else:
             session_name = args[1]
     print "Session name:", session_name, "Session offset:", session_offset
-    assert os.path.exists(path_to_ci), "Did not exist: " + path_to_ci
-    if options.new_session:
-        assert not front.find_last_revision(session_name), \
-            "There already exists a session named '"+session_name+"'"
-    else:
-        assert front.find_last_revision(session_name), "No session with the name '"+session_name+\
-            "' exists. Add --new-session to create a new session."
+    if not os.path.exists(path_to_ci):
+        raise UserError("Path to check in does not exist: " + path_to_ci)
+    if not front.find_last_revision(session_name):
+        raise UserError("No session with the name '%s' exists." % (session_name))
     wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
     session_id = wd.checkin(write_meta = options.create_workdir, 
                             add_only = True, dry_run = options.dry_run)
@@ -218,6 +213,17 @@ def cmd_update(wd, args):
 def cmd_ci(wd, args):
     session_id = wd.checkin()
     print "Checked in session id", session_id
+
+def cmd_mksession(front, args):
+    session_name, = args
+    if front.find_last_revision(session_name) != None:
+        raise UserError("There already exists a session named '%s'" % (session_name))
+    front.create_session()
+    session_info = { "name": session_name,
+                     "timestamp": int(time()),
+                     "date": ctime() }
+    id = front.commit(session_info)
+    print "New session '%s' was created successfully" % (session_name)
 
 def cmd_co(front, args): 
     session_ids = front.get_session_ids()
@@ -316,6 +322,9 @@ def main():
     elif sys.argv[1] == "locate":
         front = init_repo_from_env()
         cmd_locate(front, sys.argv[2:])
+    elif sys.argv[1] == "mksession":
+        front = init_repo_from_env()
+        cmd_mksession(front, sys.argv[2:])
     elif sys.argv[1] == "exportmd5":
         wd = workdir.init_workdir(os.getcwd())
         cmd_export_md5(wd, sys.argv[2:])
