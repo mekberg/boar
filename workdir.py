@@ -139,7 +139,13 @@ class Workdir:
         if dry_run:
             front = DryRunFront(front)
         assert os.path.exists(self.root) and os.path.isdir(self.root)
+        assert self.revision
 
+        latest_rev = front.find_latest_revision(self.sessionName)
+        if latest_rev != self.revision:
+            assert latest_rev > self.revision, \
+                "Workdir revision %s is later than latest repository revision %s?" % (self.revision, latest_rev)
+            raise UserError("Workdir is not up to date. Please perform an update first.")
         base_session = None
         if not force_primary_session:
             base_session = front.find_last_revision(self.sessionName)
