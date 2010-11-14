@@ -1,6 +1,0 @@
-Kolla om checksummor kollas vid utcheckning.
-
-Strömmande in/utcheckning (stöd för stora filer)
-
-Vettigt repository-format.
-
