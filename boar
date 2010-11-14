@@ -268,66 +268,86 @@ def cmd_find(front, args):
 def cmd_export_md5(wd, args):
     wd.export_md5()
 
-def init_repo_from_env():
+def init_repo_from_env(repo_from_cmdline):
     repopath = os.getenv("REPO_PATH")
-    repourl = os.getenv("REPO_URL")
+    if repo_from_cmdline:
+        repopath = repo_from_cmdline
     front = None
     msg = None
-    if not repopath and not repourl:
-        msg = "You need to set REPO_PATH or REPO_URL"
-    elif repopath and repourl:
-        msg = "Both REPO_PATH and REPO_URL was set. Only one allowed"
-    elif repopath:
+    if not repopath:
+        raise UserError("You need to specify a repository to operate on."+\
+                            "Use the --repo option or set $REPO_PATH.")
+    elif repopath.startswith("boar://"):
+        front = client.connect(repopath)
+    else:
+        if not os.path.exists(repopath):
+            raise UserError("Provided repository path does not exist: "+repopath)
+        if not os.path.isabs(repopath):
+            raise UserError("The repository path must be absolute. Was: "+repopath + "\n" + \
+                                "Maybe you meant '" + os.path.abspath(repopath) + "'?" )
         front = Front(repository.Repo(repopath))
-    elif repourl:
-        print "Using remote repo at '%s'" % (repourl)
-        front = client.connect(repourl)
-    if front == None:
-        raise Exception(msg)
+    assert front
     return front
-
 
 def main():    
     if len(sys.argv) <= 1:
         print_help()
         return
-    elif sys.argv[1] == "mkrepo":
-        cmd_mkrepo(sys.argv[2:])
+
+    args = sys.argv[1:]
+    cmdline_repo = None
+    for i in range(0, len(args)):
+        # This is ridiculous, but I just can't get OptParse to just
+        # look for --repo without exploding on other "unknown options".
+        # TODO: make less silly
+        if args[i] == "--repo":
+            args.pop(i)
+            try:
+                cmdline_repo = args.pop(i) 
+                break
+            except:
+                raise UserError("You must specify a valid repository after --repo")
+        if args[i].startswith("--repo="):
+            _, cmdline_repo = args.pop(i).split("=")
+            break
+
+    if args[0] == "mkrepo":
+        cmd_mkrepo(args[1:])
         return
-    if sys.argv[1] == "import":
-        front = init_repo_from_env()
-        cmd_import(front, sys.argv[2:])
-    elif sys.argv[1] == "list":
-        front = init_repo_from_env()
-        cmd_list(front, sys.argv[2:])
-    elif sys.argv[1] == "verify":
-        front = init_repo_from_env()
-        cmd_verify(front, sys.argv[2:])
-    elif sys.argv[1] == "co":
-        front = init_repo_from_env()
-        cmd_co(front, sys.argv[2:])
-    elif sys.argv[1] == "status":
-        cmd_status(sys.argv[2:])
-    elif sys.argv[1] == "info":
-        cmd_info(sys.argv[2:])
-    elif sys.argv[1] == "ci":
+    if args[0] == "import":
+        front = init_repo_from_env(cmdline_repo)
+        cmd_import(front, args[1:])
+    elif args[0] == "list":
+        front = init_repo_from_env(cmdline_repo)
+        cmd_list(front, args[1:])
+    elif args[0] == "verify":
+        front = init_repo_from_env(cmdline_repo)
+        cmd_verify(front, args[1:])
+    elif args[0] == "co":
+        front = init_repo_from_env(cmdline_repo)
+        cmd_co(front, args[1:])
+    elif args[0] == "status":
+        cmd_status(args[1:])
+    elif args[0] == "info":
+        cmd_info(args[1:])
+    elif args[0] == "ci":
         wd = workdir.init_workdir(os.getcwd())
-        cmd_ci(wd, sys.argv[2:])
-    elif sys.argv[1] == "update":
+        cmd_ci(wd, args[1:])
+    elif args[0] == "update":
         wd = workdir.init_workdir(os.getcwd())
-        cmd_update(wd, sys.argv[2:])
-    elif sys.argv[1] == "find":
-        front = init_repo_from_env()
-        cmd_find(front, sys.argv[2:])
-    elif sys.argv[1] == "locate":
-        front = init_repo_from_env()
-        cmd_locate(front, sys.argv[2:])
-    elif sys.argv[1] == "mksession":
-        front = init_repo_from_env()
-        cmd_mksession(front, sys.argv[2:])
-    elif sys.argv[1] == "exportmd5":
+        cmd_update(wd, args[1:])
+    elif args[0] == "find":
+        front = init_repo_from_env(cmdline_repo)
+        cmd_find(front, args[1:])
+    elif args[0] == "locate":
+        front = init_repo_from_env(cmdline_repo)
+        cmd_locate(front, args[1:])
+    elif args[0] == "mksession":
+        front = init_repo_from_env(cmdline_repo)
+        cmd_mksession(front, args[1:])
+    elif args[0] == "exportmd5":
         wd = workdir.init_workdir(os.getcwd())
-        cmd_export_md5(wd, sys.argv[2:])
+        cmd_export_md5(wd, args[1:])
     else:
         print_help()
         return
