@@ -35,7 +35,41 @@ if __name__ == '__main__':
 
 import workdir
 from blobrepo import repository
-from common import get_tree
+from common import get_tree, my_relpath
+
+def read_tree(path):
+    """Returns a mapping {filename: content, ...} for the given directory
+    tree"""
+    assert os.path.exists(path)
+    def visitor(out_map, dirname, names):
+        encoding = sys.getfilesystemencoding()
+        dirname = dirname.decode(encoding)
+        for name in names:
+            name = name.decode(encoding)
+            fullpath = os.path.join(dirname, name)
+            assert fullpath.startswith(path+"/")
+            relpath = fullpath[len(path)+1:]
+            if not os.path.isdir(fullpath):
+                out_map[relpath] = open(fullpath).read()
+    result = {}
+    os.path.walk(path, visitor, result)
+    return result
+
+def write_tree(path, filemap):
+    """Accepts a mapping {filename: content, ...} and writes it to the
+    tree starting at the given """
+    assert os.path.exists(path)
+    for filename in filemap.keys():
+        assert not os.path.exists(filename)
+        assert not os.path.isabs(filename)
+        fullpath = os.path.join(path, filename)
+        dirpath = os.path.dirname(fullpath)
+        try:
+            os.makedirs(dirpath)
+        except:
+            pass
+        with open(fullpath, "wb") as f:
+            f.write(filemap[filename])
 
 class WorkdirHelper:
     def mkdir(self, path):
@@ -130,6 +164,16 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         # Order doesnt matter below really, so this is fragile
         self.assertEqual(changes, (tuple(["subdir/tjosan2.txt", "subdir/tjosan1.txt"]), (), (), (), ()))
 
+    def testWriteAndReadTree(self):
+        """ Really only test helper functions write_tree() and
+        read_tree() themselves"""
+        tree = {"tjosan.txt": "tjosan content",
+                "subdir/nisse.txt": "nisse content"}
+        testdir = self.createTmpName()
+        os.mkdir(testdir)
+        write_tree(testdir, tree)
+        tree2 = read_tree(testdir)
+        self.assertEqual(tree, tree2)
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def setUp(self):
