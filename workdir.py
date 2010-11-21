@@ -29,9 +29,14 @@ import settings
 import time
 import hashlib
 import stat
-import anydbm
 import copy
 import cPickle
+import anydbm
+
+# shelve and dbhash are only imported as a workaround for py2exe,
+# which otherwise for some reason will forget to include a dbm implementation
+import shelve
+import dbhash
 
 if sys.version_info >= (2, 6):
     import json
