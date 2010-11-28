@@ -21,16 +21,10 @@ import os, time, threading
 import front
 
 class BoarServer:
-    def __init__(self):
-        port = 50000
+    def __init__(self, repopath, port = 50000):
         self.server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
                                      jsonrpc.TransportTcpIp(timeout=60.0, 
                                                             addr=("0.0.0.0", port)))
-
-        repopath = os.getenv("REPO_PATH")
-        if repopath == None:
-            print "You need to set REPO_PATH"
-            return
         repo = repository.Repo(repopath)
         fr = front.Front(repo)
         self.server.register_instance(fr, "front")
@@ -39,16 +33,23 @@ class BoarServer:
         self.server.serve()
 
 class ThreadedBoarServer(BoarServer):
-    def __init__(self):
-        BoarServer.__init__(self)
+    def __init__(self, repopath, port = 50000):
+        BoarServer.__init__(self, repopath, port)
 
     def serve(self):
         self.serverThread = threading.Thread(target = self.server.serve)
         self.serverThread.setDaemon(True)
         self.serverThread.start()
+        # Some smarter way to sleep until the server is started would
+        # be nice
+        time.sleep(0.1) 
 
 def main():
-    server = BoarServer()
+    repopath = os.getenv("REPO_PATH")
+    if repopath == None:
+        print "You need to set REPO_PATH"
+        return
+    server = BoarServer(repopath)
     print "Serving"
     pid = server.serve()
 
