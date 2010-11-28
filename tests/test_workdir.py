@@ -36,6 +36,7 @@ if __name__ == '__main__':
 import workdir
 from blobrepo import repository
 from common import get_tree, my_relpath
+import server
 
 def read_tree(path):
     """Returns a mapping {filename: content, ...} for the given directory
@@ -58,7 +59,7 @@ def read_tree(path):
 def write_tree(path, filemap):
     """Accepts a mapping {filename: content, ...} and writes it to the
     tree starting at the given """
-    assert os.path.exists(path)
+    os.mkdir(path)
     for filename in filemap.keys():
         assert not os.path.exists(filename)
         assert not os.path.isabs(filename)
@@ -170,10 +171,31 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         tree = {"tjosan.txt": "tjosan content",
                 "subdir/nisse.txt": "nisse content"}
         testdir = self.createTmpName()
-        os.mkdir(testdir)
         write_tree(testdir, tree)
         tree2 = read_tree(testdir)
         self.assertEqual(tree, tree2)
+
+
+class TestWorkdirWithServer(TestWorkdir):
+    __next_port = 11000
+    def next_port(self):
+        port = TestWorkdirWithServer.__next_port
+        TestWorkdirWithServer.__next_port += 1
+        return port
+
+    def setUp(self):
+        self.remove_at_teardown = []
+        self.workdir = self.createTmpName()
+        self.repopath = self.createTmpName()
+        repository.create_repository(self.repopath)
+        os.mkdir(self.workdir)
+        self.port = self.next_port()
+        serv = server.ThreadedBoarServer(self.repopath, self.port)
+        serv.serve()
+        self.wd = workdir.Workdir("boar://localhost:%s/" % (self.port), "TestSession", "", 
+                                  None, self.workdir)
+        id = self.wd.checkin()
+        assert id == 1
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def setUp(self):

@@ -23,6 +23,7 @@ from blobrepo.repository import Repo
 from treecomp import TreeComparer
 from common import *
 from boar_exceptions import *
+import client
 
 from base64 import b64decode, b64encode
 import settings
@@ -192,7 +193,11 @@ class Workdir:
         return self.revision
 
     def get_front(self):
-        if not self.front:
+        if self.front:
+            return self.front
+        if self.repoUrl.startswith("boar://"):
+            return client.connect(self.repoUrl)
+        else:
             self.front = Front(Repo(self.repoUrl))
         return self.front
 
