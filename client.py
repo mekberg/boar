@@ -20,8 +20,8 @@ import base64
 import re
 def connect(url):
     
-    m = re.match("avo://(.*?)/", url)
-    assert m, "Not a valid avocado url"
+    m = re.match("boar://(.*?)/", url)
+    assert m, "Not a valid boar url"
     address = m.group(1)    
     server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
                                  jsonrpc.TransportTcpIp(addr=(address, 50000), timeout=60.0, limit=2**16))
