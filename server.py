@@ -21,8 +21,9 @@ import os
 import front
 
 def main():
+    port = 50000
     server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
-                            jsonrpc.TransportTcpIp(timeout=60.0, addr=("0.0.0.0", 50000)))
+                            jsonrpc.TransportTcpIp(timeout=60.0, addr=("0.0.0.0", port)))
 
     repopath = os.getenv("REPO_PATH")
     if repopath == None:

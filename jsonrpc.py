@@ -288,16 +288,13 @@ def dictkeyclean(d):
 
 def ReadJsonObjectFromSocket(s):
     """Perform a blocking read of a json object from the given socket"""
-    print "Receiving from socket"
     data_parts = []
     data_parts.extend(s.recv( 4096 ))
     while( select.select((s,), (), (), 0.1)[0] ):  #TODO: this select is probably not necessary, because server closes this socket
         d = s.recv( 4096 )
         if len(d) == 0:
-            print "Got nothing on read. Maybe finished?"
             break
         data_parts.append(d)
-    print "Finished reading"
     data = "".join(data_parts)
     return data
 
