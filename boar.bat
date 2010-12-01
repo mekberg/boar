@@ -1,1 +1,1 @@
-C:\Python26\python.exe C:\Python26\pyarchive\boar.py %1 %2 %3 %4 %5
+C:\Python26\python.exe C:\Python26\boar\boar %1 %2 %3 %4 %5
