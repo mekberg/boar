@@ -190,7 +190,7 @@ def cmd_import(front, args):
     base_session = None
     (options, args) = parser.parse_args(args)
     assert len(args) <= 2
-    path_to_ci = os.path.abspath(args[0])
+    path_to_ci = os.path.abspath(args[0]).decode()
     session_name = os.path.basename(args[0]) #TODO: what happens when giving only one arg?
     session_offset = ""
     if len(args) > 1:
@@ -233,9 +233,9 @@ def cmd_co(front, args):
     session_name, throwaway, offset = args[0].partition("/")
 
     if len(args) <= 1:
-        workdir_path = os.path.abspath(session_name)
+        workdir_path = os.path.abspath(session_name).decode()
     else:
-        workdir_path = os.path.abspath(args[1])
+        workdir_path = os.path.abspath(args[1]).decode()
     print "Exporting to workdir", workdir_path
 
     for sid in session_ids:
