@@ -47,6 +47,7 @@ else:
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
+        assert isinstance(root, unicode)
         assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
         assert os.path.exists(root)
         self.repoUrl = repoUrl

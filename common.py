@@ -51,6 +51,7 @@ def md5sum_file(path):
 def convert_win_path_to_unix(path):
     """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
         Has no effect on unix style paths. """
+    assert isinstance(path, unicode)
     nodrive = os.path.splitdrive(path)[1]
     result = nodrive.replace("\\", "/")
     #print "convert_win_path_to_unix: " + path + " => " + result
@@ -104,6 +105,7 @@ def is_child_path(parent, child):
     return result
     
 def remove_first_dirname(p):
+    assert isinstance(p, unicode)
     rel_path = get_relative_path(p)
     firstslash = rel_path.find("/")
     if firstslash == -1:
@@ -113,7 +115,7 @@ def remove_first_dirname(p):
     rest = get_relative_path(rest)
     return rest
 
-assert remove_first_dirname("tjosan/hejsan") == "hejsan"
+assert remove_first_dirname(u"tjosan/hejsan") == "hejsan"
 
 
 import os.path as posixpath
@@ -126,6 +128,8 @@ def my_relpath(path, start=curdir):
     assert os.path.isabs(path)
     if not path:
         raise ValueError("no path specified")
+    assert isinstance(path, unicode)
+    assert isinstance(start, unicode)
     absstart = posixpath.abspath(start)
     abspath = posixpath.abspath(path)
     if absstart[-1] != os.path.sep:
@@ -150,15 +154,13 @@ def open_raw(filename):
 def get_tree(root, skip = [], absolute_paths = False):
     """ Returns a simple list of all the files and directories in the
         workdir (except meta directories). """
+    assert isinstance(root, unicode) # type affects os.path.walk callback args
     def visitor(out_list, dirname, names):
         for file_to_skip in skip:
             if file_to_skip in names:
                 names.remove(file_to_skip)
-        encoding = sys.getfilesystemencoding()
-        dirname = dirname.decode(encoding)
         for name in names:
             try:
-                name = name.decode(encoding)
                 fullpath = os.path.join(dirname, name)
             except:
                 print "Failed on file:", dirname, name
