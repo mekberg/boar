@@ -77,11 +77,11 @@ def cmd_locate(front, args):
     assert len(args) == 1, "Session name must be given"
     sessionName = args[0]
     repo_path = os.getenv("REPO_PATH")
-    root = os.getcwd()
+    root = os.getcwd().decode(sys.getfilesystemencoding())
     tree = get_tree(root)
     tree.sort()
     wd = workdir.Workdir(front.get_repo_path(), sessionName, "", None, root)
-    missing = 0
+    missing = []
     found = 0
     for f in tree:
         csum = md5sum_file(f)
@@ -89,7 +89,7 @@ def cmd_locate(front, args):
         session_dirs = [os.path.dirname(fn) for fn in session_filenames]
         if not session_filenames:
             print "Missing:", f
-            missing += 1
+            missing.append(f)
             continue
         if session_filenames:
             print "OK:", f
@@ -97,6 +97,8 @@ def cmd_locate(front, args):
             for p in session_filenames:
                 print "   " + p
     print "%s files exists in the given session, %s do not." % (found, missing)
+    for f in missing:
+        print "Missing:",f
 
 def cmd_status(args):
     verbose = ("-v" in args)
