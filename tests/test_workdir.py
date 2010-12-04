@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
 import workdir
 from blobrepo import repository
-from common import get_tree, my_relpath
+from common import get_tree, my_relpath, convert_win_path_to_unix
 import server
 
 def read_tree(path):
@@ -48,8 +48,8 @@ def read_tree(path):
         for name in names:
             name = name.decode(encoding)
             fullpath = os.path.join(dirname, name)
-            assert fullpath.startswith(path+"/")
-            relpath = fullpath[len(path)+1:]
+            assert fullpath.startswith(path+os.path.sep), fullpath
+            relpath = convert_win_path_to_unix(fullpath[len(path)+1:])
             if not os.path.isdir(fullpath):
                 out_map[relpath] = open(fullpath).read()
     result = {}
@@ -91,6 +91,7 @@ class WorkdirHelper:
 
     def createTmpName(self, suffix = ""):
         filename = tempfile.mktemp(prefix='testworkdir'+suffix+"_", dir=TMPDIR)
+        filename = filename.decode()
         self.remove_at_teardown.append(filename)
         return filename
 
