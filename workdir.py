@@ -44,6 +44,9 @@ if sys.version_info >= (2, 6):
 else:
     import simplejson as json
 
+class FakeFile:
+    def write(self, s):
+        pass
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
@@ -67,10 +70,14 @@ class Workdir:
         self.bloblist_csums = None
         self.tree_csums = None
         self.tree = None
+        self.output = FakeFile()
 
     def __reload_tree(self):
         self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
         self.tree_csums == None
+
+    def setLogOutput(self, fout):
+        self.output = fout
 
     def write_metadata(self):
         workdir_path = self.root
@@ -177,7 +184,7 @@ class Workdir:
             wd_path = strip_path_offset(self.offset, sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
             abspath = self.abspath(sessionpath)
-            check_in_file(front, abspath, sessionpath, expected_md5sum)
+            check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
 
         if not add_only:
             for f in deleted_files:
@@ -340,7 +347,7 @@ def is_ignored(dirname, entryname = None):
         return True
     return False
 
-def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum):
+def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum, log = FakeFile()):
     """ Checks in the file found at the given "abspath" into the
     active "sessionwriter" with the path in the session given as
     "sessionpath". The md5sum of the file has to be provided. The
@@ -352,7 +359,7 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum):
            "'..' not allowed in paths or filenames. Was: " + sessionpath
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
-    #print "CI: %s => %s" % (abspath, sessionpath)
+    log.write("Checking in %s => %s\n" % (abspath, sessionpath))
     if not sessionwriter.has_blob(expected_md5sum):
         with open_raw(abspath) as f:
             m = hashlib.md5()
