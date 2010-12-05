@@ -183,6 +183,8 @@ def cmd_verify(front, args):
 
 def cmd_import(front, args):
     parser = OptionParser(usage="usage: %prog [options] <folder to import> <snapshot name>[/imported name]")
+    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
+                      help="Show more details about what is happening.")
     parser.add_option("-n", "--dry-run", dest = "dry_run", action="store_true",
                       help="Don't actually do anything. Just show what will happen.")
     parser.add_option("-w", "--create-workdir", dest = "create_workdir", action="store_true",
@@ -199,12 +201,15 @@ def cmd_import(front, args):
             session_name, session_offset = args[1].split("/", 1)
         else:
             session_name = args[1]
-    print "Session name:", session_name, "Session offset:", session_offset
+    if options.verbose:
+        print "Session name:", session_name, "Session offset:", session_offset
     if not os.path.exists(path_to_ci):
         raise UserError("Path to check in does not exist: " + path_to_ci)
     if not front.find_last_revision(session_name):
         raise UserError("No session with the name '%s' exists." % (session_name))
     wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
+    if options.verbose:
+        wd.setLogOutput(sys.stdout)
     session_id = wd.checkin(write_meta = options.create_workdir, 
                             add_only = True, dry_run = options.dry_run)
     print "Checked in session id", session_id
