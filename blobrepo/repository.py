@@ -88,7 +88,7 @@ class Repo:
         # that changes the cwd. For instance, fuse.
         assert(os.path.isabs(repopath)), "The repo path must be absolute. "\
             +"Was: " + repopath
-        self.repopath = repopath
+        self.repopath = unicode(repopath)
         self.session_readers = {}
         assert os.path.exists(self.repopath), "No such directory: %s" % (self.repopath)
         self.process_queue()
