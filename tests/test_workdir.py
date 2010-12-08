@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from __future__ import with_statement
 import sys, os, unittest, tempfile, shutil
 from copy import copy
@@ -36,6 +37,7 @@ if __name__ == '__main__':
 import workdir
 from blobrepo import repository
 from common import get_tree, my_relpath, convert_win_path_to_unix
+from boar_exceptions import UserError
 import server
 
 def read_tree(path):
@@ -99,6 +101,10 @@ class WorkdirHelper:
         with open(path, "rb") as f:
             file_contents = f.read()
             self.assertEquals(file_contents, expected_contents)
+
+    
+    #session_id = wd.checkin(write_meta = options.create_workdir, 
+    #                        add_only = True, dry_run = options.dry_run)
         
 
 class TestWorkdir(unittest.TestCase, WorkdirHelper):
@@ -109,8 +115,15 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
-        id = self.wd.checkin()
+        id = self.wd.get_front().mksession("TestSession")
         assert id == 1
+
+    def createWorkdir(self, tree):
+        wdroot = self.createTmpName()
+        write_tree(wdroot, tree)
+        wd = workdir.Workdir(self.repopath, "TestSession", "", None, wdroot)
+        self.assertTrue(wd.get_front().find_last_revision("TestSession"))
+        return wd
 
     def tearDown(self):
         for d in self.remove_at_teardown:
@@ -176,6 +189,13 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         tree2 = read_tree(testdir)
         self.assertEqual(tree, tree2)
 
+    def testOverwriteImport(self):
+        tree1 = {'file.txt': 'file.txt contents'}
+        tree2 = {'file.txt': 'file.txt other contents'}
+        wd = self.createWorkdir(tree1)
+        wd.checkin()
+        wd = self.createWorkdir(tree2)
+        self.assertRaises(UserError, wd.checkin, add_only = True)
 
 class TestWorkdirWithServer(TestWorkdir):
     __next_port = 11000
