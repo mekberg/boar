@@ -225,11 +225,7 @@ def cmd_mksession(front, args):
     session_name, = args
     if front.find_last_revision(session_name) != None:
         raise UserError("There already exists a session named '%s'" % (session_name))
-    front.create_session()
-    session_info = { "name": session_name,
-                     "timestamp": int(time()),
-                     "date": ctime() }
-    id = front.commit(session_info)
+    front.mksession(session_name)
     print "New session '%s' was created successfully" % (session_name)
 
 def cmd_co(front, args): 
