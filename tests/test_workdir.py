@@ -215,7 +215,7 @@ class TestWorkdirWithServer(TestWorkdir):
         serv.serve()
         self.wd = workdir.Workdir("boar://localhost:%s/" % (self.port), "TestSession", "", 
                                   None, self.workdir)
-        id = self.wd.checkin()
+        id = self.wd.get_front().mksession("TestSession")
         assert id == 1
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
@@ -231,8 +231,10 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         self.addWorkdirFile("onlyintopdir.txt", "nothing")
         self.mkdir("mysubdir")
         self.addWorkdirFile("mysubdir/insubdir.txt", "nothing2")
-        id = wd.checkin()
+        id = wd.get_front().mksession("TestSession")
         assert id == 1
+        id = wd.checkin()
+        assert id == 2
         shutil.rmtree(self.workdir, ignore_errors = True)
 
     def tearDown(self):

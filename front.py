@@ -181,3 +181,6 @@ class DryRunFront:
 
     def find_last_revision(self, session_name):
         return self.realfront.find_last_revision(session_name)
+
+    def mksession(self, sessionName):
+        pass
