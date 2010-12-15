@@ -174,7 +174,8 @@ def get_tree(root, skip = [], absolute_paths = False):
         all_files = map(remove_rootpath, all_files)
     for f in all_files:
         assert not is_windows_path(f), "Was:" + f
-        assert not ".." in f, "Was:" + f
+        assert not ".." in f.split("/"), "Was:" + f
+        assert not "\\" in f, "Was:" + f
     return all_files
 
 
