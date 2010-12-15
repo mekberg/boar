@@ -355,8 +355,9 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum, log = Fa
     consistent."""
     assert os.path.isabs(abspath), \
         "abspath must be absolute. Was: '%s'" % (path)
-    assert ".." not in sessionpath, \
+    assert ".." not in sessionpath.split("/"), \
            "'..' not allowed in paths or filenames. Was: " + sessionpath
+    assert "\\" not in sessionpath, "Was: '%s'" % (path)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
     log.write("Checking in %s => %s\n" % (abspath, sessionpath))
