@@ -23,6 +23,7 @@ serialized easily.
 
 from blobrepo import repository
 import sys
+from time import ctime, time
 
 if sys.version_info >= (2, 6):
     import json
@@ -78,6 +79,16 @@ class Front:
         session. Requires that the current session has a base
         session""" 
         self.new_session.remove(filename)
+
+    def mksession(self, sessionName):
+        if self.find_last_revision(sessionName) != None:
+            raise Exception("There already exists a session named '%s'" % (session_name))
+        self.create_session()
+        session_info = { "name": sessionName,
+                         "timestamp": int(time()),
+                         "date": ctime() }
+        return self.commit(session_info)
+
 
     def commit(self, sessioninfo = {}):
         id = self.new_session.commit(sessioninfo)
@@ -170,3 +181,6 @@ class DryRunFront:
 
     def find_last_revision(self, session_name):
         return self.realfront.find_last_revision(session_name)
+
+    def mksession(self, sessionName):
+        pass

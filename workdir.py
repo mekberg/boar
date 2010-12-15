@@ -60,6 +60,8 @@ class Workdir:
         self.root = root
         self.metadir = os.path.join(self.root, settings.metadir)
         self.front = None
+        if self.repoUrl:
+            self.front = self.get_front()
         if os.path.exists(self.metadir):
             self.md5cache = anydbm.open(self.metadir + "/" + 'md5sumcache', 'c')
         else:
@@ -169,6 +171,9 @@ class Workdir:
             self.get_changes()
         assert base_session or (not unchanged_files and not modified_files and not deleted_files)
 
+        if add_only and modified_files:
+            raise UserError("This import would replace some existing files")
+
         for f in new_files + modified_files:
             # A little hackish to store up the md5sums in one sweep
             # before starting to check them in. An attempt to reduce
@@ -227,6 +232,8 @@ class Workdir:
         if not self.revision:
             front = self.get_front()
             self.revision = front.find_last_revision(self.sessionName)
+        if not self.revision:
+            raise UserError("There is no session named '%s'" % (self.sessionName))
         bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
         if os.path.exists(bloblist_file):
             self.blobinfos = cPickle.load(open(bloblist_file, "rb"))
@@ -316,11 +323,16 @@ class Workdir:
             assert not os.path.isabs(f)
         
         bloblist = {}
-        if self.revision != None:
-            for i in self.get_bloblist():
-                if is_child_path(self.offset, i['filename']):
-                    bloblist[i['filename']] = i['md5sum']
-            
+        if self.revision == None:
+            assert self.sessionName
+            self.revision = front.find_last_revision(self.sessionName)
+            if not self.revision:
+                raise UserError("No session found named '%s'" % (self.sessionName))
+
+        for i in self.get_bloblist():
+            if is_child_path(self.offset, i['filename']):
+                bloblist[i['filename']] = i['md5sum']
+
         comp = TreeComparer(bloblist, filelist)
         unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
         ignored_files = ()

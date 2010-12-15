@@ -91,6 +91,9 @@ class Repo:
         self.repopath = unicode(repopath)
         self.session_readers = {}
         assert os.path.exists(self.repopath), "No such directory: %s" % (self.repopath)
+        assert os.path.exists(self.repopath + "/sessions")
+        assert os.path.exists(self.repopath + "/blobs")
+        assert os.path.exists(self.repopath + "/tmp")
         self.process_queue()
 
     def get_repo_path(self):
