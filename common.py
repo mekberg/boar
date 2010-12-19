@@ -38,15 +38,23 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
-def md5sum_file(path):
+def md5sum_fileobj(f):
     m = hashlib.md5()
-    with open(path, "rb") as f:
-        while True:
-            data = f.read(2 ** 20)
-            m.update(data)
-            if data == "":
-                break
+    f.seek(0)
+    while True:
+        data = f.read(2 ** 20)
+        m.update(data)
+        if data == "":
+            break
     return m.hexdigest()
+
+def md5sum_file(f):
+    assert f, "File must not be None"
+    if isinstance(f, basestring):
+        with open(f, "rb") as fobj:
+            return md5sum_fileobj(fobj)
+    return md5sum_fileobj(f)
+    
 
 def convert_win_path_to_unix(path):
     """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
