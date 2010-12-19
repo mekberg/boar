@@ -105,7 +105,7 @@ class Repo:
         return os.path.join(self.repopath, QUEUE_DIR, filename)
 
     def get_blob_path(self, sum):
-        assert is_md5sum(sum)
+        assert is_md5sum(sum), "Was: %s" % (sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
 
     def get_recipe_path(self, sum):
@@ -152,7 +152,7 @@ class Repo:
             return data
         recipe = self.get_recipe(sum)
         if recipe:
-            return create_blob_reader(recipe)
+            return create_blob_reader(recipe, self).read(offset=offset, size=size)
         else:
             raise ValueError("No such blob or recipe exists: "+sum)
 
@@ -197,11 +197,24 @@ class Repo:
             m = blobpattern.search(f)
             if m:
                 matches.append(m.group(1))
+        blobpattern = re.compile("([0-9a-f]{32})\\.recipe$")
+        tree = get_tree(os.path.join(self.repopath, RECIPES_DIR))
+        for f in tree:
+            m = blobpattern.search(f)
+            if m:
+                matches.append(m.group(1))
         return matches
 
     def verify_blob(self, sum):
-        path = self.get_blob_path(sum)
-        verified_ok = (sum == md5sum_file(path))
+        recipe = self.get_recipe(sum)
+        if recipe:
+            reader = create_blob_reader(recipe, self)
+            verified_ok = (sum == md5sum_file(reader))
+        elif self.has_raw_blob(sum):
+            path = self.get_blob_path(sum)
+            verified_ok = (sum == md5sum_file(path))
+        else:
+            raise ValueError("No such blob or recipe: " + sum)
         return verified_ok 
 
     def process_queue(self):        
