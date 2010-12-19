@@ -34,11 +34,12 @@ else:
     import simplejson as json
 
 from common import *
-
+from blobreader import create_blob_reader
 
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
 SESSIONS_DIR = "sessions"
+RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
 
 recoverytext = """Repository format 0.1
@@ -78,6 +79,7 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, QUEUE_DIR))
     os.mkdir(os.path.join(repopath, BLOB_DIR))
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
+    os.mkdir(os.path.join(repopath, RECIPES_DIR))
     os.mkdir(os.path.join(repopath, TMP_DIR))
     with open(os.path.join(repopath, "recovery.txt"), "w") as f:
         f.write(recoverytext)
@@ -106,24 +108,53 @@ class Repo:
         assert is_md5sum(sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
 
+    def get_recipe_path(self, sum):
+        assert is_md5sum(sum)
+        return os.path.join(self.repopath, RECIPES_DIR, sum + ".recipe")
+
+    def has_raw_blob(self, sum):
+        """Returns true if there is an actual (non-recipe based)
+        blob with the given checksum"""
+        blobpath = self.get_blob_path(sum)
+        return os.path.exists(blobpath)
+
     def has_blob(self, sum):
-        path = self.get_blob_path(sum)
-        return os.path.exists(path)
+        """Returns true if there is a blob with the given
+        checksum. The blob may be raw or recipe-based."""
+        blobpath = self.get_blob_path(sum)
+        recpath = self.get_recipe_path(sum)
+        return os.path.exists(blobpath) or os.path.exists(recpath)
+
+    def get_recipe(self, sum):
+        recpath = self.get_recipe_path(sum)
+        if not os.path.exists(recpath):
+            return None
+        with open(recpath) as f:
+            recipe = json.load(f)
+        return recipe
 
     def get_blob_size(self, sum):
         blobpath = self.get_blob_path(sum)
-        assert blobpath, "get_blob_size(): target blob must exist"
-        return os.path.getsize(blobpath)
+        if blobpath:
+            return os.path.getsize(blobpath)
+        recipe = self.get_recipe(sum)
+        if not recipe:
+            raise ValueError("No such blob or recipe exists: "+sum)
+        return recipe['size']
 
     def get_blob(self, sum, offset = 0, size = -1):
         """ Returns None if there is no such blob """
-        if not self.has_blob(sum):
-            return None
-        path = self.get_blob_path(sum)
-        with open(path, "rb") as f:
-            f.seek(offset)
-            data = f.read(size)
-        return data            
+        if self.has_raw_blob(sum):
+            path = self.get_blob_path(sum)
+            with open(path, "rb") as f:
+                f.seek(offset)
+                data = f.read(size)
+            return data
+        recipe = self.get_recipe(sum)
+        if recipe:
+            return create_blob_reader(recipe)
+        else:
+            raise ValueError("No such blob or recipe exists: "+sum)
 
     def get_session_path(self, session_id):
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
