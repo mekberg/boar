@@ -135,7 +135,7 @@ class Repo:
 
     def get_blob_size(self, sum):
         blobpath = self.get_blob_path(sum)
-        if blobpath:
+        if os.path.exists(blobpath):
             return os.path.getsize(blobpath)
         recipe = self.get_recipe(sum)
         if not recipe:
@@ -152,7 +152,9 @@ class Repo:
             return data
         recipe = self.get_recipe(sum)
         if recipe:
-            return create_blob_reader(recipe, self).read(offset=offset, size=size)
+            reader = create_blob_reader(recipe, self)
+            reader.seek(offset)
+            return reader.read(size)
         else:
             raise ValueError("No such blob or recipe exists: "+sum)
 
