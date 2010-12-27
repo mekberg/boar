@@ -98,6 +98,9 @@ class Repo:
         assert os.path.exists(self.repopath + "/tmp")
         self.process_queue()
 
+    def __str__(self):
+        return "repo:"+self.repopath
+
     def get_repo_path(self):
         return self.repopath
 
@@ -219,6 +222,44 @@ class Repo:
             raise ValueError("No such blob or recipe: " + sum)
         return verified_ok 
 
+
+
+    def pullFrom(self, other_repo):
+        """Updates this repository with changes from the other
+        repo. The other repo must be a continuation of this repo."""
+        assert False, "Not yet implemented"
+        print "Pulling updates from %s into %s" % (other_repo, self)
+        # Check that other repo is a continuation of this one
+        assert set(self.get_all_sessions()) <= set(other_repo.get_all_sessions()), \
+            "Cannot pull: other repo contains fewer sessions than this repo"        
+        for session_id in self.get_all_sessions():
+            self_session = self.get_session(session_id)
+            other_session = other_repo.get_session(session_id)
+            assert self_session.get_fingerprint() == other_session.get_fingerprint(), \
+                "Cannot pull: Other repo is not a continuation of this repo"
+        # All seems ok. Start copying.
+        
+        # Copy all new blobs
+        self_blobs = set(self.get_blob_names())
+        other_blobs = set(other_repo.get_blob_names())
+        assert set(self_blobs) <= set(other_blobs), \
+            "Other repo is missing some blobs that are present in this repo. Corrupt repository?"
+
+        for blobname in other_blobs - self_blobs:
+            assert other_repo.has_raw_blob(blobname), "Cloning of recipe blobs not yet implemented"
+            source_path = other_repo.get_blob_path(blobname)
+            destination_path = self.get_blob_path(blobname)
+            assert not self.has_blob(blobname), "Blob already exists?"
+            destdir = os.path.dirname(destination_path)
+            if not os.path.exists(destdir):
+                os.makedirs(destdir)
+            shutil.copy(source_path, destination_path)
+        
+            
+        # Copy all new sessions
+        
+        
+
     def process_queue(self):        
         queued_item = self.get_queue_path("queued_session")
         if not os.path.exists(queued_item):
@@ -252,7 +293,7 @@ class Repo:
             assert not os.path.exists(destination_path)
             dir = os.path.dirname(destination_path)
             if not os.path.exists(dir):
-                os.mkdir(dir)
+                os.makedirs(dir)
             os.rename(blob_to_move, destination_path)
             #print "Moving", os.path.join(queued_item, filename),"to", destination_path
 
