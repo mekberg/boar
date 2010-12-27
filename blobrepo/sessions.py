@@ -193,6 +193,9 @@ class SessionReader:
     def get_properties(self):
         return copy.copy(self.properties)
 
+    def get_fingerprint(self):
+        return self.properties['fingerprint']
+
     def verify(self):
         if self.verified:
             return

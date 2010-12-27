@@ -268,6 +268,18 @@ def cmd_find(front, args):
             if bi['md5sum'] == cs:
                 print info['name'] +":"+bi['filename']
 
+def cmd_clone(args):
+    repopath1, repopath2 = args
+    if repopath1.startswith("boar://") or repopath2.startswith("boar://"):
+        raise UserError("Cloning requires local repositories")
+    repopath1 = os.path.abspath(repopath1)
+    repopath2 = os.path.abspath(repopath2)
+    repo1 = repository.Repo(repopath1) # todo: handle errors nicely
+    if not os.path.exists(repopath2):
+        repository.create_repository(repopath2)
+    repo2 = repository.Repo(repopath2)
+    repo2.pullFrom(repo1)
+
 def cmd_export_md5(wd, args):
     wd.export_md5()
 
@@ -351,6 +363,8 @@ def main():
     elif args[0] == "exportmd5":
         wd = workdir.init_workdir(os.getcwd())
         cmd_export_md5(wd, args[1:])
+    elif args[0] == "clone":
+        cmd_clone(args[1:])
     else:
         print_help()
         return
