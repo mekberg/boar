@@ -227,7 +227,6 @@ class Repo:
     def pullFrom(self, other_repo):
         """Updates this repository with changes from the other
         repo. The other repo must be a continuation of this repo."""
-        assert False, "Not yet implemented"
         print "Pulling updates from %s into %s" % (other_repo, self)
         # Check that other repo is a continuation of this one
         assert set(self.get_all_sessions()) <= set(other_repo.get_all_sessions()), \
@@ -237,8 +236,7 @@ class Repo:
             other_session = other_repo.get_session(session_id)
             assert self_session.get_fingerprint() == other_session.get_fingerprint(), \
                 "Cannot pull: Other repo is not a continuation of this repo"
-        # All seems ok. Start copying.
-        
+
         # Copy all new blobs
         self_blobs = set(self.get_blob_names())
         other_blobs = set(other_repo.get_blob_names())
@@ -247,17 +245,24 @@ class Repo:
 
         for blobname in other_blobs - self_blobs:
             assert other_repo.has_raw_blob(blobname), "Cloning of recipe blobs not yet implemented"
-            source_path = other_repo.get_blob_path(blobname)
-            destination_path = self.get_blob_path(blobname)
+            blob_source_path = other_repo.get_blob_path(blobname)
+            blob_destination_path = self.get_blob_path(blobname)
             assert not self.has_blob(blobname), "Blob already exists?"
-            destdir = os.path.dirname(destination_path)
+            destdir = os.path.dirname(blob_destination_path)
             if not os.path.exists(destdir):
                 os.makedirs(destdir)
-            shutil.copy(source_path, destination_path)
-        
-            
+            shutil.copy(blob_source_path, blob_destination_path)
+
         # Copy all new sessions
-        
+        self_sessions = set(self.get_all_sessions())
+        other_sessions = set(other_repo.get_all_sessions())
+        sessions_to_copy = list(other_sessions - self_sessions)
+        sessions_to_copy.sort()
+        for session_id in sessions_to_copy:
+            sess_source_path = other_repo.get_session_path(session_id)
+            sess_dest_path = self.get_session_path(session_id)
+            assert not os.path.exists(sess_dest_path)
+            shutil.copytree(sess_source_path, sess_dest_path)
         
 
     def process_queue(self):        
