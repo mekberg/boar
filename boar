@@ -73,6 +73,38 @@ def list_files(front, session_name, revision):
     for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
+def verify_repo(repo, verify_blobs = True):
+    front = Front(repo)
+    print "Verifying repo", repo
+    print "Collecting a list of all sessions..."
+    session_ids = front.get_session_ids()
+    print "Verifying %s sessions" % (len(session_ids))
+    ok_blobs = set()
+    for i in range(0, len(session_ids)):
+        id = session_ids[i]
+        bloblist = front.get_session_bloblist(id)
+        calc_fingerprint = bloblist_fingerprint(bloblist)
+        assert calc_fingerprint == front.get_session_property(id, "fingerprint"), \
+            "Fingerprint didn't match for session "+str(id)
+        for bi in bloblist:
+            assert bi['md5sum'] in ok_blobs or \
+                front.has_blob(bi['md5sum']), "Session %s is missing blob %s" \
+                % (session_ids[i], bi['md5sum'])
+            ok_blobs.add(bi['md5sum'])
+        print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
+    if not verify_blobs:
+        print "Skipping blob verification"
+        return True
+    print "Collecting a list of all blobs..."
+    count = front.init_verify_blobs()
+    print "Verifying %s blobs..." % (count)
+    done = 0
+    while done < count:
+        done += len(front.verify_some_blobs())
+        print done, "of "+str(count)+" blobs verified, "+ \
+            str(round(1.0*done/count * 100,1)) + "% done."
+    return True
+
 def cmd_locate(front, args):
     assert len(args) == 1, "Session name must be given"
     sessionName = args[0]
@@ -156,30 +188,7 @@ def cmd_list(front, args):
         print "Duuuh?"
 
 def cmd_verify(front, args):
-    print "Collecting a list of all sessions..."
-    session_ids = front.get_session_ids()
-    print "Verifying %s sessions" % (len(session_ids))
-    ok_blobs = set()
-    for i in range(0, len(session_ids)):
-        id = session_ids[i]
-        bloblist = front.get_session_bloblist(id)
-        calc_fingerprint = bloblist_fingerprint(bloblist)
-        assert calc_fingerprint == front.get_session_property(id, "fingerprint"), \
-            "Fingerprint didn't match for session "+str(id)
-        for bi in bloblist:
-            assert bi['md5sum'] in ok_blobs or \
-                front.has_blob(bi['md5sum']), "Session %s is missing blob %s" \
-                % (session_ids[i], bi['md5sum'])
-            ok_blobs.add(bi['md5sum'])
-        print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
-    print "Collecting a list of all blobs..."
-    count = front.init_verify_blobs()
-    print "Verifying %s blobs..." % (count)
-    done = 0
-    while done < count:
-        done += len(front.verify_some_blobs())
-        print done, "of "+str(count)+" blobs verified, "+ \
-            str(round(1.0*done/count * 100,1)) + "% done."
+    verify_repo(front.repo)
 
 def cmd_import(front, args):
     parser = OptionParser(usage="usage: %prog [options] <folder to import> <snapshot name>[/imported name]")
@@ -278,7 +287,14 @@ def cmd_clone(args):
     if not os.path.exists(repopath2):
         repository.create_repository(repopath2)
     repo2 = repository.Repo(repopath2)
+
+    print "Quick verifying source repo"
+    verify_repo(repo1, verify_blobs = False)
+    print "Quick verifying destination repo"
+    verify_repo(repo2, verify_blobs = False)
     repo2.pullFrom(repo1)
+    print "Performing full verify on cloned repo"
+    verify_repo(repo2, verify_blobs = True)
 
 def cmd_export_md5(wd, args):
     wd.export_md5()
