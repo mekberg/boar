@@ -222,20 +222,34 @@ class Repo:
             raise ValueError("No such blob or recipe: " + sum)
         return verified_ok 
 
+    def isIdentical(self, other_repo):
+        """ Returns True iff the other repo contains the same sessions
+        with the same fingerprints as this repo."""
+        if not other_repo.isContinuation(self):
+            return False
+        return set(self.get_all_sessions()) == set(other_repo.get_all_sessions())
 
+    def isContinuation(self, other_repo):
+        """ Returns True if the other repo is a continuation of this
+        one. That is, the other repo contains all the sessions of this
+        repo, and then zero of more additional sessions."""
+        if set(self.get_all_sessions()) > set(other_repo.get_all_sessions()):
+            # Not same sessions - cannot be successor
+            return False
+        for session_id in self.get_all_sessions():
+            self_session = self.get_session(session_id)
+            other_session = other_repo.get_session(session_id)
+            if self_session.get_fingerprint() != other_session.get_fingerprint():
+                return False
+        return True
 
     def pullFrom(self, other_repo):
         """Updates this repository with changes from the other
         repo. The other repo must be a continuation of this repo."""
         print "Pulling updates from %s into %s" % (other_repo, self)
         # Check that other repo is a continuation of this one
-        assert set(self.get_all_sessions()) <= set(other_repo.get_all_sessions()), \
-            "Cannot pull: other repo contains fewer sessions than this repo"        
-        for session_id in self.get_all_sessions():
-            self_session = self.get_session(session_id)
-            other_session = other_repo.get_session(session_id)
-            assert self_session.get_fingerprint() == other_session.get_fingerprint(), \
-                "Cannot pull: Other repo is not a continuation of this repo"
+        assert self.isContinuation(other_repo), \
+            "Cannot pull: %s is not a continuation of %s" % (other_repo, self)
 
         # Copy all new blobs
         self_blobs = set(self.get_blob_names())

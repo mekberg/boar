@@ -287,7 +287,9 @@ def cmd_clone(args):
     if not os.path.exists(repopath2):
         repository.create_repository(repopath2)
     repo2 = repository.Repo(repopath2)
-
+    if repo1.isIdentical(repo2):
+        print "Repositories are already identical"
+        return
     print "Quick verifying source repo"
     verify_repo(repo1, verify_blobs = False)
     print "Quick verifying destination repo"
