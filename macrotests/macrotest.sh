@@ -21,8 +21,9 @@ cd $TESTDIR
 export PATH="$PATH:$TESTDIR/../"
 CMD="boar"
 REPO="$TESTDIR/TESTREPO"
+CLONE="${REPO}_CLONE"
 
-rm -r $REPO test_tree 2>/dev/null
+rm -r $REPO test_tree $CLONE 2>/dev/null
 
 tar -xvzf test_tree.tar.gz || { echo "Couldn't create test tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 before check-in"; exit 1; }
@@ -75,7 +76,6 @@ md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
 581ab2d89f05c294d4fe69c623bdef83  test_tree/nysubfil.txt
 EOF
 
-
 echo Test offset import / add file / status
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
@@ -84,6 +84,11 @@ REPO_PATH=$REPO $CMD import -w test_tree MyTestSession/new_import || { echo "Cou
 echo "Some new content" >test_tree/new_file.txt
 (cd test_tree && $CMD status) || { echo "Status command 2 failed"; exit 1; }
 #find test_tree -type f -a ! -ipath *.meta*` || { echo "More files than expected in checkout"; exit 1; }
+
+echo Test repo cloning
+$CMD clone $REPO $CLONE || { echo "Couldn't clone repo"; exit 1; }
+diff -r $REPO $CLONE || { echo "Some differences where found in cloned repo"; exit 1; }
+rm -r $CLONE || { echo "Couldn't remove cloned repo"; exit 1; }
 
 echo Test recipe checkout
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
