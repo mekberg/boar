@@ -87,7 +87,7 @@ echo "Some new content" >test_tree/new_file.txt
 
 echo Test repo cloning
 $CMD clone $REPO $CLONE || { echo "Couldn't clone repo"; exit 1; }
-diff -r $REPO $CLONE || { echo "Some differences where found in cloned repo"; exit 1; }
+$CMD diffrepo $REPO $CLONE || { echo "Some differences where found in cloned repo"; exit 1; }
 rm -r $CLONE || { echo "Couldn't remove cloned repo"; exit 1; }
 
 echo Test recipe checkout
