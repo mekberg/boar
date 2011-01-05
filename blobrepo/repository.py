@@ -179,8 +179,8 @@ class Repo:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]
 
-    def create_session(self, base_session = None):
-        return sessions.SessionWriter(self, base_session = base_session)
+    def create_session(self, base_session = None, session_id = None):
+        return sessions.SessionWriter(self, base_session = base_session, session_id = session_id)
 
     def find_next_session_id(self):
         assert os.path.exists(self.repopath)
@@ -259,13 +259,6 @@ class Repo:
 
         for blobname in other_blobs - self_blobs:
             assert other_repo.has_raw_blob(blobname), "Cloning of recipe blobs not yet implemented"
-            blob_source_path = other_repo.get_blob_path(blobname)
-            blob_destination_path = self.get_blob_path(blobname)
-            assert not self.has_blob(blobname), "Blob already exists?"
-            destdir = os.path.dirname(blob_destination_path)
-            if not os.path.exists(destdir):
-                os.makedirs(destdir)
-            shutil.copy(blob_source_path, blob_destination_path)
 
         # Copy all new sessions
         self_sessions = set(self.get_all_sessions())
@@ -273,17 +266,26 @@ class Repo:
         sessions_to_copy = list(other_sessions - self_sessions)
         sessions_to_copy.sort()
         for session_id in sessions_to_copy:
-            sess_source_path = other_repo.get_session_path(session_id)
-            sess_dest_path = self.get_session_path(session_id)
-            assert not os.path.exists(sess_dest_path)
-            shutil.copytree(sess_source_path, sess_dest_path)
-        
+            reader = other_repo.get_session(session_id)
+            base_session = reader.get_properties().get('base_session', None)
+            writer = self.create_session(base_session, session_id)
+            writer.clone(reader)
 
-    def process_queue(self):        
-        queued_item = self.get_queue_path("queued_session")
-        if not os.path.exists(queued_item):
+    def get_queued_session_id(self):
+        path = os.path.join(self.repopath, QUEUE_DIR)
+        files = os.listdir(path)
+        assert len(files) <= 1, "Corrupted queue directory - more than one item in queue"
+        if len(files) == 0:
+            return None
+        result = int(files[0])
+        assert result > 0, "Corrupted queue directory - illegal session id"
+        return result
+
+    def process_queue(self):
+        session_id = self.get_queued_session_id()
+        if session_id == None:
             return
-
+        queued_item = self.get_queue_path(str(session_id))
         items = os.listdir(queued_item)
 
         # Check the checksums of all blobs
@@ -316,9 +318,7 @@ class Repo:
             os.rename(blob_to_move, destination_path)
             #print "Moving", os.path.join(queued_item, filename),"to", destination_path
 
-        id = self.find_next_session_id()
-        session_path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
+        session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         shutil.move(queued_item, session_path)
-        assert not os.path.exists(queued_item), "Queue should be empty after processing"
+        assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
         #print "Done"
-        return id

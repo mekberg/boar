@@ -81,7 +81,7 @@ def bloblist_fingerprint(bloblist):
     return md5.hexdigest()
 
 class SessionWriter:
-    def __init__(self, repo, base_session = None):
+    def __init__(self, repo, base_session = None, session_id = None):
         self.repo = repo
         self.base_session = base_session
         self.session_path = None
@@ -99,6 +99,11 @@ class SessionWriter:
             self.base_bloblist_dict = bloblist_to_dict(\
                 self.repo.get_session(self.base_session).get_all_blob_infos())
         self.resulting_blobdict = self.base_bloblist_dict
+
+        self.forced_session_id = None
+        if session_id != None:
+            self.forced_session_id = int(session_id)
+            assert self.forced_session_id > 0
 
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""
@@ -169,12 +174,18 @@ class SessionWriter:
         with open(fingerprint_marker, "wb") as f:
             pass
 
-        queue_dir = self.repo.get_queue_path("queued_session")
-        assert not os.path.exists(queue_dir)
-        
+        assert not self.repo.get_queued_session_id()
+        if self.forced_session_id: 
+            session_id = self.forced_session_id
+        else:
+            session_id = self.repo.find_next_session_id()
+        assert session_id > 0
+        assert session_id not in self.repo.get_all_sessions()
+        queue_dir = self.repo.get_queue_path(str(session_id))
         shutil.move(self.session_path, queue_dir)
-        id = self.repo.process_queue()
-        return id
+        self.repo.process_queue()
+        return session_id
+
 
 class SessionReader:
     def __init__(self, repo, session_path):
