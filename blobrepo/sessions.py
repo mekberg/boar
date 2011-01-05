@@ -160,7 +160,14 @@ class SessionWriter:
             blobname = metadata['md5sum']
             assert session.repo.has_raw_blob(blobname), "Other repo does not appear to have the blob we need"+\
                 "(Recipe? Cloning of recipes not yet supported)"
-            self.add_blob_data(blobname, session.repo.get_blob(blobname))
+            if not self.repo.has_blob(blobname):
+                size = session.repo.get_blob_size(blobname)
+                offset = 0
+                while offset < size:
+                    data = session.repo.get_blob(blobname, offset, 1000000)
+                    assert len(data) > 0
+                    offset += len(data)
+                    self.add_blob_data(blobname, data)
         return self.commit(sessioninfo)
 
     def commit(self, sessioninfo = {}):
