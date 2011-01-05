@@ -269,7 +269,7 @@ class Repo:
             reader = other_repo.get_session(session_id)
             base_session = reader.get_properties().get('base_session', None)
             writer = self.create_session(base_session, session_id)
-            writer.clone(reader)
+            writer.commitClone(reader)
 
     def get_queued_session_id(self):
         path = os.path.join(self.repopath, QUEUE_DIR)
