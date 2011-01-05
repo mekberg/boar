@@ -147,6 +147,22 @@ class SessionWriter:
         self.metadatas[filename] = metadata
         del self.resulting_blobdict[metadata['filename']]
 
+    def commitClone(self, session):
+        other_bloblist = session.get_all_blob_infos()
+        self.resulting_blobdict = bloblist_to_dict(other_bloblist)
+        self.metadatas = bloblist_to_dict(session.get_raw_bloblist())
+        self.base_session = session.properties.get("base_session", None)
+        sessioninfo = session.properties.get("client_data")
+        for metadata in self.metadatas.values():
+            if not 'md5sum' in metadata:
+                # Probably a deletion entry
+                continue
+            blobname = metadata['md5sum']
+            assert session.repo.has_raw_blob(blobname), "Other repo does not appear to have the blob we need"+\
+                "(Recipe? Cloning of recipes not yet supported)"
+            self.add_blob_data(blobname, session.repo.get_blob(blobname))
+        return self.commit(sessioninfo)
+
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
         for name, summer in self.blob_checksummers.items():
@@ -221,14 +237,16 @@ class SessionReader:
         for blobinfo in bloblist:
             assert repo.has_blob(blobinfo['md5sum'])
         self.verified = True
-        
+
+    def get_raw_bloblist(self):
+        self.__load_bloblist()
+        return self.bloblist
 
     def __load_bloblist(self):
         if self.bloblist == None:
             path = os.path.join(self.path, "bloblist.json")
             with open(path, "rb") as f:
                 self.bloblist = json.load(f)
-        return self.bloblist
 
     def get_all_blob_infos(self):
         self.__load_bloblist()

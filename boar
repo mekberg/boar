@@ -298,6 +298,23 @@ def cmd_clone(args):
     print "Performing full verify on cloned repo"
     verify_repo(repo2, verify_blobs = True)
 
+def cmd_diffrepo(args):
+    global return_code
+    repopath1, repopath2 = args
+    if repopath1.startswith("boar://") or repopath2.startswith("boar://"):
+        raise UserError("Cloning requires local repositories")
+    repopath1 = os.path.abspath(repopath1)
+    repopath2 = os.path.abspath(repopath2)
+    repo1 = repository.Repo(repopath1) # todo: handle errors nicely
+    repo2 = repository.Repo(repopath2)
+    if repo1.isIdentical(repo2):
+        assert repo2.isIdentical(repo1)
+        print "Repositories are identical"
+        return_code = 0
+    else:
+        print "Repositories differ"
+        return_code = 1
+
 def cmd_export_md5(wd, args):
     wd.export_md5()
 
@@ -381,17 +398,20 @@ def main():
         cmd_export_md5(wd, args[1:])
     elif args[0] == "clone":
         cmd_clone(args[1:])
+    elif args[0] == "diffrepo":
+        cmd_diffrepo(args[1:])
     else:
         print_help()
         return
 
+
+return_code = 0
 if __name__ == "__main__":
     t1 = time()
     #cProfile.run('main()', "prof.txt")
     #import pstats
     #p = pstats.Stats('prof.txt')
     #p.sort_stats('cum').print_stats(10)
-    return_code = 0
     try:
         main()
     except UserError as e:
