@@ -47,11 +47,10 @@ def read_tree(path, skip = None):
     def visitor(out_map, dirname, names):
         encoding = sys.getfilesystemencoding()
         dirname = dirname.decode(encoding)
+        if skip in names:
+            names.remove(skip)
         for name in names:
             name = name.decode(encoding)
-            if name == skip:
-                names.remove(name)
-                continue
             fullpath = os.path.join(dirname, name)
             assert fullpath.startswith(path+os.path.sep), fullpath
             relpath = convert_win_path_to_unix(fullpath[len(path)+1:])
@@ -61,10 +60,13 @@ def read_tree(path, skip = None):
     os.path.walk(path, visitor, result)
     return result
 
-def write_tree(path, filemap):
+def write_tree(path, filemap, create_root = True):
     """Accepts a mapping {filename: content, ...} and writes it to the
     tree starting at the given """
-    os.mkdir(path)
+    if create_root:
+        os.mkdir(path)
+    else:
+        assert os.path.exists(path)
     for filename in filemap.keys():
         assert not os.path.exists(filename)
         assert not os.path.isabs(filename)
@@ -202,6 +204,22 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         subtree = read_tree(wd.root, skip = ".meta")
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2'})
 
+    def testOffsetCheckin(self):
+        tree1 = {'file.txt': 'fc1',
+                 'subdir1/subdirfile1.txt': 'fc2'}
+        wd = self.createWorkdir(tree1)
+        wd.checkin()
+        wd = self.createWorkdir({}, "subdir1")
+        wd.checkout()
+        subtree = read_tree(wd.root, skip = ".meta")
+        write_tree(wd.root, {'newfile.txt': 'nf'}, create_root = False)
+        wd.checkin()
+        wd = self.createWorkdir({}, "subdir1")
+        wd.checkout()
+        subtree = read_tree(wd.root, skip = ".meta")
+        self.assertEqual(subtree, {'subdirfile1.txt': 'fc2',
+                                   'newfile.txt': 'nf'})        
+        
     def testOverwriteImport(self):
         tree1 = {'file.txt': 'file.txt contents'}
         tree2 = {'file.txt': 'file.txt other contents'}
