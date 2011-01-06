@@ -76,7 +76,6 @@ def list_files(front, session_name, revision):
 def verify_repo(repo, verify_blobs = True):
     front = Front(repo)
     print "Verifying repo", repo
-    print "Collecting a list of all sessions..."
     session_ids = front.get_session_ids()
     print "Verifying %s sessions" % (len(session_ids))
     ok_blobs = set()
@@ -128,9 +127,9 @@ def cmd_locate(front, args):
             found += 1
             for p in session_filenames:
                 print "   " + p
-    print "%s files exists in the given session, %s do not." % (found, missing)
+    print "%s files exists in the given session, %s do not." % (found, len(missing))
     for f in missing:
-        print "Missing:",f
+        print "Missing:", f
 
 def cmd_status(args):
     verbose = ("-v" in args)
