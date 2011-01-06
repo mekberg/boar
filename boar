@@ -191,7 +191,7 @@ def cmd_verify(front, args):
     verify_repo(front.repo)
 
 def cmd_import(front, args):
-    parser = OptionParser(usage="usage: %prog [options] <folder to import> <snapshot name>[/imported name]")
+    parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
     parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
                       help="Show more details about what is happening.")
     parser.add_option("-n", "--dry-run", dest = "dry_run", action="store_true",
@@ -238,25 +238,37 @@ def cmd_mksession(front, args):
     print "New session '%s' was created successfully" % (session_name)
 
 def cmd_co(front, args): 
+    parser = OptionParser(usage="usage: boar co [options] <session name>[/path/] [workdir name]")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="The revision to check out (defaults to latest)")
+    (options, args) = parser.parse_args(args)
+
     session_ids = front.get_session_ids()
     session_ids.reverse()
-    session_name, throwaway, offset = args[0].partition("/")
 
-    if len(args) <= 1:
-        workdir_path = os.path.abspath(session_name).decode()
+    if not args:
+        raise UserError("You must specify a session name with an optional subpath (i.e 'MyPictures/summer2010')")    
+    if len(args) > 2:
+        raise UserError("Too many arguments")
+
+    session_name, throwaway, offset = args.pop(0).partition("/")
+    if args:
+        workdir_path = os.path.abspath(args.pop(0)).decode()
     else:
-        workdir_path = os.path.abspath(args[1]).decode()
-    print "Exporting to workdir", workdir_path
+        workdir_path = os.path.abspath(session_name).decode()
+    assert not args, args
 
-    for sid in session_ids:
-        session_info = front.get_session_info(sid)
-        name = session_info.get("name", "<no name>")
-        if name == session_name:
-            break
-    if name != session_name:
-        print "No session named '%s' found" % (session_name)
-        return
-    assert not os.path.exists(workdir_path)
+    print "Checking out to workdir", workdir_path
+
+    if options.revision:
+        sid = front.find_last_revision(session_name, [options.revision])
+    else:
+        sid = front.find_last_revision(session_name)
+
+    if not sid:
+        raise UserError("No session named '%s' found" % (session_name))
+    if os.path.exists(workdir_path):
+        raise UserError("Workdir path '%s' already exists" % (workdir_path))
     os.mkdir(workdir_path)
     wd = workdir.Workdir(front.get_repo_path(), session_name, offset, sid, workdir_path)
     wd.checkout()
