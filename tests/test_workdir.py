@@ -40,7 +40,7 @@ from common import get_tree, my_relpath, convert_win_path_to_unix
 from boar_exceptions import UserError
 import server
 
-def read_tree(path):
+def read_tree(path, skip = None):
     """Returns a mapping {filename: content, ...} for the given directory
     tree"""
     assert os.path.exists(path)
@@ -49,6 +49,9 @@ def read_tree(path):
         dirname = dirname.decode(encoding)
         for name in names:
             name = name.decode(encoding)
+            if name == skip:
+                names.remove(name)
+                continue
             fullpath = os.path.join(dirname, name)
             assert fullpath.startswith(path+os.path.sep), fullpath
             relpath = convert_win_path_to_unix(fullpath[len(path)+1:])
@@ -118,10 +121,10 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         id = self.wd.get_front().mksession("TestSession")
         assert id == 1
 
-    def createWorkdir(self, tree):
+    def createWorkdir(self, tree, offset = ""):
         wdroot = self.createTmpName()
         write_tree(wdroot, tree)
-        wd = workdir.Workdir(self.repopath, "TestSession", "", None, wdroot)
+        wd = workdir.Workdir(self.repopath, "TestSession", offset, None, wdroot)
         self.assertTrue(wd.get_front().find_last_revision("TestSession"))
         return wd
 
@@ -188,6 +191,16 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         write_tree(testdir, tree)
         tree2 = read_tree(testdir)
         self.assertEqual(tree, tree2)
+
+    def testOffsetCheckout(self):
+        tree1 = {'file.txt': 'fc1',
+                 'subdir1/subdirfile1.txt': 'fc2'}
+        wd = self.createWorkdir(tree1)
+        wd.checkin()
+        wd = self.createWorkdir({}, "subdir1")
+        wd.checkout()
+        subtree = read_tree(wd.root, skip = ".meta")
+        self.assertEqual(subtree, {'subdirfile1.txt': 'fc2'})
 
     def testOverwriteImport(self):
         tree1 = {'file.txt': 'file.txt contents'}
