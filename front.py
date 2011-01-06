@@ -112,8 +112,10 @@ class Front:
             return self.repo.has_blob(sum) or self.new_session.has_blob(sum)
         return self.repo.has_blob(sum)
 
-    def find_last_revision(self, session_name):
+    def find_last_revision(self, session_name, sessions_to_search = None):
         all_sids = self.get_session_ids()
+        if sessions_to_search != None:
+            all_sids = [sid for sid in all_sids if sid in sessions_to_search]
         all_sids.sort()
         all_sids.reverse()
         for sid in all_sids:
