@@ -223,7 +223,11 @@ def cmd_import(front, args):
     print "Checked in session id", session_id
 
 def cmd_update(wd, args):
-    wd.update()
+    parser = OptionParser(usage="usage: boar update [options]")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="The revision to update to (defaults to latest)")
+    (options, args) = parser.parse_args(args)
+    wd.update(new_revision = options.revision)
 
 def cmd_ci(wd, args):
     session_id = wd.checkin()

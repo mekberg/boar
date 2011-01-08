@@ -64,6 +64,15 @@ class Front:
     def create_session(self, base_session = None):
         self.new_session = self.repo.create_session(base_session)
 
+    def has_snapshot(self, session_name, snapshot_id):
+        """ Returns True if there exists a session with the given
+        session_name and snapshot id """
+        if snapshot_id not in self.get_session_ids():
+            return False
+        session_info = self.get_session_info(snapshot_id)
+        name = session_info.get("name", None)
+        return name == session_name        
+
     def add_blob_data(self, blob_md5, b64data):
         """ Must be called after a create_session()  """
         self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))

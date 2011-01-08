@@ -115,7 +115,7 @@ class Workdir:
             target_path = os.path.join(self.root, target)
             fetch_blob(front, info['md5sum'], target_path, overwrite = False)
 
-    def update(self):
+    def update(self, new_revision = None):
         assert self.revision
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
@@ -123,11 +123,14 @@ class Workdir:
             raise UserError("There must be no modified files when performing an update.\n"+\
                                 "Run a 'status' command to see what files are modified.")
         front = self.get_front()
-        new_revision = front.find_last_revision(self.sessionName)
+        if new_revision:
+            if not front.has_snapshot(self.sessionName, new_revision):
+                raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
+        else:
+            new_revision = front.find_last_revision(self.sessionName)
         new_bloblist = front.get_session_bloblist(new_revision)
         new_bloblist_dict = bloblist_to_dict(new_bloblist)
         old_bloblist = self.get_bloblist()
-        to_delete = []
         for b in new_bloblist:
             if not b['filename'].startswith(self.offset):
                 continue
@@ -148,6 +151,7 @@ class Workdir:
         self.bloblist_csums = None
         self.tree = None
         self.write_metadata()
+        print "Workdir now at revision", self.revision
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                       add_only = False, dry_run = False):
