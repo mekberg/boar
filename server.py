@@ -40,9 +40,6 @@ class ThreadedBoarServer(BoarServer):
         self.serverThread = threading.Thread(target = self.server.serve)
         self.serverThread.setDaemon(True)
         self.serverThread.start()
-        # Some smarter way to sleep until the server is started would
-        # be nice
-        time.sleep(0.1) 
 
 def main():
     repopath = os.getenv("REPO_PATH")
