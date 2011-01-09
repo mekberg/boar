@@ -136,6 +136,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
 #import
 
 import sys
+import struct
 
 #=========================================
 # errors
@@ -272,18 +273,19 @@ def dictkeyclean(d):
 #----------------------
 # JSON-RPC 1.0
 
-def ReadJsonObjectFromSocket(s):
-    """Perform a blocking read of a json object from the given socket"""
+def RecvNBytes(socket, n, timeout = None):
     data_parts = []
-    data_parts.extend(s.recv( 4096 ))
-    while( select.select((s,), (), (), 0.1)[0] ):  #TODO: this select is probably not necessary, because server closes this socket
-        d = s.recv( 4096 )
-        if len(d) == 0:
-            break
+    readsize = 0
+    while readsize < n:
+        ready_list = select.select((socket,), (), (), timeout)[0]
+        if not ready_list:
+            raise Exception("Communication timeout")
+        d = socket.recv( min(4096, n - readsize ))
         data_parts.append(d)
+        readsize += len(d)
+    assert readsize == n, "Protocol error. Expected %s bytes, got %s" % (n, readsize)
     data = "".join(data_parts)
-    return data
-
+    return data    
 
 class JsonRpc10:
     """JSON-RPC V1.0 data-structure / serializer
@@ -662,9 +664,13 @@ class JsonRpc20:
 import codecs
 import time
 
+t0 = time.time()
+
 def log_dummy( message ):
     """dummy-logger: do nothing"""
+    #print round(time.time() - t0, 2), message
     pass
+
 def log_stdout( message ):
     """print message to STDOUT"""
     print message
@@ -772,12 +778,14 @@ class TransportSocket(Transport):
         self.s      = None
         self.timeout = timeout
         self.log    = logfunc
+
     def connect( self ):
         self.close()
         self.log( "connect to %s" % repr(self.addr) )
         self.s = socket.socket( self.s_type, self.s_prot )
         self.s.settimeout( self.timeout )
         self.s.connect( self.addr )
+
     def close( self ):
         if self.s is not None:
             self.log( "close %s" % repr(self.addr) )
@@ -789,22 +797,35 @@ class TransportSocket(Transport):
     def send( self, string ):
         if self.s is None:
             self.connect()
-        self.log( "--> "+repr(string) )
+        header = struct.pack("!II", 0x01020304, len(string))
+        assert len(header) == 8
+        self.s.sendall( header )
         self.s.sendall( string )
+        self.log( "TransportSocket.Send() --> "+repr(string) )
         
     def recv( self ):
         if self.s is None:
             self.connect()
-        data = ReadJsonObjectFromSocket(self.s)
+        header = RecvNBytes(self.s, 8)
+        assert len(header) == 8, len(header)
+        magic, datasize = struct.unpack("!II", header)
+        assert magic == 0x01020304, header
+        data = RecvNBytes(self.s, datasize, 5.0)
+        self.log( "TransportSocket.Recv() --> "+repr(data) )
         return data
 
     def sendrecv( self, string ):
         """send data + receive data + close"""
         try:
+            self.log("SendRecv id = " + str(id(self)))
             self.send( string )
-            return self.recv()
-        finally:
+            self.log("SendRecv Waiting for reply")
+            reply = self.recv()
+            self.log("SendRecv Got a reply")
+            return reply
+        finally: 
             self.close()
+
     def serve(self, handler, n=None):
         """open socket, wait for incoming connections and handle them.
         
@@ -814,7 +835,7 @@ class TransportSocket(Transport):
         self.close()
         self.s = socket.socket( self.s_type, self.s_prot )
         try:
-            self.log( "listen %s" % repr(self.addr) )
+            self.log( "Server id %s listens at %s" % (id(self),self.addr) )
             self.s.bind( self.addr )
             self.s.listen(1)
             n_current = 0
@@ -822,14 +843,25 @@ class TransportSocket(Transport):
                 if n is not None  and  n_current >= n:
                     break
                 conn, addr = self.s.accept()
-                self.log( "%s connected" % repr(addr) )
-                data = ReadJsonObjectFromSocket(conn)
-                self.log( "%s --> %s" % (repr(addr), repr(data)) )
+                self.log( "TransportSocket.Serve(): %s connected" % repr(addr) )
+                header = RecvNBytes(conn, 8)
+                self.log( "TransportSocket.Serve(): got an header")
+                magic, datasize = struct.unpack("!II", header)
+                assert magic == 0x01020304, header
+                data = RecvNBytes(conn, datasize, 5.0)
+                self.log( "TransportSocket.Serve(): Got a message: %s --> %s" % (repr(addr), repr(data)) )
                 result = handler(data)
-                if data is not None:
-                    self.log( "%s <-- %s" % (repr(addr), repr(result)) )
-                    conn.send( result )
-                self.log( "%s close" % repr(addr) )
+                self.log( "TransportSocket.Serve(): Message was handled ok" )
+                if result is not None:
+                    self.log( "TransportSocket.Serve(): Responding to %s <-- %s" % (repr(addr), repr(result)) )  
+                    header = struct.pack("!II", 0x01020304, len(result))
+                    assert len(header) == 8
+                    conn.sendall( header )
+                    conn.sendall( result )
+                    self.log( "TransportSocket.Serve(): Response sent" )
+                else:
+                    self.log( "TransportSocket.Serve(): Request was async - no reply" % repr(addr) )
+                self.log( "TransportSocket.Serve(): %s close" % repr(addr) )
                 conn.close()
                 n_current += 1
         finally:
