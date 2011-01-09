@@ -18,6 +18,7 @@
 from __future__ import with_statement
 import sys, os, unittest, tempfile, shutil
 from copy import copy
+import socket, errno
 
 DATA1 = "tjosan"
 DATA1_MD5 = "5558e0551622725a5fa380caffa94c5d"
@@ -229,11 +230,15 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertRaises(UserError, wd.checkin, add_only = True)
 
 class TestWorkdirWithServer(TestWorkdir):
-    __next_port = 11000
-    def next_port(self):
-        port = TestWorkdirWithServer.__next_port
-        TestWorkdirWithServer.__next_port += 1
-        return port
+    def create_server(self):
+        for p in range(11000, 12000):
+            try:
+                self.server = server.ThreadedBoarServer(self.repopath, p)
+                self.port = p
+                break
+            except socket.error, e:
+                if e.errno != errno.EADDRINUSE:
+                    raise e
 
     def setUp(self):
         self.remove_at_teardown = []
@@ -241,9 +246,8 @@ class TestWorkdirWithServer(TestWorkdir):
         self.repopath = self.createTmpName()
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
-        self.port = self.next_port()
-        serv = server.ThreadedBoarServer(self.repopath, self.port)
-        serv.serve()
+        self.create_server()
+        self.server.serve()
         self.wd = workdir.Workdir("boar://localhost:%s/" % (self.port), "TestSession", "", 
                                   None, self.workdir)
         id = self.wd.get_front().mksession("TestSession")

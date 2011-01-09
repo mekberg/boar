@@ -713,6 +713,10 @@ class Transport:
         """send + receive data"""
         self.send( string )
         return self.recv()
+
+    def init_server(self):
+        pass
+
     def serve( self, handler, n=None ):
         """serve (forever or for n communicaions).
         
@@ -826,18 +830,23 @@ class TransportSocket(Transport):
         finally: 
             self.close()
 
+    def init_server(self):
+        if self.s:
+            return
+        self.close()
+        self.s = socket.socket( self.s_type, self.s_prot )
+        self.log( "Server id %s listens at %s" % (id(self),self.addr) )
+        self.s.bind( self.addr )
+        self.s.listen(1)
+
     def serve(self, handler, n=None):
         """open socket, wait for incoming connections and handle them.
         
         :Parameters:
             - n: serve n requests, None=forever
         """
-        self.close()
-        self.s = socket.socket( self.s_type, self.s_prot )
         try:
-            self.log( "Server id %s listens at %s" % (id(self),self.addr) )
-            self.s.bind( self.addr )
-            self.s.listen(1)
+            self.init_server()
             n_current = 0
             while 1:
                 if n is not None  and  n_current >= n:
@@ -1000,6 +1009,7 @@ class Server:
         if not isinstance(transport, Transport):
             raise ValueError('invalid "transport" (must be a Transport-instance)"')
         self.__transport = transport
+        self.__transport.init_server()
         self.logfile = logfile
         if self.logfile is not None:    #create logfile (or raise exception)
             f = codecs.open( self.logfile, 'a', encoding='utf-8' )
