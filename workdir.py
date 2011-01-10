@@ -461,11 +461,9 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
     size = front.get_blob_size(blobname)
     offset = 0
     f = open(target_path, "wb")
-    while offset < size:
-        data = b64decode(front.get_blob_b64(blobname, offset, 1000000))
-        assert len(data) > 0
-        offset += len(data)
-        f.write(data)
+    datareader = front.get_blob(blobname)
+    while datareader.bytes_left() > 0:
+        f.write(datareader.read(1024))
     f.close()
 
 def bloblist_to_dict(bloblist):
