@@ -112,9 +112,9 @@ class Front:
     def get_blob_size(self, sum):
         return self.repo.get_blob_size(sum)
 
-    def get_blob_b64(self, sum, offset = 0, size = -1):
-        blobpart = self.repo.get_blob(sum, offset, size)
-        return base64.b64encode(blobpart)
+    def get_blob(self, sum, offset = 0, size = -1):
+        datasource = self.repo.get_blob_reader(sum, offset, size)
+        return datasource
 
     def has_blob(self, sum):
         if self.new_session:
