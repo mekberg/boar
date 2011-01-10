@@ -158,6 +158,33 @@ def dictkeyclean(d):
 #----------------------
 # JSON-RPC 1.0
 
+class DataSource:
+    def bytes_left(self):
+        """Return the number of bytes that remains to be read from
+        this data source."""
+        raise NotImplementedError()
+    
+    def read(self, n):
+        """Reads and returns a number of bytes. May return fewer bytes
+        than specified if there are no more bytes to read."""
+        raise NotImplementedError()
+
+class SocketDataSource(DataSource):
+    def __init__(self, socket, data_size):
+        self.socket = socket
+        self.remaining = data_size
+
+    def bytes_left(self):
+        return self.remaining
+
+    def read(self, n):
+        bytes_to_read = min(n, self.remaining)
+        data = RecvNBytes(self.socket, bytes_to_read)
+        self.remaining -= bytes_to_read
+        assert len(data) == bytes_to_read
+        assert len(data) <= n
+        return data
+
 def RecvNBytes(socket, n, timeout = None):
     data_parts = []
     readsize = 0
@@ -181,7 +208,7 @@ class JsonRpc20:
     """JSON-RPC V2.0 data-structure / serializer
 
     :SeeAlso:   JSON-RPC 2.0 specification
-    :TODO:      catch simplejson.dumps not-serializable-exceptions
+    :TODO:      catch simpeljson.dumps not-serializable-exceptions
     """
     def __init__(self, dumps=simplejson.dumps, loads=simplejson.loads):
         """init: set serializer to use
