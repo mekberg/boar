@@ -173,16 +173,46 @@ class SocketDataSource(DataSource):
     def __init__(self, socket, data_size):
         self.socket = socket
         self.remaining = data_size
+        if self.remaining == 0:
+            self.socket.close()
 
     def bytes_left(self):
         return self.remaining
 
     def read(self, n):
+        if self.remaining == 0:
+            return ""
         bytes_to_read = min(n, self.remaining)
         data = RecvNBytes(self.socket, bytes_to_read)
         self.remaining -= bytes_to_read
         assert len(data) == bytes_to_read
         assert len(data) <= n
+        assert self.remaining >= 0
+        if self.remaining == 0:
+            self.socket.close()
+        return data
+
+class FileDataSource(DataSource):
+    def __init__(self, fo, data_size):
+        self.fo = fo
+        self.remaining = data_size
+        if self.remaining == 0:
+            self.fo.close()
+
+    def bytes_left(self):
+        return self.remaining
+
+    def read(self, n):
+        if self.remaining == 0:
+            return ""
+        bytes_to_read = min(n, self.remaining)
+        data = self.fo.read(bytes_to_read)
+        self.remaining -= bytes_to_read
+        assert len(data) == bytes_to_read
+        assert len(data) <= n
+        assert self.remaining >= 0
+        if self.remaining == 0:
+            self.fo.close()
         return data
 
 def RecvNBytes(socket, n, timeout = None):
@@ -407,6 +437,31 @@ def log_filedate( filename ):
 
 #----------------------
 
+HEADER_SIZE=13
+"""
+The header has 
+"""
+def pack_header(payload_size, binary_payload_size = None):
+    has_binary_payload = False
+    if binary_payload_size == None:
+        has_binary_payload = True
+        binary_payload_size = 0
+    header_str = struct.pack("!II?I", 0x01020304, payload_size,\
+                                 has_binary_payload, binary_payload_size)
+    assert len(header_str) == HEADER_SIZE
+    return header_str
+
+def unpack_header(header_str):
+    assert len(header_str) == HEADER_SIZE
+    magic, payload_size, has_binary_payload, binary_payload_size = \
+        struct.unpack("!II?I", header_str)
+    assert magic == 0x01020304, header_str
+    if binary_payload_size > 0:
+        assert has_binary_payload
+    else:
+        binary_payload_size = None
+    return payload_size, binary_payload_size
+
 import socket, select
 class TransportTcpIp:
     """Transport via socket.
@@ -451,8 +506,7 @@ class TransportTcpIp:
     def send( self, string ):
         if self.s is None:
             self.connect()
-        header = struct.pack("!II", 0x01020304, len(string))
-        assert len(header) == 8
+        header = pack_header(len(string))
         self.s.sendall( header )
         self.s.sendall( string )
         self.log( "TransportSocket.Send() --> "+repr(string) )
@@ -460,25 +514,28 @@ class TransportTcpIp:
     def recv( self ):
         if self.s is None:
             self.connect()
-        header = RecvNBytes(self.s, 8)
-        assert len(header) == 8, len(header)
-        magic, datasize = struct.unpack("!II", header)
-        assert magic == 0x01020304, header
+        header = RecvNBytes(self.s, HEADER_SIZE)
+        datasize, binary_data_size = unpack_header(header)
         data = RecvNBytes(self.s, datasize, 5.0)
         self.log( "TransportSocket.Recv() --> "+repr(data) )
-        return data
+        if binary_data_size != None:            
+            return data, SocketDataSource(self.s)
+        else:
+            return data, None
 
     def sendrecv( self, string ):
         """send data + receive data + close"""
+        data_source = None
         try:
             self.log("SendRecv id = " + str(id(self)))
             self.send( string )
             self.log("SendRecv Waiting for reply")
-            reply = self.recv()
+            reply, data_source = self.recv()
             self.log("SendRecv Got a reply")
-            return reply
+            return reply, data_source
         finally: 
-            self.close()
+            if data_source == None:
+                self.close()
 
     def init_server(self):
         if self.s:
@@ -503,23 +560,27 @@ class TransportTcpIp:
                     break
                 conn, addr = self.s.accept()
                 self.log( "TransportSocket.Serve(): %s connected" % repr(addr) )
-                header = RecvNBytes(conn, 8)
+                header = RecvNBytes(conn, HEADER_SIZE)
                 self.log( "TransportSocket.Serve(): got an header")
-                magic, datasize = struct.unpack("!II", header)
-                assert magic == 0x01020304, header
+                datasize, binary_data_size = unpack_header(header)
+                assert binary_data_size == None, "Not implemented yet"
                 data = RecvNBytes(conn, datasize, 5.0)
                 self.log( "TransportSocket.Serve(): Got a message: %s --> %s" % (repr(addr), repr(data)) )
-                result = handler(data)
+                result, datasource = handler(data)
                 self.log( "TransportSocket.Serve(): Message was handled ok" )
-                if result is not None:
-                    self.log( "TransportSocket.Serve(): Responding to %s <-- %s" % (repr(addr), repr(result)) )  
-                    header = struct.pack("!II", 0x01020304, len(result))
-                    assert len(header) == 8
+                assert result != None
+                self.log( "TransportSocket.Serve(): Responding to %s <-- %s" % (repr(addr), repr(result)) )  
+                if datasource:
+                    header = pack_header(len(result), datasource.bytes_left())
                     conn.sendall( header )
                     conn.sendall( result )
-                    self.log( "TransportSocket.Serve(): Response sent" )
+                    while datasource.bytes_left() > 0:
+                        conn.sendall(datasource.read(10000))
                 else:
-                    self.log( "TransportSocket.Serve(): Request was async - no reply" % repr(addr) )
+                    header = pack_header(len(result))
+                    conn.sendall( header )
+                    conn.sendall( result )
+                self.log( "TransportSocket.Serve(): Response sent" )
                 self.log( "TransportSocket.Serve(): %s close" % repr(addr) )
                 conn.close()
                 n_current += 1
@@ -571,7 +632,9 @@ class ServerProxy:
         else:
             req_str  = self.__data_serializer.dumps_request( methodname, kwargs, id )
 
-        resp_str = self.__transport.sendrecv( req_str )
+        resp_str, data_source = self.__transport.sendrecv( req_str )
+        if data_source:
+            return data_source
         resp = self.__data_serializer.loads_response( resp_str )
         return resp[0]
 
@@ -702,21 +765,26 @@ class Server:
             return self.__data_serializer.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND]), id )
 
         try:
+            data_source = None
             if isinstance(params, dict):
                 result = self.funcs[method]( **params )
             else:
                 result = self.funcs[method]( *params )
+            if isinstance(result, DataSource):
+                data_source = result
+                result = None
+
         except RPCFault, err:
-            return self.__data_serializer.dumps_error( err, id=None )
+            return self.__data_serializer.dumps_error( err, id=None ), data_source
         except Exception, err:
             print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
+            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id ), None
 
         try:
-            return self.__data_serializer.dumps_response( result, id )
+            return self.__data_serializer.dumps_response( result, id ), data_source
         except Exception, err:
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
+            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id ), None
 
     def serve(self, n=None):
         """serve (forever or for n communicaions).

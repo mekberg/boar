@@ -35,6 +35,7 @@ else:
 
 from common import *
 from blobreader import create_blob_reader
+from jsonrpc import FileDataSource
 
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
@@ -144,6 +145,21 @@ class Repo:
         if not recipe:
             raise ValueError("No such blob or recipe exists: "+sum)
         return recipe['size']
+
+    def get_blob_reader(self, sum, offset = 0, size = -1):
+        if self.has_raw_blob(sum):
+            blobsize = self.get_blob_size(sum)
+            if size == -1:
+                size = blobsize
+            assert blobsize <= offset + size
+            path = self.get_blob_path(sum)
+            fo = open(path, "rb")
+            fo.seek(offset)
+            return FileDataSource(fo, size)
+        recipe = self.get_recipe(sum)
+        if recipe:
+            assert False, "Recipes not implemented yet"
+        raise ValueError("No such blob or recipe exists: "+sum)
 
     def get_blob(self, sum, offset = 0, size = -1):
         """ Returns None if there is no such blob """
