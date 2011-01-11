@@ -438,6 +438,7 @@ def log_filedate( filename ):
 #----------------------
 
 HEADER_SIZE=13
+HEADER_MAGIC=0x12345678
 """
 The header has 
 """
@@ -446,7 +447,7 @@ def pack_header(payload_size, binary_payload_size = None):
     if binary_payload_size == None:
         has_binary_payload = True
         binary_payload_size = 0
-    header_str = struct.pack("!II?I", 0x01020304, payload_size,\
+    header_str = struct.pack("!II?I", HEADER_MAGIC, payload_size,\
                                  has_binary_payload, binary_payload_size)
     assert len(header_str) == HEADER_SIZE
     return header_str
@@ -455,7 +456,7 @@ def unpack_header(header_str):
     assert len(header_str) == HEADER_SIZE
     magic, payload_size, has_binary_payload, binary_payload_size = \
         struct.unpack("!II?I", header_str)
-    assert magic == 0x01020304, header_str
+    assert magic == HEADER_MAGIC, header_str
     if binary_payload_size > 0:
         assert has_binary_payload
     else:
@@ -563,7 +564,7 @@ class TransportTcpIp:
                 header = RecvNBytes(conn, HEADER_SIZE)
                 self.log( "TransportSocket.Serve(): got an header")
                 datasize, binary_data_size = unpack_header(header)
-                assert binary_data_size == None, "Not implemented yet"
+                assert binary_data_size == None, "Not implemented yet. Was: " + str(binary_data_size)
                 data = RecvNBytes(conn, datasize, 5.0)
                 self.log( "TransportSocket.Serve(): Got a message: %s --> %s" % (repr(addr), repr(data)) )
                 result, datasource = handler(data)
