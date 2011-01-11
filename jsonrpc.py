@@ -240,6 +240,9 @@ class JsonRpc20:
     :SeeAlso:   JSON-RPC 2.0 specification
     :TODO:      catch simpeljson.dumps not-serializable-exceptions
     """
+    dumps = simplejson.dumps
+    loads = simplejson.loads
+
     def __init__(self, dumps=simplejson.dumps, loads=simplejson.loads):
         """init: set serializer to use
 
@@ -437,8 +440,9 @@ def log_filedate( filename ):
 
 #----------------------
 
-HEADER_SIZE=13
+HEADER_SIZE=17
 HEADER_MAGIC=0x12345678
+HEADER_VERSION=1
 """
 The header has 
 """
@@ -447,15 +451,15 @@ def pack_header(payload_size, binary_payload_size = None):
     if binary_payload_size == None:
         has_binary_payload = True
         binary_payload_size = 0
-    header_str = struct.pack("!II?I", HEADER_MAGIC, payload_size,\
+    header_str = struct.pack("!III?I", HEADER_MAGIC, HEADER_VERSION, payload_size,\
                                  has_binary_payload, binary_payload_size)
     assert len(header_str) == HEADER_SIZE
     return header_str
 
 def unpack_header(header_str):
     assert len(header_str) == HEADER_SIZE
-    magic, payload_size, has_binary_payload, binary_payload_size = \
-        struct.unpack("!II?I", header_str)
+    magic, version, payload_size, has_binary_payload, binary_payload_size = \
+        struct.unpack("!III?I", header_str)
     assert magic == HEADER_MAGIC, header_str
     if binary_payload_size > 0:
         assert has_binary_payload
@@ -567,16 +571,17 @@ class TransportTcpIp:
                 assert binary_data_size == None, "Not implemented yet. Was: " + str(binary_data_size)
                 data = RecvNBytes(conn, datasize, 5.0)
                 self.log( "TransportSocket.Serve(): Got a message: %s --> %s" % (repr(addr), repr(data)) )
-                result, datasource = handler(data)
+                result = handler(data)
                 self.log( "TransportSocket.Serve(): Message was handled ok" )
                 assert result != None
                 self.log( "TransportSocket.Serve(): Responding to %s <-- %s" % (repr(addr), repr(result)) )  
-                if datasource:
-                    header = pack_header(len(result), datasource.bytes_left())
+                if isinstance(result, DataSource):
+                    dummy_result = JsonRpc20.dumps_response(None)
+                    header = pack_header(len(dummy_result), result.bytes_left())
                     conn.sendall( header )
-                    conn.sendall( result )
-                    while datasource.bytes_left() > 0:
-                        conn.sendall(datasource.read(10000))
+                    conn.sendall( dummy_result )
+                    while result.bytes_left() > 0:
+                        conn.sendall(result.read(10000))
                 else:
                     header = pack_header(len(result))
                     conn.sendall( header )
@@ -766,26 +771,24 @@ class Server:
             return self.__data_serializer.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND]), id )
 
         try:
-            data_source = None
             if isinstance(params, dict):
                 result = self.funcs[method]( **params )
             else:
                 result = self.funcs[method]( *params )
             if isinstance(result, DataSource):
-                data_source = result
-                result = None
+                return result
 
         except RPCFault, err:
-            return self.__data_serializer.dumps_error( err, id=None ), data_source
+            return self.__data_serializer.dumps_error( err, id=None )
         except Exception, err:
             print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id ), None
+            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
         try:
-            return self.__data_serializer.dumps_response( result, id ), data_source
+            return self.__data_serializer.dumps_response( result, id )
         except Exception, err:
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id ), None
+            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
     def serve(self, n=None):
         """serve (forever or for n communicaions).
