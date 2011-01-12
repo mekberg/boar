@@ -212,10 +212,7 @@ class Workdir:
     def get_front(self):
         if self.front:
             return self.front
-        if self.repoUrl.startswith("boar://"):
-            return client.connect(self.repoUrl)
-        else:
-            self.front = Front(Repo(self.repoUrl))
+        self.front = create_front(self.repoUrl)
         return self.front
 
     def exists_in_session(self, csum):
@@ -422,23 +419,28 @@ def load_meta_info(metapath):
         info = json.load(f)
     return info
 
+def create_front(repoUrl):
+    print "Opening a front from", repoUrl
+    if repoUrl.startswith("boar://"):
+        front = client.connect(repoUrl)
+        front.isRemote = True
+    else:
+        front = Front(Repo(repoUrl))
+        front.isRemote = False
+    return front
+
 def init_repo_from_meta(path):
     front = None
     msg = None
     meta = find_meta(path)
-    if meta:
-        pass # print "Found meta data at", meta
-    else:
-        print "No workdir found at", path
-        return None
+    if not meta:
+        raise UserError("No workdir found at %s" % path)
 
     info = load_meta_info(meta)
     repo_path = info['repo_path']
     session_name = info['session_name']
     session_id = info['session_id']
-
-    # print "Using repo at", repo_path, "with session", session_name
-    front = Front(Repo(repo_path))
+    front = create_front(repo_path)
     return front
 
 def create_blobinfo(abspath, sessionpath, md5sum):
