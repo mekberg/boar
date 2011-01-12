@@ -40,6 +40,7 @@ from blobrepo import repository
 from common import get_tree, my_relpath, convert_win_path_to_unix
 from boar_exceptions import UserError
 import server
+from front import Front
 
 def read_tree(path, skip = None):
     """Returns a mapping {filename: content, ...} for the given directory
@@ -118,16 +119,17 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.remove_at_teardown = []
         self.workdir = self.createTmpName()
         self.repopath = self.createTmpName()
+        self.repoUrl = self.repopath
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
         id = self.wd.get_front().mksession("TestSession")
         assert id == 1
 
-    def createWorkdir(self, tree, offset = ""):
+    def createWorkdir(self, repoUrl, tree = {}, offset = ""):
         wdroot = self.createTmpName()
         write_tree(wdroot, tree)
-        wd = workdir.Workdir(self.repopath, "TestSession", offset, None, wdroot)
+        wd = workdir.Workdir(repoUrl, "TestSession", offset, None, wdroot)
         self.assertTrue(wd.get_front().find_last_revision("TestSession"))
         return wd
 
@@ -198,9 +200,9 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def testOffsetCheckout(self):
         tree1 = {'file.txt': 'fc1',
                  'subdir1/subdirfile1.txt': 'fc2'}
-        wd = self.createWorkdir(tree1)
+        wd = self.createWorkdir(self.repoUrl, tree1)
         wd.checkin()
-        wd = self.createWorkdir({}, "subdir1")
+        wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
         wd.checkout()
         subtree = read_tree(wd.root, skip = ".meta")
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2'})
@@ -208,14 +210,14 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def testOffsetCheckin(self):
         tree1 = {'file.txt': 'fc1',
                  'subdir1/subdirfile1.txt': 'fc2'}
-        wd = self.createWorkdir(tree1)
+        wd = self.createWorkdir(self.repoUrl, tree1)
         wd.checkin()
-        wd = self.createWorkdir({}, "subdir1")
+        wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
         wd.checkout()
         subtree = read_tree(wd.root, skip = ".meta")
         write_tree(wd.root, {'newfile.txt': 'nf'}, create_root = False)
         wd.checkin()
-        wd = self.createWorkdir({}, "subdir1")
+        wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
         wd.checkout()
         subtree = read_tree(wd.root, skip = ".meta")
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2',
@@ -224,16 +226,16 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def testOverwriteImport(self):
         tree1 = {'file.txt': 'file.txt contents'}
         tree2 = {'file.txt': 'file.txt other contents'}
-        wd = self.createWorkdir(tree1)
+        wd = self.createWorkdir(self.repoUrl, tree1)
         wd.checkin()
-        wd = self.createWorkdir(tree2)
+        wd = self.createWorkdir(self.repoUrl, tree2)
         self.assertRaises(UserError, wd.checkin, add_only = True)
 
 class TestWorkdirWithServer(TestWorkdir):
     def create_server(self):
         for p in range(11000, 12000):
             try:
-                self.server = server.ThreadedBoarServer(self.repopath, p)
+                self.server = server.ThreadedBoarServer(self.raw_repopath, p)
                 self.port = p
                 break
             except socket.error, e:
@@ -243,13 +245,16 @@ class TestWorkdirWithServer(TestWorkdir):
     def setUp(self):
         self.remove_at_teardown = []
         self.workdir = self.createTmpName()
-        self.repopath = self.createTmpName()
-        repository.create_repository(self.repopath)
+        self.raw_repopath = self.createTmpName()
+        repository.create_repository(self.raw_repopath)
         os.mkdir(self.workdir)
         self.create_server()
         self.server.serve()
-        self.wd = workdir.Workdir("boar://localhost:%s/" % (self.port), "TestSession", "", 
+        self.repoUrl = "boar://localhost:%s/" % (self.port)
+        self.wd = workdir.Workdir(self.repoUrl, "TestSession", "", 
                                   None, self.workdir)
+        front = self.wd.get_front()
+        assert front.isRemote
         id = self.wd.get_front().mksession("TestSession")
         assert id == 1
 
