@@ -240,9 +240,6 @@ class JsonRpc20:
     :SeeAlso:   JSON-RPC 2.0 specification
     :TODO:      catch simpeljson.dumps not-serializable-exceptions
     """
-    dumps = simplejson.dumps
-    loads = simplejson.loads
-
     def __init__(self, dumps=simplejson.dumps, loads=simplejson.loads):
         """init: set serializer to use
 
@@ -253,8 +250,9 @@ class JsonRpc20:
                the invariant parts of the resulting json-object themselves,
                without using the given json-encoder-function.
         """
-        self.dumps = dumps
-        self.loads = loads
+        self.dumps = simplejson.dumps
+        self.loads = simplejson.loads
+
 
     def dumps_request( self, method, params=(), id=0 ):
         """serialize JSON-RPC-Request
@@ -401,6 +399,7 @@ class JsonRpc20:
         else:
             return data["result"], data["id"]
 
+jsonrpc20 = JsonRpc20()
 
 #=========================================
 # transports
@@ -447,9 +446,9 @@ HEADER_VERSION=1
 The header has 
 """
 def pack_header(payload_size, binary_payload_size = None):
-    has_binary_payload = False
+    has_binary_payload = True
     if binary_payload_size == None:
-        has_binary_payload = True
+        has_binary_payload = False
         binary_payload_size = 0
     header_str = struct.pack("!III?I", HEADER_MAGIC, HEADER_VERSION, payload_size,\
                                  has_binary_payload, binary_payload_size)
@@ -505,6 +504,7 @@ class TransportTcpIp:
             self.log( "close %s" % repr(self.addr) )
             self.s.close()
             self.s = None
+
     def __repr__(self):
         return "<TransportSocket, %s>" % repr(self.addr)
     
@@ -524,12 +524,13 @@ class TransportTcpIp:
         data = RecvNBytes(self.s, datasize, 5.0)
         self.log( "TransportSocket.Recv() --> "+repr(data) )
         if binary_data_size != None:            
-            return data, SocketDataSource(self.s)
+            return data, SocketDataSource(self.s, binary_data_size)
         else:
             return data, None
 
     def sendrecv( self, string ):
         """send data + receive data + close"""
+        self.close()
         data_source = None
         try:
             self.log("SendRecv id = " + str(id(self)))
@@ -576,7 +577,7 @@ class TransportTcpIp:
                 assert result != None
                 self.log( "TransportSocket.Serve(): Responding to %s <-- %s" % (repr(addr), repr(result)) )  
                 if isinstance(result, DataSource):
-                    dummy_result = JsonRpc20.dumps_response(None)
+                    dummy_result = jsonrpc20.dumps_response(None)
                     header = pack_header(len(dummy_result), result.bytes_left())
                     conn.sendall( header )
                     conn.sendall( dummy_result )
