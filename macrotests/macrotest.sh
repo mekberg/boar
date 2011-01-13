@@ -90,16 +90,16 @@ $CMD clone $REPO $CLONE || { echo "Couldn't clone repo"; exit 1; }
 $CMD diffrepo $REPO $CLONE || { echo "Some differences where found in cloned repo"; exit 1; }
 rm -r $CLONE || { echo "Couldn't remove cloned repo"; exit 1; }
 
-echo Test recipe checkout
-rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
-tar -xzf reciperepo.tar.gz
-REPO_PATH=`pwd`/reciperepo $CMD verify || { echo "Recipe repo failed verify"; exit 1; }
-REPO_PATH=`pwd`/reciperepo $CMD co Alice test_tree || { echo "Couldn't check out tree"; exit 1; }
-(cd test_tree && $CMD status -v) || { echo "Status command failed"; exit 1; }
-md5sum -c <<EOF || { echo "Recipe checkout failed"; exit 1; }
-9b97d0a697dc503fb4c53ea01bd23dc7  test_tree/alice.txt
-EOF
-rm -r reciperepo || { echo "Couldn't remove recipe repo"; exit 1; }
+# echo Test recipe checkout
+# rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+# tar -xzf reciperepo.tar.gz
+# REPO_PATH=`pwd`/reciperepo $CMD verify || { echo "Recipe repo failed verify"; exit 1; }
+# REPO_PATH=`pwd`/reciperepo $CMD co Alice test_tree || { echo "Couldn't check out tree"; exit 1; }
+# (cd test_tree && $CMD status -v) || { echo "Status command failed"; exit 1; }
+# md5sum -c <<EOF || { echo "Recipe checkout failed"; exit 1; }
+# 9b97d0a697dc503fb4c53ea01bd23dc7  test_tree/alice.txt
+# EOF
+# rm -r reciperepo || { echo "Couldn't remove recipe repo"; exit 1; }
 
 rm -r $REPO test_tree
 echo "All tests completed ok!"
