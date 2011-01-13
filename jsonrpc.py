@@ -460,9 +460,8 @@ def unpack_header(header_str):
     magic, version, payload_size, has_binary_payload, binary_payload_size = \
         struct.unpack("!III?I", header_str)
     assert magic == HEADER_MAGIC, header_str
-    if binary_payload_size > 0:
-        assert has_binary_payload
-    else:
+    if not has_binary_payload:
+        assert binary_payload_size == 0
         binary_payload_size = None
     return payload_size, binary_payload_size
 
