@@ -231,6 +231,16 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl, tree2)
         self.assertRaises(UserError, wd.checkin, add_only = True)
 
+    def testEmptyFile(self):
+        tree = {'file.txt': ''}
+        wd = self.createWorkdir(self.repoUrl, tree)
+        wd.checkin()
+        wd = self.createWorkdir(self.repoUrl)
+        wd.checkout()
+        co_tree = read_tree(wd.root, skip = ".meta")
+        self.assertEquals(tree, co_tree)
+
+
 class TestWorkdirWithServer(TestWorkdir):
     def create_server(self):
         for p in range(11000, 12000):
