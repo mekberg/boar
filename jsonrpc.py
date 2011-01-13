@@ -581,7 +581,7 @@ class TransportTcpIp:
                     conn.sendall( header )
                     conn.sendall( dummy_result )
                     while result.bytes_left() > 0:
-                        conn.sendall(result.read(10000))
+                        conn.sendall(result.read(2**14))
                 else:
                     header = pack_header(len(result))
                     conn.sendall( header )

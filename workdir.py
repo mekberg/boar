@@ -420,7 +420,6 @@ def load_meta_info(metapath):
     return info
 
 def create_front(repoUrl):
-    print "Opening a front from", repoUrl
     if repoUrl.startswith("boar://"):
         front = client.connect(repoUrl)
         front.isRemote = True
@@ -465,7 +464,7 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
     f = open(target_path, "wb")
     datareader = front.get_blob(blobname)
     while datareader.bytes_left() > 0:
-        f.write(datareader.read(1024))
+        f.write(datareader.read(2**14))
     f.close()
 
 def bloblist_to_dict(bloblist):
