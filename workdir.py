@@ -165,20 +165,34 @@ class Workdir:
             assert latest_rev > self.revision, \
                 "Workdir revision %s is later than latest repository revision %s?" % (self.revision, latest_rev)
             raise UserError("Workdir is not up to date. Please perform an update first.")
-        base_session = None
+        base_snapshot = None
         if not force_primary_session:
-            base_session = front.find_last_revision(self.sessionName)
+            base_snapshot = front.find_last_revision(self.sessionName)
         
-        front.create_session(base_session)
-
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
-        assert base_session or (not unchanged_files and not modified_files and not deleted_files)
+        assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
 
         if add_only and modified_files:
             raise UserError("This import would replace some existing files")
 
-        for f in new_files + modified_files:
+        if add_only:
+            deleted_files = []
+
+        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot)
+
+        if write_meta:
+            self.write_metadata()
+        return self.revision
+
+    def __create_snapshot(self, files, deleted_files, base_snapshot):
+        """ Creates a new snapshot of the files in this
+        workdir. Modified and new files are passed in the 'files'
+        argument, deleted files in the 'deleted_files' argument. The
+        new snapshot will be created as a modification of the snapshot
+        given in the 'base_snapshot' argument."""
+
+        for f in files:
             # A little hackish to store up the md5sums in one sweep
             # before starting to check them in. An attempt to reduce
             # the chance that the file is in disk cache when we read
@@ -189,25 +203,26 @@ class Workdir:
             # from disk. But that's complicated.
             self.cached_md5sum(strip_path_offset(self.offset, f))
 
-        for sessionpath in new_files + modified_files:
+        front = self.get_front()
+        front.create_session(base_snapshot)
+
+        for sessionpath in files:
             wd_path = strip_path_offset(self.offset, sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
             abspath = self.abspath(sessionpath)
             check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
 
-        if not add_only:
-            for f in deleted_files:
-                front.remove(f)
+        for f in deleted_files:
+            front.remove(f)
 
         session_info = {}
         session_info["name"] = self.sessionName
         session_info["timestamp"] = int(time.time())
         session_info["date"] = time.ctime()
         self.revision = front.commit(session_info)
-        self.blobinfos = None
-        if write_meta:
-            self.write_metadata()
+        self.blobinfos = None # Force reload of blobinfos
         return self.revision
+
 
     def get_front(self):
         if self.front:
