@@ -37,12 +37,25 @@ from common import *
 import settings
 
 def print_help():
-    print """Usage: 
-import [-w] [-u] <dir> <session_name>
-co <session_name> [destination]
-mkrepo <dir to create>
-list [session_name [revision_id]]
-find <filename>
+    print """Boar commands: 
+
+ci        Commit changes in a work directory
+clone     Create or update a clone of a repository
+co        Check out files from the repository
+diffrepo  Check if two repositories are identical
+info      Show some information about the current workdir
+import    Import the contents of a folder into your repository
+list      Show the contents of a repository or snapshot
+locate    Check if some non-versioned files are already present in a repository
+mkrepo    Create a new repository
+mksession Create a new session
+status    List any changes in the current work directory
+update    Update the current work directory from the repository
+verify    Verify the integrity of the repository
+
+For most commands, you can type "boar <command> --help" to get more
+information. The full command reference is available online at
+http://code.google.com/p/boar/wiki/CommandReference
 """
 
 def list_sessions(front):
