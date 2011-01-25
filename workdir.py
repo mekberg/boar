@@ -154,7 +154,7 @@ class Workdir:
         print "Workdir now at revision", self.revision
 
     def checkin(self, write_meta = True, force_primary_session = False, \
-                      add_only = False, dry_run = False):
+                      fail_on_modifications = False, add_only = False, dry_run = False):
         front = self.get_front()
         if dry_run:
             front = DryRunFront(front)
@@ -173,11 +173,12 @@ class Workdir:
             self.get_changes()
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
 
-        if add_only and modified_files:
+        if fail_on_modifications and modified_files:
             raise UserError("This import would replace some existing files")
 
         if add_only:
-            deleted_files = []
+            deleted_files = ()
+            modified_files = ()
 
         self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot)
 
