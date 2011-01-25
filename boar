@@ -219,7 +219,7 @@ def cmd_import(front, args):
     if options.verbose:
         wd.setLogOutput(sys.stdout)
     session_id = wd.checkin(write_meta = options.create_workdir, 
-                            add_only = True, dry_run = options.dry_run)
+                            fail_on_modifications = True, add_only = True, dry_run = options.dry_run)
     print "Checked in session id", session_id
 
 def cmd_update(wd, args):
@@ -230,7 +230,13 @@ def cmd_update(wd, args):
     wd.update(new_revision = options.revision)
 
 def cmd_ci(wd, args):
-    session_id = wd.checkin()
+    parser = OptionParser(usage="usage: boar ci [options]")
+    parser.add_option("-a", "--add-only", dest = "addonly", action="store_true",
+                      help="Only new files will be committed. Modified and deleted files will be ignored.")
+    (options, args) = parser.parse_args(args)
+    if args:
+        raise UserError("Unexpected arguments: "+str(args))
+    session_id = wd.checkin(add_only = options.addonly)
     print "Checked in session id", session_id
 
 def cmd_mksession(front, args):

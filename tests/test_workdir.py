@@ -222,6 +222,24 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         subtree = read_tree(wd.root, skip = ".meta")
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2',
                                    'newfile.txt': 'nf'})        
+
+    def testAddOnlyCommit(self):
+        """ Add-only commits should ignore modifications and
+        deletions, and only commit new files, if any. """
+        tree1 = {'modified.txt': 'mod1',
+                 'deleted.txt': 'del'}
+        wd = self.createWorkdir(self.repoUrl, tree1)
+        wd.checkin()
+        tree2 = {'modified.txt': 'mod2',
+                 'new.txt': 'new'}
+        wd = self.createWorkdir(self.repoUrl, tree2)
+        wd.checkin(add_only = True)
+        wd = self.createWorkdir(self.repoUrl)
+        wd.checkout()
+        newtree = read_tree(wd.root, skip = ".meta")
+        self.assertEqual(newtree, {'modified.txt': 'mod1',
+                                   'deleted.txt': 'del',
+                                   'new.txt': 'new'})
         
     def testOverwriteImport(self):
         tree1 = {'file.txt': 'file.txt contents'}
@@ -229,7 +247,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl, tree1)
         wd.checkin()
         wd = self.createWorkdir(self.repoUrl, tree2)
-        self.assertRaises(UserError, wd.checkin, add_only = True)
+        self.assertRaises(UserError, wd.checkin, fail_on_modifications = True)
 
     def testEmptyFile(self):
         tree = {'file.txt': ''}
