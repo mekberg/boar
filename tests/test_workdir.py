@@ -265,6 +265,26 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEquals(updated_tree, {'file2.txt': 'f2 mod1',
                                          'file3.txt': 'f3'})
 
+    def testUpdateDeletion(self):
+        """ Only file3.txt should be deleted by the update, since it
+        is unchanged. The other two should remain untouched."""
+        wd = self.createWorkdir(self.repoUrl, 
+                                {'file1.txt': 'f1', 
+                                 'file2.txt': 'f2', 
+                                 'file3.txt': 'f3'})
+        rev1 = wd.checkin()
+        wd = self.createWorkdir(self.repoUrl, {})
+        rev2 = wd.checkin()
+        wd_update = self.createWorkdir(self.repoUrl, 
+                                       {'file1.txt': 'f1 mod',
+                                        'file2.txt': 'f2 mod',
+                                        'file3.txt': 'f3'}, 
+                                       revision = rev1)
+        wd_update.update(log = open("/dev/null", "w"))
+        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        self.assertEquals(updated_tree, {'file1.txt': 'f1 mod',
+                                         'file2.txt': 'f2 mod'})
+
     def testEmptyFile(self):
         tree = {'file.txt': ''}
         wd = self.createWorkdir(self.repoUrl, tree)
