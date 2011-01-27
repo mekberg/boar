@@ -126,10 +126,10 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         id = self.wd.get_front().mksession("TestSession")
         assert id == 1
 
-    def createWorkdir(self, repoUrl, tree = {}, offset = ""):
+    def createWorkdir(self, repoUrl, tree = {}, offset = "", revision = None):
         wdroot = self.createTmpName()
         write_tree(wdroot, tree)
-        wd = workdir.Workdir(repoUrl, "TestSession", offset, None, wdroot)
+        wd = workdir.Workdir(repoUrl, "TestSession", offset, revision, wdroot)
         self.assertTrue(wd.get_front().find_last_revision("TestSession"))
         return wd
 
@@ -248,6 +248,22 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
         wd = self.createWorkdir(self.repoUrl, tree2)
         self.assertRaises(UserError, wd.checkin, fail_on_modifications = True)
+
+    def testUpdate(self):
+        wd = self.createWorkdir(self.repoUrl, 
+                                {'file2.txt': 'f2'})
+        rev1 = wd.checkin()
+        wd = self.createWorkdir(self.repoUrl,
+                                {'file2.txt': 'f2 mod2', # modified file
+                                 'file3.txt': 'f3'}) # new file
+        rev2 = wd.checkin()
+        wd_update = self.createWorkdir(self.repoUrl, 
+                                       {'file2.txt': 'f2 mod1'}, 
+                                       revision = rev1)
+        wd_update.update(log = open("/dev/null", "w"))
+        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        self.assertEquals(updated_tree, {'file2.txt': 'f2 mod1',
+                                         'file3.txt': 'f3'})
 
     def testEmptyFile(self):
         tree = {'file.txt': ''}

@@ -115,13 +115,10 @@ class Workdir:
             target_path = os.path.join(self.root, target)
             fetch_blob(front, info['md5sum'], target_path, overwrite = False)
 
-    def update(self, new_revision = None):
+    def update(self, new_revision = None, log = sys.stdout):
         assert self.revision
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
-        if modified_files:
-            raise UserError("There must be no modified files when performing an update.\n"+\
-                                "Run a 'status' command to see what files are modified.")
         front = self.get_front()
         if new_revision:
             if not front.has_snapshot(self.sessionName, new_revision):
@@ -134,24 +131,30 @@ class Workdir:
         for b in new_bloblist:
             if not b['filename'].startswith(self.offset):
                 continue
+            if b['filename'] in modified_files:
+                print >>log, "Skipping update of modified file", b['filename']
+                continue
             target_wdpath = strip_path_offset(self.offset, b['filename'])
             target_abspath = os.path.join(self.root, target_wdpath)
             if not os.path.exists(target_abspath) or self.cached_md5sum(target_wdpath) != b['md5sum']:
-                print "Updating:", b['filename']
+                print >>log, "Updating:", b['filename']
                 fetch_blob(front, b['md5sum'], target_abspath, overwrite = True)
         for b in old_bloblist:
             if b['filename'] not in new_bloblist_dict:
+                if b['filename'] in modified_files:
+                    print >>log, "Skipping deletion of modified file", b['filename']
+                    continue
                 try:
                     os.remove(self.abspath(b['filename']))
-                    print "Deleted:", b['filename']
+                    print >>log, "Deleted:", b['filename']
                 except:
-                    print "Deletion failed:", b['filename']
+                    print >>log, "Deletion failed:", b['filename']
         self.revision = new_revision
         self.blobinfos = None
         self.bloblist_csums = None
         self.tree = None
         self.write_metadata()
-        print "Workdir now at revision", self.revision
+        print >>log, "Workdir now at revision", self.revision
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                       fail_on_modifications = False, add_only = False, dry_run = False):
