@@ -265,6 +265,23 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEquals(updated_tree, {'file2.txt': 'f2 mod1',
                                          'file3.txt': 'f3'})
 
+    def testUpdateWithOffset(self):
+        wd = self.createWorkdir(self.repoUrl, 
+                                {'subdir/d/file2.txt': 'f2'})
+        rev1 = wd.checkin()
+        wd = self.createWorkdir(self.repoUrl,
+                                {'subdir/d/file2.txt': 'f2 mod2', # modified file
+                                 'subdir/d/file3.txt': 'f3'}) # new file
+        rev2 = wd.checkin()
+        wd_update = self.createWorkdir(self.repoUrl, 
+                                       {'d/file2.txt': 'f2 mod1'}, 
+                                       revision = rev1,
+                                       offset = "subdir")
+        wd_update.update(log = open("/dev/null", "w"))
+        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        self.assertEquals(updated_tree, {'d/file2.txt': 'f2 mod1',
+                                         'd/file3.txt': 'f3'})
+
     def testUpdateDeletion(self):
         """ Only file3.txt should be deleted by the update, since it
         is unchanged. The other two should remain untouched."""
@@ -284,6 +301,27 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         updated_tree = read_tree(wd_update.root, skip = ".meta")
         self.assertEquals(updated_tree, {'file1.txt': 'f1 mod',
                                          'file2.txt': 'f2 mod'})
+
+    def testUpdateDeletionWithOffset(self):
+        """ Only file3.txt should be deleted by the update, since it
+        is unchanged. The other two should remain untouched."""
+        wd = self.createWorkdir(self.repoUrl, 
+                                {'subdir/d/file1.txt': 'f1', 
+                                 'subdir/d/file2.txt': 'f2', 
+                                 'subdir/d/file3.txt': 'f3'})
+        rev1 = wd.checkin()
+        wd = self.createWorkdir(self.repoUrl, {})
+        rev2 = wd.checkin()
+        wd_update = self.createWorkdir(self.repoUrl, 
+                                       {'d/file1.txt': 'f1 mod',
+                                        'd/file2.txt': 'f2 mod',
+                                        'd/file3.txt': 'f3'}, 
+                                       revision = rev1,
+                                       offset = "subdir")
+        wd_update.update(log = open("/dev/null", "w"))
+        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        self.assertEquals(updated_tree, {'d/file1.txt': 'f1 mod',
+                                         'd/file2.txt': 'f2 mod'})
 
     def testEmptyFile(self):
         tree = {'file.txt': ''}
