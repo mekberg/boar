@@ -183,13 +183,13 @@ class Workdir:
             deleted_files = ()
             modified_files = ()
 
-        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot)
+        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front)
 
         if write_meta:
             self.write_metadata()
         return self.revision
 
-    def __create_snapshot(self, files, deleted_files, base_snapshot):
+    def __create_snapshot(self, files, deleted_files, base_snapshot, front):
         """ Creates a new snapshot of the files in this
         workdir. Modified and new files are passed in the 'files'
         argument, deleted files in the 'deleted_files' argument. The
@@ -207,7 +207,6 @@ class Workdir:
             # from disk. But that's complicated.
             self.cached_md5sum(strip_path_offset(self.offset, f))
 
-        front = self.get_front()
         front.create_session(base_snapshot)
 
         for sessionpath in files:
