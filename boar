@@ -200,7 +200,11 @@ def cmd_list(front, args):
         print "Duuuh?"
 
 def cmd_verify(front, args):
-    verify_repo(front.repo)
+    parser = OptionParser(usage="usage: boar verify [options]")
+    parser.add_option("-q", "--quick", dest = "quick", action="store_true",
+                      help="Only check that the repository looks reasonably ok (skip blob checksumming)")
+    (options, args) = parser.parse_args(args)
+    verify_repo(front.repo, verify_blobs = not options.quick)
 
 def cmd_import(front, args):
     parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
