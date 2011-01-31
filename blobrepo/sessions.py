@@ -153,6 +153,7 @@ class SessionWriter:
         self.metadatas = bloblist_to_dict(session.get_raw_bloblist())
         self.base_session = session.properties.get("base_session", None)
         sessioninfo = session.properties.get("client_data")
+        added_blobs = set()
         for metadata in self.metadatas.values():
             if not 'md5sum' in metadata:
                 # Probably a deletion entry
@@ -160,9 +161,10 @@ class SessionWriter:
             blobname = metadata['md5sum']
             assert session.repo.has_raw_blob(blobname), "Other repo does not appear to have the blob we need"+\
                 "(Recipe? Cloning of recipes not yet supported)"
-            if not self.repo.has_blob(blobname):
+            if not self.repo.has_blob(blobname) and blobname not in added_blobs:
                 size = session.repo.get_blob_size(blobname)
                 offset = 0
+                added_blobs.add(blobname)
                 while offset < size:
                     data = session.repo.get_blob(blobname, offset, 1000000)
                     assert len(data) > 0

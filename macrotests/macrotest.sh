@@ -90,6 +90,17 @@ $CMD clone $REPO $CLONE || { echo "Couldn't clone repo"; exit 1; }
 $CMD diffrepo $REPO $CLONE || { echo "Some differences where found in cloned repo"; exit 1; }
 rm -r $CLONE || { echo "Couldn't remove cloned repo"; exit 1; }
 
+echo --- Test repo cloning with duplicate files in a new session
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+mkdir test_tree || { echo "Couldn't create test tree"; exit 1; }
+echo "Identical Content" >test_tree/file1.txt || { echo "Couldn't create file1.txt"; exit 1; }
+echo "Identical Content" >test_tree/file2.txt || { echo "Couldn't create file2.txt"; exit 1; }
+REPO_PATH=$REPO $CMD mksession MyCloneTest || { echo "Couldn't create session"; exit 1; }
+REPO_PATH=$REPO $CMD import test_tree MyCloneTest || { echo "Couldn't import tree"; exit 1; }
+$CMD clone $REPO $CLONE || { echo "Couldn't clone repo"; exit 1; }
+$CMD diffrepo $REPO $CLONE || { echo "Some differences where found in cloned repo"; exit 1; }
+rm -r $CLONE || { echo "Couldn't remove cloned repo"; exit 1; }
+
 # echo --- Test recipe checkout
 # rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 # tar -xzf reciperepo.tar.gz
