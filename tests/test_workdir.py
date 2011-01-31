@@ -249,6 +249,21 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl, tree2)
         self.assertRaises(UserError, wd.checkin, fail_on_modifications = True)
 
+    def testImportDryRun(self):
+        """ Test that nothing is changed by a dry run commit """
+        wd = self.createWorkdir(self.repoUrl, {"file1.txt": "fc1", # modified
+                                               "file2.txt": "fc2"}) # deleted
+        wd.checkin()
+        wd = self.createWorkdir(self.repoUrl, {"file1.txt": "fc1 mod", # modified
+                                               'file3.txt': 'fc3'}) # new
+        id = wd.checkin(dry_run = True)
+        self.assertEquals(id, 0)
+        wd = self.createWorkdir(self.repoUrl)
+        wd.checkout()
+        newtree = read_tree(wd.root, skip = ".meta")
+        self.assertEquals(newtree, {'file1.txt': 'fc1',
+                                    'file2.txt': 'fc2'})
+
     def testUpdate(self):
         wd = self.createWorkdir(self.repoUrl, 
                                 {'file2.txt': 'f2'})
