@@ -21,10 +21,6 @@ import os
 import tempfile
 import re
 import sys
-if sys.version_info >= (2, 6):
-    import json
-else:
-    import simplejson as json
 import copy
 
 import repository
@@ -83,6 +79,7 @@ def bloblist_fingerprint(bloblist):
 class SessionWriter:
     def __init__(self, repo, base_session = None, session_id = None):
         self.repo = repo
+        self.max_blob_size = None
         self.base_session = base_session
         self.session_path = None
         self.metadatas = {}
@@ -172,6 +169,57 @@ class SessionWriter:
                     self.add_blob_data(blobname, data)
         return self.commit(sessioninfo)
 
+    def split_blob(self, blob, cut_positions):
+        """'Cuts' is a list of positions where to split the blob. If the
+        cut is at position n, the first part will end at byte n-1, and
+        the second part will begin with byte n as the first byte."""
+
+        cuts = cut_positions[:]
+        assert len(set(cuts)) == len(cuts), "Duplicate entry in cut list"
+        assert len(cuts) >= 1, "Empty cuts not allowed"
+        blob_size = self.repo.get_blob_size(blob)
+        blob_path = self.repo.get_blob_path(blob)
+        assert max(cuts) < blob_size and min(cuts) > 0, "Cut for %s out of range: %s" % (blob, cuts)
+        cuts.append(0) # Always have an implicit cut starting at 0
+        cuts.append(blob_size) # Always have an implicit cut ending at blob_size
+        cuts.sort()
+        added_blobs = set()
+        recipe_pieces = []
+        print "Splitting to dir", self.session_path
+        start = cuts.pop(0)
+        while len(cuts) > 0:
+            end = cuts.pop(0)
+            checksum = md5sum_file(blob_path, start, end)
+            print "Splitting", start,end,checksum
+            recipe_pieces.append({"source": checksum,
+                                  "offset": 0,
+                                  "length": end - start})
+            if self.repo.has_blob(checksum) or checksum in added_blobs:
+                start = end
+                continue
+            destination = os.path.join(self.session_path, checksum)
+            copy_file(blob_path, destination, start, end, checksum)
+            added_blobs.add(checksum)
+            start = end
+        recipe_path = os.path.join(self.session_path, blob + ".recipe")
+        assert not os.path.exists(recipe_path)
+        # TODO: resolve secondary recipes - only first level blobs allowed
+        write_json(recipe_path,
+                   {"method": "concat",
+                    "md5sum": blob,
+                    "size": blob_size,
+                    "pieces": recipe_pieces})
+        
+        # Exekvera transaktionen
+        #     Kopiera de nya blobbarna till sina positioner
+        #     Kopiera receptet till receptkatalogen
+        # Leta efter redundanta blobbar och ta bort dem
+
+        # Saker att testa: Splitta en fil i flera identiska delar
+        # Saker att testa: Splitta en fil i delar som finns som recept
+        # Saker att testa: Splitta en fil i delar som finns som blobbar
+
+
     def commit(self, sessioninfo = {}):
         assert self.session_path != None
         for name, summer in self.blob_checksummers.items():
@@ -181,14 +229,10 @@ class SessionWriter:
                      'fingerprint': fingerprint,
                      'client_data': sessioninfo}
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
-        assert not os.path.exists(bloblist_filename)
-        with open(bloblist_filename, "wb") as f:
-            json.dump(self.metadatas.values(), f, indent = 4)
+        write_json(bloblist_filename, self.metadatas.values())
 
         session_filename = os.path.join(self.session_path, "session.json")
-        assert not os.path.exists(session_filename)
-        with open(session_filename, "wb") as f:
-            json.dump(metainfo, f, indent = 4)
+        write_json(session_filename, metainfo)
 
         md5_filename = os.path.join(self.session_path, "session.md5")
         with open(md5_filename, "wb") as f:
@@ -223,8 +267,7 @@ class SessionReader:
         self.verified = False
 
         path = os.path.join(self.path, "session.json")
-        with open(path, "rb") as f:
-            self.properties = json.load(f)
+        self.properties = read_json(path)
 
     def get_properties(self):
         return copy.copy(self.properties)
@@ -254,8 +297,7 @@ class SessionReader:
     def __load_bloblist(self):
         if self.bloblist == None:
             path = os.path.join(self.path, "bloblist.json")
-            with open(path, "rb") as f:
-                self.bloblist = json.load(f)
+            self.bloblist = read_json(path)
 
     def get_all_blob_infos(self):
         self.__load_bloblist()

@@ -22,6 +22,9 @@ DATA1_MD5 = "5558e0551622725a5fa380caffa94c5d"
 DATA2 = "tjosan hejsan"
 DATA2_MD5 = "923574a1a36aebc7e1f586b7d363005e"
 
+DATA3 = "tjosan hejsan tjosan hejsan hejsan"
+DATA3_MD5 = "cafa2ed1e085869b3bfe9e43b60e7a5a"
+
 TMPDIR=tempfile.gettempdir()
 
 if __name__ == '__main__':
@@ -39,9 +42,12 @@ class TestBlobRepo(unittest.TestCase):
                           "md5sum": DATA1_MD5}
         self.fileinfo2 = {"filename": "testfilename2.txt",
                           "md5sum": DATA2_MD5}
+        self.fileinfo3 = {"filename": "testfilename3.txt",
+                          "md5sum": DATA3_MD5}
 
     def tearDown(self):
-        shutil.rmtree(self.repopath, ignore_errors = True)
+        #shutil.rmtree(self.repopath, ignore_errors = True)
+        print "Skipping remove"
 
     def assertListsEqualAsSets(self, lst1, lst2):
         self.assertEqual(len(lst1), len(lst2))
@@ -112,6 +118,19 @@ class TestBlobRepo(unittest.TestCase):
     def test_remove_nonexisting(self):
         writer1 = self.repo.create_session()
         self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")        
+
+    def test_split(self):
+        #  0          1        2         3
+        #  0123456789012345678901234567890123456789
+        # "tjosan hejsan tjosan hejsan hejsan"
+        # cafa2ed1e085869b3bfe9e43b60e7a5a
+        writer = self.repo.create_session()
+        writer.add_blob_data(DATA3_MD5, DATA3)
+        writer.add(self.fileinfo3)
+        writer.commit()
+        writer = self.repo.create_session()
+        writer.split_blob("cafa2ed1e085869b3bfe9e43b60e7a5a", [14,28])
+        writer.commit()
 
 if __name__ == '__main__':
     unittest.main()
