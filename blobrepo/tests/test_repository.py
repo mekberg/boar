@@ -131,6 +131,8 @@ class TestBlobRepo(unittest.TestCase):
         writer = self.repo.create_session()
         writer.split_blob("cafa2ed1e085869b3bfe9e43b60e7a5a", [14,28])
         writer.commit()
+        redundant = list(self.repo.find_redundant_raw_blobs())
+        self.assertEquals(redundant, ["cafa2ed1e085869b3bfe9e43b60e7a5a"])
 
 if __name__ == '__main__':
     unittest.main()
