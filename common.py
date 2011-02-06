@@ -22,6 +22,20 @@ import os
 import sys
 import platform
 
+if sys.version_info >= (2, 6):
+    import json
+else:
+    import simplejson as json
+
+def write_json(filename, obj):
+    assert not os.path.exists(filename), "File already exists: " + filename
+    with open(filename, "wb") as f:
+        json.dump(obj, f, indent = 4)
+
+def read_json(filename):
+    with open(filename, "rb") as f:
+        return json.load(f)
+
 """ This file contains code that is generally useful, without being
 specific for any project """
 
@@ -70,14 +84,28 @@ def md5sum_file(f, start = 0, end = None):
             return md5sum_fileobj(fobj, start, end)
     return md5sum_fileobj(f, start, end)
 
-def copy_file(source, destination, start = 0, end = None):
+def copy_file(source, destination, start = 0, end = None, expected_md5sum = None):
     assert os.path.exists(source), "Source doesn't exist"
-    assert not os.path.exists(destination), "Destination already exist"    
+    assert not os.path.exists(destination), "Destination already exist"
+    m = hashlib.md5()
     with open(source, "rb") as sobj:
         reader = file_reader(sobj, start, end)
         with open(destination, "wb") as dobj:
             for block in reader:
+                if expected_md5sum:
+                    m.update(block)
                 dobj.write(block)
+    if expected_md5sum:
+        assert m.hexdigest() == expected_md5sum, \
+            "Copied file did not have expected md5sum"
+
+def move_file(source, destination, mkdirs = False):
+    assert not os.path.exists(destination)
+    dirname = os.path.dirname(destination)
+    if mkdirs and not os.path.exists(dirname):
+        os.makedirs(dirname)
+    os.rename(source, destination)
+    
 
 def convert_win_path_to_unix(path):
     """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
@@ -208,34 +236,4 @@ def get_tree(root, skip = [], absolute_paths = False):
         assert not ".." in f.split("/"), "Was:" + f
         assert not "\\" in f, "Was:" + f
     return all_files
-
-
-class UNUSED_TreeWalker:
-    def __init__(self, path):
-        assert os.path.exists(path)
-        self.queue = [path]
-        self.nextdir = None
-
-    def __iter__(self):
-        return self
-
-    def next(self):
-        """ Returns the next entry as a tuple, (dirname, entryname) """
-        if self.nextdir:
-            for name in os.listdir(self.nextdir):
-                self.queue.append(os.path.join(self.nextdir, name))
-            self.nextdir = None
-        if not self.queue:
-            raise StopIteration()
-        item = self.queue.pop(0)
-        if os.path.isdir(item):
-            self.nextdir = item
-        result = os.path.dirname(item), os.path.basename(item)
-        return result
-
-    def skip_dir(self):
-        """ Prevents descent into the directory that was returned by
-        next() the last time it was called. 
-        """
-        self.nextdir = None
 

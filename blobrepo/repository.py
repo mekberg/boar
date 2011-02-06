@@ -28,11 +28,6 @@ import sessions
 
 #TODO: use/modify the session reader so that we don't have to use json here
 import sys
-if sys.version_info >= (2, 6):
-    import json
-else:
-    import simplejson as json
-
 from common import *
 from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
@@ -84,6 +79,13 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, TMP_DIR))
     with open(os.path.join(repopath, "recovery.txt"), "w") as f:
         f.write(recoverytext)
+
+def is_recipe_filename(filename):
+    filename_parts = filename.split(".")
+    return len(filename_parts) == 2 \
+        and filename_parts[1] == "recipe" \
+        and is_md5sum(filename_parts[0])
+            
     
 class Repo:
     def __init__(self, repopath):
@@ -112,9 +114,11 @@ class Repo:
         assert is_md5sum(sum), "Was: %s" % (sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
 
-    def get_recipe_path(self, sum):
-        assert is_md5sum(sum)
-        return os.path.join(self.repopath, RECIPES_DIR, sum + ".recipe")
+    def get_recipe_path(self, recipe):
+        if is_recipe_filename(recipe):
+            recipe = recipe.split(".")[0]
+        assert is_md5sum(recipe)
+        return os.path.join(self.repopath, RECIPES_DIR, recipe + ".recipe")
 
     def has_raw_blob(self, sum):
         """Returns true if there is an actual (non-recipe based)
@@ -133,8 +137,7 @@ class Repo:
         recpath = self.get_recipe_path(sum)
         if not os.path.exists(recpath):
             return None
-        with open(recpath) as f:
-            recipe = json.load(f)
+        recipe = read_json(f)
         return recipe
 
     def get_blob_size(self, sum):
@@ -297,6 +300,7 @@ class Repo:
         assert result > 0, "Corrupted queue directory - illegal session id"
         return result
 
+
     def process_queue(self):
         session_id = self.get_queued_session_id()
         if session_id == None:
@@ -313,28 +317,47 @@ class Repo:
     
         # Check the existence of all required files
         # TODO: check the contents for validity
-        with open(os.path.join(queued_item, "session.json"), "rb") as f:
-            meta_info = json.load(f)
-        contents = [x for x in os.listdir(queued_item) if not is_md5sum(x)]
-        assert set(contents) == \
+        meta_info = read_json(os.path.join(queued_item, "session.json"))
+        
+        contents = os.listdir(queued_item)
+        # Check that there are no unexpected files in the snapshot,
+        # and perform a simple test for json well-formedness
+        for filename in contents:
+            if is_md5sum(filename): 
+                continue # Blob
+            if filename == meta_info['fingerprint']+".fingerprint":
+                continue # Fingerprint file
+            if filename in ["session.json", "bloblist.json"]:
+                read_json(os.path.join(queued_item, filename)) # Check if malformed
+                continue
+            if filename in ["session.md5"]:
+                continue
+            if is_recipe_filename(filename):
+                read_json(os.path.join(queued_item, filename)) # Check if malformed
+                continue
+            assert False, "Unexpected file in new session:" + filename
+
+        # Check that all necessary files are present in the snapshot
+        assert set(contents) >= \
             set([meta_info['fingerprint']+".fingerprint",\
                      "session.json", "bloblist.json", "session.md5"]), \
-                     "Missing or unexpected files in queue dir: "+str(contents)
+                     "Missing files in queue dir: "+str(contents)
 
         # Everything seems OK, move the blobs and consolidate the session
         for filename in items:
-            if not is_md5sum(filename):
-                continue
-            blob_to_move = os.path.join(queued_item, filename)
-            destination_path = self.get_blob_path(filename)
-            assert not os.path.exists(destination_path)
-            dir = os.path.dirname(destination_path)
-            if not os.path.exists(dir):
-                os.makedirs(dir)
-            os.rename(blob_to_move, destination_path)
-            #print "Moving", os.path.join(queued_item, filename),"to", destination_path
+            if is_md5sum(filename):
+                blob_to_move = os.path.join(queued_item, filename)
+                destination_path = self.get_blob_path(filename)
+                move_file(blob_to_move, destination_path, mkdirs = True)
+            elif is_recipe_filename(filename):
+                recipe_to_move = os.path.join(queued_item, filename)
+                destination_path = self.get_recipe_path(filename)
+                move_file(recipe_to_move, destination_path, mkdirs = True)
+            else:
+                pass # The rest becomes a snapshot definition directory
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         shutil.move(queued_item, session_path)
         assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
-        #print "Done"
+
+
