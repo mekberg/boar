@@ -1,5 +1,23 @@
 from common import *
 
+""" A recipe has the following format:
+
+{
+    "method": "concat",
+    "md5sum": "9b97d0a697dc503fb4c53ea01bd23dc7",
+    "size": 8469,
+
+    "pieces": [
+       {"source": "82a6c69d071b6d84b18912a2fa6725a4",
+        "offset": 0,
+        "size": 5000},
+       {"source": "c7eac275a3810a395fda6eeb7786c0e9",
+        "offset": 0,
+        "size": 3469}
+    ]
+}
+
+"""
 
 def create_blob_reader(recipe, repo):
     assert recipe
