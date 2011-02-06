@@ -38,22 +38,30 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
-def md5sum_fileobj(f):
+def md5sum_fileobj(f, start = 0, end = None):
+    """Accepts a file object and returns the md5sum."""
     m = hashlib.md5()
-    f.seek(0)
-    while True:
-        data = f.read(2 ** 20)
+    f.seek(0, os.SEEK_END)
+    real_end = f.tell()
+    assert end <= real_end, "Can't checksum past end of file"
+    f.seek(start)
+    if end == None:
+        end = real_end
+    bytes_left = real_end - start
+    while bytes_left > 0:
+        data = f.read(min(bytes_left, 2 ** 20))
+        assert data != "", "Unexpected failed read"
+        bytes_left -= len(data)
         m.update(data)
-        if data == "":
-            break
     return m.hexdigest()
 
-def md5sum_file(f):
+def md5sum_file(f, start = 0, end = None):
+    """Accepts a filename or a file object and returns the md5sum."""
     assert f, "File must not be None"
     if isinstance(f, basestring):
         with open(f, "rb") as fobj:
-            return md5sum_fileobj(fobj)
-    return md5sum_fileobj(f)
+            return md5sum_fileobj(fobj, start, end)
+    return md5sum_fileobj(f, start, end)
     
 
 def convert_win_path_to_unix(path):
