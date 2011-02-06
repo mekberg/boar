@@ -126,6 +126,9 @@ class Repo:
         blobpath = self.get_blob_path(sum)
         return os.path.exists(blobpath)
 
+    def has_recipe_blob(self, sum):
+        return os.path.exists(self.get_recipe_path(sum))
+
     def has_blob(self, sum):
         """Returns true if there is a blob with the given
         checksum. The blob may be raw or recipe-based."""
@@ -216,18 +219,18 @@ class Repo:
         blobpattern = re.compile("/([0-9a-f]{32})$")
         assert blobpattern.search("b5/b5fb453aeaaef8343353cc1b641644f9")
         tree = get_tree(os.path.join(self.repopath, BLOB_DIR))
-        matches = []
+        matches = set()
         for f in tree:
             m = blobpattern.search(f)
             if m:
-                matches.append(m.group(1))
+                matches.add(m.group(1))
         blobpattern = re.compile("([0-9a-f]{32})\\.recipe$")
         tree = get_tree(os.path.join(self.repopath, RECIPES_DIR))
         for f in tree:
             m = blobpattern.search(f)
             if m:
-                matches.append(m.group(1))
-        return matches
+                matches.add(m.group(1))
+        return list(matches)
 
     def verify_blob(self, sum):
         recipe = self.get_recipe(sum)
@@ -240,6 +243,12 @@ class Repo:
         else:
             raise ValueError("No such blob or recipe: " + sum)
         return verified_ok 
+
+    def find_redundant_raw_blobs(self):
+        all_blobs = self.get_blob_names()
+        for blob in all_blobs:
+            if self.has_recipe_blob(blob) and self.has_raw_blob(blob):
+                yield blob
 
     def isIdentical(self, other_repo):
         """ Returns True iff the other repo contains the same sessions
