@@ -33,6 +33,22 @@ def is_md5sum(str):
 
 assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 
+def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
+    """Accepts a file object and yields the specified part of the file
+    as a sequence of blocks with length <= blocksize."""
+    f.seek(0, os.SEEK_END)
+    real_end = f.tell()
+    assert end == None or end <= real_end, "Can't checksum past end of file"
+    f.seek(start)
+    if end == None:
+        end = real_end
+    bytes_left = end - start
+    while bytes_left > 0:
+        data = f.read(min(bytes_left, blocksize))
+        assert data != "", "Unexpected failed read"
+        bytes_left -= len(data)
+        yield data
+
 def md5sum(data):
     m = hashlib.md5()
     m.update(data)
@@ -41,18 +57,9 @@ def md5sum(data):
 def md5sum_fileobj(f, start = 0, end = None):
     """Accepts a file object and returns the md5sum."""
     m = hashlib.md5()
-    f.seek(0, os.SEEK_END)
-    real_end = f.tell()
-    assert end <= real_end, "Can't checksum past end of file"
-    f.seek(start)
-    if end == None:
-        end = real_end
-    bytes_left = real_end - start
-    while bytes_left > 0:
-        data = f.read(min(bytes_left, 2 ** 20))
-        assert data != "", "Unexpected failed read"
-        bytes_left -= len(data)
-        m.update(data)
+    for block in file_reader(f, start, end):
+        assert block != "", "Got an empty read"
+        m.update(block)
     return m.hexdigest()
 
 def md5sum_file(f, start = 0, end = None):
@@ -62,7 +69,15 @@ def md5sum_file(f, start = 0, end = None):
         with open(f, "rb") as fobj:
             return md5sum_fileobj(fobj, start, end)
     return md5sum_fileobj(f, start, end)
-    
+
+def copy_file(source, destination, start = 0, end = None):
+    assert os.path.exists(source), "Source doesn't exist"
+    assert not os.path.exists(destination), "Destination already exist"    
+    with open(source, "rb") as sobj:
+        reader = file_reader(sobj, start, end)
+        with open(destination, "wb") as dobj:
+            for block in reader:
+                dobj.write(block)
 
 def convert_win_path_to_unix(path):
     """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
