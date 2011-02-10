@@ -169,45 +169,35 @@ class SessionWriter:
                     self.add_blob_data(blobname, data)
         return self.commit(sessioninfo)
 
+    # def split_file(source, dest_dir, cut_positions, want_piece = None):
+
     def split_blob(self, blob, cut_positions):
         """'Cuts' is a list of positions where to split the blob. If the
         cut is at position n, the first part will end at byte n-1, and
         the second part will begin with byte n as the first byte."""
 
-        cuts = cut_positions[:]
-        assert len(set(cuts)) == len(cuts), "Duplicate entry in cut list"
-        assert len(cuts) >= 1, "Empty cuts not allowed"
-        blob_size = self.repo.get_blob_size(blob)
         blob_path = self.repo.get_blob_path(blob)
-        assert max(cuts) < blob_size and min(cuts) > 0, "Cut for %s out of range: %s" % (blob, cuts)
-        cuts.append(0) # Always have an implicit cut starting at 0
-        cuts.append(blob_size) # Always have an implicit cut ending at blob_size
-        cuts.sort()
-        added_blobs = set()
+        pieces = split_file(blob_path, self.session_path, cut_positions, \
+                                lambda b: not self.repo.has_blob(b))
         recipe_pieces = []
-        print "Splitting to dir", self.session_path
-        start = cuts.pop(0)
-        while len(cuts) > 0:
-            end = cuts.pop(0)
-            checksum = md5sum_file(blob_path, start, end)
-            print "Splitting", start,end,checksum
-            recipe_pieces.append({"source": checksum,
-                                  "offset": 0,
-                                  "length": end - start})
-            if self.repo.has_blob(checksum) or checksum in added_blobs:
-                start = end
-                continue
-            destination = os.path.join(self.session_path, checksum)
-            copy_file(blob_path, destination, start, end, checksum)
-            added_blobs.add(checksum)
-            start = end
+        offset = 0
+        for piece in pieces:
+            piece_path = os.path.join(self.session_path, piece)
+            if self.repo.has_blob(piece):
+                piece_size = self.get_blob_size(piece)
+            else:
+                piece_size = os.path.getsize(piece_path)
+            recipe_pieces.append({"source": piece,
+                                  "offset": offset,
+                                  "length": piece_size})
+            
         recipe_path = os.path.join(self.session_path, blob + ".recipe")
         assert not os.path.exists(recipe_path)
         # TODO: resolve secondary recipes - only first level blobs allowed
         write_json(recipe_path,
                    {"method": "concat",
                     "md5sum": blob,
-                    "size": blob_size,
+                    "size": self.repo.get_blob_size(blob),
                     "pieces": recipe_pieces})
         
         # Exekvera transaktionen

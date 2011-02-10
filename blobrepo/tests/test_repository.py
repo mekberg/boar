@@ -46,8 +46,7 @@ class TestBlobRepo(unittest.TestCase):
                           "md5sum": DATA3_MD5}
 
     def tearDown(self):
-        #shutil.rmtree(self.repopath, ignore_errors = True)
-        print "Skipping remove"
+        shutil.rmtree(self.repopath, ignore_errors = True)
 
     def assertListsEqualAsSets(self, lst1, lst2):
         self.assertEqual(len(lst1), len(lst2))
