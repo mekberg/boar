@@ -26,6 +26,7 @@ import copy
 import repository
 import shutil
 import hashlib
+import types
 
 from common import *
 
@@ -249,6 +250,8 @@ class SessionWriter:
 class SessionReader:
     def __init__(self, repo, session_path):
         assert session_path, "Session path must be given"
+        assert type(session_path) in types.StringTypes, \
+            "Session path must be a string. Was: "+repr(session_path)
         self.path = session_path
         self.repo = repo
         assert os.path.exists(self.path), "No such session path:" + self.path
@@ -264,21 +267,6 @@ class SessionReader:
 
     def get_fingerprint(self):
         return self.properties['fingerprint']
-
-    def verify(self):
-        if self.verified:
-            return
-        bloblist = self.get_all_blob_infos()
-        expected_fingerprint = bloblist_fingerprint(bloblist)
-        assert self.properties['fingerprint'] == expected_fingerprint
-        contents = os.listdir(self.path)
-        assert set(contents) == \
-            set([expected_fingerprint+".fingerprint",\
-                     "session.json", "bloblist.json", "session.md5"]), \
-                     "Missing or unexpected files in session dir: "+self.path
-        for blobinfo in bloblist:
-            assert repo.has_blob(blobinfo['md5sum'])
-        self.verified = True
 
     def get_raw_bloblist(self):
         self.__load_bloblist()
