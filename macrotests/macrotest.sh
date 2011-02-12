@@ -18,12 +18,18 @@
 TESTDIR=~+/`dirname $0`
 cd $TESTDIR
 
-export PATH="$PATH:$TESTDIR/../"
-CMD="boar"
+#export PATH="$PATH:$TESTDIR/../"
+CMD="$TESTDIR/../boar"
 REPO="$TESTDIR/TESTREPO"
 CLONE="${REPO}_CLONE"
 
 rm -r $REPO test_tree $CLONE 2>/dev/null
+
+echo --- Test --help flag
+for subcmd in ci clone co diffrepo info import list locate mkrepo mksession status update verify; do
+    ( REPO_PATH="" $CMD $subcmd --help | grep "Usage:" >/dev/null ) || \
+	{ echo "Subcommand '$subcmd' did not give a help message with --help flag"; exit 1; }
+done
 
 tar -xvzf test_tree.tar.gz || { echo "Couldn't create test tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 before check-in"; exit 1; }
