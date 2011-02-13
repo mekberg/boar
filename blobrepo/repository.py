@@ -67,8 +67,21 @@ bloblist.
 
 """
 
-class MisuseException(Exception):
-    pass
+class MisuseError(Exception):
+    def __init__(self, msg):
+        Exception.__init__(self, msg)
+
+class CorruptionError(Exception):
+    def __init__(self, msg):
+        Exception.__init__(self, msg)
+
+def misuse_assert(test, errormsg = None):
+    if not test:
+        raise MisuseError(errormsg)
+
+def integrity_assert(test, errormsg = None):
+    if not test:
+        raise CorruptionError(errormsg)
 
 def create_repository(repopath):
     os.mkdir(repopath)
@@ -95,10 +108,11 @@ class Repo:
             +"Was: " + repopath
         self.repopath = unicode(repopath)
         self.session_readers = {}
-        assert os.path.exists(self.repopath), "No such directory: %s" % (self.repopath)
-        assert os.path.exists(self.repopath + "/sessions")
-        assert os.path.exists(self.repopath + "/blobs")
-        assert os.path.exists(self.repopath + "/tmp")
+        misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
+        assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
+        integrity_assert(os.path.exists(self.repopath + "/sessions"), assert_msg)
+        integrity_assert(os.path.exists(self.repopath + "/blobs"), assert_msg)
+        integrity_assert(os.path.exists(self.repopath + "/tmp"), assert_msg)
         self.process_queue()
 
     def __str__(self):
