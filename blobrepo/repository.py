@@ -224,11 +224,6 @@ class Repo:
         session_dirs.append(0)
         return max(session_dirs) + 1            
 
-    def verify_all(self):
-        for sid in self.get_all_sessions():
-            session = sessions.SessionReader(self, sid)
-            session.verify()
-
     def get_blob_names(self):
         blobpattern = re.compile("/([0-9a-f]{32})$")
         assert blobpattern.search("b5/b5fb453aeaaef8343353cc1b641644f9")

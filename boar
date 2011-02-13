@@ -339,20 +339,11 @@ def cmd_co(args):
     wd.checkout()
 
 def cmd_find(front, args):
-    filename, = args
-    cs = md5sum_file(filename)
-    all_ids = front.get_session_ids()
-    all_ids.sort()
-    all_ids.reverse()
-    seen = set()
-    for i in all_ids:
-        info = front.get_session_info(i)
-        if info['name'] in seen:
-            continue
-        seen.add(info['name'])
-        for bi in front.get_session_bloblist(i):
-            if bi['md5sum'] == cs:
-                print info['name'] +":"+bi['filename']
+    cs, sessionName = args
+    sessionId = front.find_last_revision(sessionName)
+    for bi in front.get_session_bloblist(sessionId):
+        if bi['md5sum'] == cs:
+            print bi['filename']
 
 def cmd_clone(args):
     if len(args) == 0:

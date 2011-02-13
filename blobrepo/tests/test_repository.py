@@ -46,8 +46,7 @@ class TestBlobRepo(unittest.TestCase):
                           "md5sum": DATA3_MD5}
 
     def tearDown(self):
-        #shutil.rmtree(self.repopath, ignore_errors = True)
-        print "Skipping remove"
+        shutil.rmtree(self.repopath, ignore_errors = True)
 
     def assertListsEqualAsSets(self, lst1, lst2):
         self.assertEqual(len(lst1), len(lst2))
@@ -130,9 +129,14 @@ class TestBlobRepo(unittest.TestCase):
         writer.commit()
         writer = self.repo.create_session()
         writer.split_blob("cafa2ed1e085869b3bfe9e43b60e7a5a", [14,28])
-        writer.commit()
+        split_snapshot = writer.commit()
         redundant = list(self.repo.find_redundant_raw_blobs())
         self.assertEquals(redundant, ["cafa2ed1e085869b3bfe9e43b60e7a5a"])
+        os.remove(self.repo.get_blob_path("cafa2ed1e085869b3bfe9e43b60e7a5a"))
+        reader = self.repo.get_session(split_snapshot)
+        blobinfos = reader.get_all_blob_infos()
+        for bi in blobinfos:
+            assertTrue(self.repo.verify_blob(bi['md5sum']))
 
 if __name__ == '__main__':
     unittest.main()

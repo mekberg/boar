@@ -105,7 +105,45 @@ def move_file(source, destination, mkdirs = False):
     if mkdirs and not os.path.exists(dirname):
         os.makedirs(dirname)
     os.rename(source, destination)
-    
+
+
+
+def split_file(source, dest_dir, cut_positions, want_piece = None):
+    """'Cuts' is a list of positions where to split the source
+    file. All cuts must be within the bounds of the file. Cuts must
+    not occur at the very start or end of the file. If the cut is at
+    position n, the first part will end at byte n-1, and the second
+    part will begin with byte n as the first byte. The results will be
+    written to the dest_dir. Each individual file will be named by
+    its' md5sum. The 'want_piece' is an optional function to control
+    if a given part shall be written to disk or not. The function must
+    accept a single argument with the md5sum of the piece given as a
+    string, and must return True if the piece should be written to the
+    destination dir. This function returns a list of the pieces in the
+    order they should be concatenated to recreate the original file."""
+
+    cuts = cut_positions[:]
+    assert len(set(cuts)) == len(cuts), "Duplicate entry in cut list"
+    assert len(cuts) >= 1, "Empty cuts not allowed"
+    source_size = os.path.getsize(source)
+    assert max(cuts) < source_size and min(cuts) > 0, "Cut for %s out of range: %s" % (blob, cuts)
+    cuts.append(0) # Always have an implicit cut starting at 0
+    cuts.append(source_size) # Always have an implicit cut ending at source_size
+    cuts.sort()
+    added_blobs = []
+    start = cuts.pop(0)
+    while len(cuts) > 0:
+        end = cuts.pop(0)
+        checksum = md5sum_file(source, start, end)
+        if not want_piece(checksum) or checksum in added_blobs:
+            added_blobs.append(checksum)
+            start = end
+            continue
+        added_blobs.append(checksum)
+        destination = os.path.join(dest_dir, checksum)
+        copy_file(source, destination, start, end, checksum)
+        start = end
+    return added_blobs
 
 def convert_win_path_to_unix(path):
     """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
