@@ -96,10 +96,9 @@ class Workdir:
     def export_md5(self):
         assert not os.path.exists("md5sum.txt")
         front = self.get_front()
-        f = open("md5sum.txt", "w")
-        for info in front.get_session_bloblist(self.revision):
-            f.write(info['md5sum'] +" *" + info['filename'] + "\n")
-        f.close()
+        with StreamEncoder(open("md5sum.txt", "w"), errors = "strict") as f:
+            for info in front.get_session_bloblist(self.revision):
+                f.write(info['md5sum'] +" *" + info['filename'] + "\n")
 
     def checkout(self, write_meta = True):
         assert os.path.exists(self.root) and os.path.isdir(self.root)
