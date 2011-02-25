@@ -21,6 +21,8 @@ import re
 import os
 import sys
 import platform
+import locale
+import codecs
 
 if sys.version_info >= (2, 6):
     import json
@@ -257,6 +259,7 @@ def get_tree(root, skip = [], absolute_paths = False):
             if file_to_skip in names:
                 names.remove(file_to_skip)
         for name in names:
+            assert type(name) == unicode, "All filenames should be unicode"
             try:
                 fullpath = os.path.join(dirname, name)
             except:
@@ -275,3 +278,22 @@ def get_tree(root, skip = [], absolute_paths = False):
         assert not "\\" in f, "Was:" + f
     return all_files
 
+
+class StreamEncoder:
+    """ Wraps an output stream (typically sys.stdout) and encodes all
+    written strings according to the current preferred encoding, with
+    settable error handling. Using errors = "strict" will yield
+    identical behaviour to original sys.stdout."""
+
+    def __init__(self, stream, errors = "backslashreplace"):
+        assert errors in ("strict", "replace", "ignore", "backslashreplace")
+        self.errors = errors
+        self.stream = stream
+        self.codec_name = locale.getpreferredencoding()
+
+    def write(self, s):
+        if type(s) != unicode:
+            self.stream.write(s)
+            return
+        encoded_s = s.encode(self.codec_name, self.errors)
+        self.stream.write(encoded_s)
