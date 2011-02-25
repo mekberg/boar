@@ -481,6 +481,7 @@ def main():
 return_code = 0
 if __name__ == "__main__":
     t1 = time()
+    sys.stdout = StreamEncoder(sys.stdout)
     #cProfile.run('main()', "prof.txt")
     #import pstats
     #p = pstats.Stats('prof.txt')
