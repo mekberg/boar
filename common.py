@@ -282,7 +282,7 @@ def get_tree(root, skip = [], absolute_paths = False):
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all
     written strings according to the current preferred encoding, with
-    settable error handling. Using errors = "strict" will yield
+    configurable error handling. Using errors = "strict" will yield
     identical behaviour to original sys.stdout."""
 
     def __init__(self, stream, errors = "backslashreplace"):
@@ -297,3 +297,15 @@ class StreamEncoder:
             return
         encoded_s = s.encode(self.codec_name, self.errors)
         self.stream.write(encoded_s)
+
+    def close(self):
+        self.stream.close()
+
+    def __enter__(self):
+        """ Support for the 'with' statement """
+        return self
+
+    def __exit__(self, type, value, traceback):
+        """ Support for the 'with' statement """
+        self.close()
+
