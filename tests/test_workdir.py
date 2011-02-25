@@ -42,6 +42,10 @@ from boar_exceptions import UserError
 import server
 from front import Front
 
+class DevNull:
+    def write(self, s):
+        pass
+
 def read_tree(path, skip = None):
     """Returns a mapping {filename: content, ...} for the given directory
     tree"""
@@ -275,7 +279,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd_update = self.createWorkdir(self.repoUrl, 
                                        {'file2.txt': 'f2 mod1'}, 
                                        revision = rev1)
-        wd_update.update(log = open("/dev/null", "w"))
+        wd_update.update(log = DevNull())
         updated_tree = read_tree(wd_update.root, skip = ".meta")
         self.assertEquals(updated_tree, {'file2.txt': 'f2 mod1',
                                          'file3.txt': 'f3'})
@@ -292,7 +296,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                        {'d/file2.txt': 'f2 mod1'}, 
                                        revision = rev1,
                                        offset = "subdir")
-        wd_update.update(log = open("/dev/null", "w"))
+        wd_update.update(log = DevNull())
         updated_tree = read_tree(wd_update.root, skip = ".meta")
         self.assertEquals(updated_tree, {'d/file2.txt': 'f2 mod1',
                                          'd/file3.txt': 'f3'})
@@ -312,7 +316,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'file2.txt': 'f2 mod',
                                         'file3.txt': 'f3'}, 
                                        revision = rev1)
-        wd_update.update(log = open("/dev/null", "w"))
+        wd_update.update(log = DevNull())
         updated_tree = read_tree(wd_update.root, skip = ".meta")
         self.assertEquals(updated_tree, {'file1.txt': 'f1 mod',
                                          'file2.txt': 'f2 mod'})
@@ -333,7 +337,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'd/file3.txt': 'f3'}, 
                                        revision = rev1,
                                        offset = "subdir")
-        wd_update.update(log = open("/dev/null", "w"))
+        wd_update.update(log = DevNull())
         updated_tree = read_tree(wd_update.root, skip = ".meta")
         self.assertEquals(updated_tree, {'d/file1.txt': 'f1 mod',
                                          'd/file2.txt': 'f2 mod'})
