@@ -25,6 +25,13 @@ CLONE="${REPO}_CLONE"
 
 rm -r $REPO test_tree $CLONE 2>/dev/null
 
+echo --- Test basic command line behaviour
+
+($CMD | grep "Boar commands:" >/dev/null ) || { echo "No subcommand did not yield help"; exit 1; }
+($CMD --help | grep "Boar commands:" >/dev/null ) || { echo "No subcommand did not yield help"; exit 1; }
+$CMD >/dev/null && { echo "No subcommand should cause an exit error code"; exit 1; }
+$CMD nonexisting_cmd >/dev/null && { echo "Non-existing subcommand should cause an exit error code"; exit 1; }
+
 echo --- Test --help flag
 for subcmd in ci clone co diffrepo info import list locate mkrepo mksession status update verify; do
     ( REPO_PATH="" $CMD $subcmd --help | grep "Usage:" >/dev/null ) || \
