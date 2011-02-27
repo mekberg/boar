@@ -379,7 +379,6 @@ def cmd_diffrepo(args):
     (options, args) = parser.parse_args(args)
     if len(args) != 2:
         raise UserError("You must specify exactly two existing repositories.")
-    global return_code
     repopath1, repopath2 = args
     if repopath1.startswith("boar://") or repopath2.startswith("boar://"):
         raise UserError("Cloning requires local repositories")
@@ -394,6 +393,7 @@ def cmd_diffrepo(args):
     else:
         print "Repositories differ"
         return_code = 1
+    return return_code
 
 def cmd_export_md5(wd, args):
     wd.export_md5()
@@ -417,10 +417,10 @@ def init_repo_from_env(repo_from_cmdline):
     assert front
     return front
 
-def main():    
+def main():
     if len(sys.argv) <= 1:
         print_help()
-        return
+        return 1
 
     args = sys.argv[1:]
     global cmdline_repo
@@ -441,41 +441,40 @@ def main():
             break
 
     if args[0] == "mkrepo":
-        cmd_mkrepo(args[1:])
-        return
-    if args[0] == "import":
-        cmd_import(args[1:])
-    elif args[0] == "list":
-        cmd_list(args[1:])
+        return cmd_mkrepo(args[1:])
+    elif args[0] == "import":
+        return cmd_import(args[1:])
+    elif args[0] == "list":        
+        return cmd_list(args[1:])
     elif args[0] == "verify":
-        cmd_verify(args[1:])
+        return cmd_verify(args[1:])
     elif args[0] == "co":
-        cmd_co(args[1:])
+        return cmd_co(args[1:])
     elif args[0] == "status":
-        cmd_status(args[1:])
+        return cmd_status(args[1:])
     elif args[0] == "info":
-        cmd_info(args[1:])
+        return cmd_info(args[1:])
     elif args[0] == "ci":
-        cmd_ci(args[1:])
+        return cmd_ci(args[1:])
     elif args[0] == "update":
-        cmd_update(args[1:])
+        return cmd_update(args[1:])
     elif args[0] == "find":
         front = init_repo_from_env(cmdline_repo)
-        cmd_find(front, args[1:])
+        return cmd_find(front, args[1:])
     elif args[0] == "locate":
-        cmd_locate(args[1:])
+        return cmd_locate(args[1:])
     elif args[0] == "mksession":
-        cmd_mksession(args[1:])
+        return cmd_mksession(args[1:])
     elif args[0] == "exportmd5":
         wd = workdir.init_workdir(os.getcwd())
-        cmd_export_md5(wd, args[1:])
+        return cmd_export_md5(wd, args[1:])
     elif args[0] == "clone":
-        cmd_clone(args[1:])
+        return cmd_clone(args[1:])
     elif args[0] == "diffrepo":
-        cmd_diffrepo(args[1:])
+        return cmd_diffrepo(args[1:])
     else:
         print_help()
-        return
+        return 1
 
 
 return_code = 0
@@ -487,7 +486,7 @@ if __name__ == "__main__":
     #p = pstats.Stats('prof.txt')
     #p.sort_stats('cum').print_stats(10)
     try:
-        main()
+        return_code = main()
     except UserError as e:
         print "ERROR:", e.value
         return_code = 1
