@@ -284,6 +284,30 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEquals(updated_tree, {'file2.txt': 'f2 mod1',
                                          'file3.txt': 'f3'})
 
+    def testUpdateResume(self):
+        """ Test the case that some parts of the workdir are already
+        up to date (like after an aborted update)."""
+        wd = self.createWorkdir(self.repoUrl, 
+                                {'file1.txt': 'f1 v1',
+                                 'file2.txt': 'f2 v1',
+                                 'file3.txt': 'f3 v1'})
+        rev1 = wd.checkin()
+        wd = self.createWorkdir(self.repoUrl,
+                                {'file1.txt': 'f1 v2',
+                                 'file2.txt': 'f2 v2',
+                                 'file3.txt': 'f3 v2'})
+        rev2 = wd.checkin()
+        wd_update = self.createWorkdir(self.repoUrl, 
+                                       {'file1.txt': 'f1 v2',  # unexpected v2
+                                        'file2.txt': 'f2 v1',  # normal v1
+                                        'file3.txt': 'f3 mod'},# normal modification, but not v2
+                                       revision = rev1)
+        wd_update.update(log = DevNull())
+        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        self.assertEquals(updated_tree, {'file1.txt': 'f1 v2',
+                                         'file2.txt': 'f2 v2',
+                                         'file3.txt': 'f3 mod'})
+
     def testUpdateWithOffset(self):
         wd = self.createWorkdir(self.repoUrl, 
                                 {'subdir/d/file2.txt': 'f2'})
