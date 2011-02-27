@@ -187,8 +187,6 @@ def cmd_status(args):
         print filestats[f], f
 
 def cmd_info(args):
-    if len(args) == 0:
-        args = ["--help"]
     parser = OptionParser(usage="usage: boar info")
     (options, args) = parser.parse_args(args)
     if len(args) != 0:
