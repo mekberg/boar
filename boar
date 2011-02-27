@@ -70,10 +70,10 @@ def list_sessions(front):
 def list_revisions(front, session_name):
     for sid in front.get_session_ids():
         session_info = front.get_session_info(sid)
-        bloblist = front.get_session_bloblist(sid)
         name = session_info.get("name", "<no name>")
         if name != session_name:
             continue
+        bloblist = front.get_session_bloblist(sid)
         print "Revision id", str(sid), "(" + session_info['date'] + "),", \
             len(bloblist), "files"
 
