@@ -115,7 +115,7 @@ class Workdir:
             target_path = os.path.join(self.root, target)
             fetch_blob(front, info['md5sum'], target_path, overwrite = False)
 
-    def update(self, new_revision = None, log = sys.stdout):
+    def update(self, new_revision = None, log = sys.stdout, ignore_errors = False):
         assert self.revision
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
@@ -138,7 +138,12 @@ class Workdir:
             target_abspath = os.path.join(self.root, target_wdpath)
             if not os.path.exists(target_abspath) or self.cached_md5sum(target_wdpath) != b['md5sum']:
                 print >>log, "Updating:", b['filename']
-                fetch_blob(front, b['md5sum'], target_abspath, overwrite = True)
+                try:
+                    fetch_blob(front, b['md5sum'], target_abspath, overwrite = True)
+                except (IOError, OSError), e:
+                    print >>log, "Could not update file %s: %s" % (b['filename'], e.strerror)
+                    if not ignore_errors:
+                        raise UserError("Errors during update - update aborted")
         for b in old_bloblist:
             if b['filename'] not in new_bloblist_dict:
                 if b['filename'] in modified_files:
@@ -478,7 +483,6 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
     target_dir = os.path.dirname(target_path)
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
-    tmpfile_fd, tmpfile = tempfile.mkstemp(dir = target_dir)
     size = front.get_blob_size(blobname)
     offset = 0
     datareader = front.get_blob(blobname)
@@ -486,10 +490,15 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
     if overwrite and os.path.exists(target_path):
         # TODO: some kind of garbage bin instead of deletion
         os.remove(target_path)
-    with os.fdopen(tmpfile_fd, "wb") as f:
-        while datareader.bytes_left() > 0:
-            f.write(datareader.read(2**14))
-    os.rename(tmpfile, target_path)
+    tmpfile_fd, tmpfile = tempfile.mkstemp(dir = target_dir)
+    try:
+        with os.fdopen(tmpfile_fd, "wb") as f:
+            while datareader.bytes_left() > 0:
+                f.write(datareader.read(2**14))
+        os.rename(tmpfile, target_path)
+    finally:
+        if os.path.exists(tmpfile):
+            os.remove(tmpfile)
 
 def bloblist_to_dict(bloblist):
     d = {}
