@@ -33,6 +33,7 @@ import stat
 import copy
 import cPickle
 import anydbm
+import tempfile
 
 # shelve and dbhash are only imported as a workaround for py2exe,
 # which otherwise for some reason will forget to include a dbm implementation
@@ -474,15 +475,21 @@ def create_blobinfo(abspath, sessionpath, md5sum):
 
 def fetch_blob(front, blobname, target_path, overwrite = False):
     assert overwrite or not os.path.exists(target_path)
-    if not os.path.exists(os.path.dirname(target_path)):
-        os.makedirs(os.path.dirname(target_path))
+    target_dir = os.path.dirname(target_path)
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+    tmpfile_fd, tmpfile = tempfile.mkstemp(dir = target_dir)
     size = front.get_blob_size(blobname)
     offset = 0
-    f = open(target_path, "wb")
     datareader = front.get_blob(blobname)
-    while datareader.bytes_left() > 0:
-        f.write(datareader.read(2**14))
-    f.close()
+    assert datareader
+    if overwrite and os.path.exists(target_path):
+        # TODO: some kind of garbage bin instead of deletion
+        os.remove(target_path)
+    with os.fdopen(tmpfile_fd, "wb") as f:
+        while datareader.bytes_left() > 0:
+            f.write(datareader.read(2**14))
+    os.rename(tmpfile, target_path)
 
 def bloblist_to_dict(bloblist):
     d = {}
