@@ -58,6 +58,10 @@ echo --- Test status command
 # By redirecting, we are forcing the output stream to ascii, which will blow up on unicode.
 ( cd test_tree && $CMD status -v >/dev/null ) || { echo "Couldn't execute redirected status command"; exit 1; }
 
+echo --- Test info command
+( cd test_tree && $CMD info ) || { echo "Couldn't execute info command"; exit 1; }
+( cd test_tree && $CMD info | grep "Workdir root" >/dev/null ) || { echo "Info command didn't return expected data"; exit 1; }
+
 echo --- Test exportmd5 command
 ( cd test_tree && $CMD exportmd5 ) || { echo "Couldn't export md5sum"; exit 1; }
 ( cd test_tree && md5sum -c md5sum.txt ) || { echo "Couldn't verify exported md5sum"; exit 1; }
