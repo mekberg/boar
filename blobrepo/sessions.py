@@ -162,6 +162,7 @@ class SessionWriter:
                 size = session.repo.get_blob_size(blobname)
                 offset = 0
                 added_blobs.add(blobname)
+                self.add_blob_data(blobname, "") # For zero length files
                 while offset < size:
                     data = session.repo.get_blob(blobname, offset, 1000000)
                     assert len(data) > 0
