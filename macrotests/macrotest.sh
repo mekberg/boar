@@ -114,6 +114,9 @@ echo "Some new content" >test_tree/new_file.txt
 (cd test_tree && $BOAR status) || { echo "Status command 2 failed"; exit 1; }
 #find test_tree -type f -a ! -ipath *.meta*` || { echo "More files than expected in checkout"; exit 1; }
 
+echo --- Test verify
+REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify repo"; exit 1; }
+
 echo --- Test repo cloning
 $BOAR clone $REPO $CLONE || { echo "Couldn't clone repo"; exit 1; }
 $BOAR diffrepo $REPO $CLONE || { echo "Some differences where found in cloned repo"; exit 1; }
@@ -141,7 +144,7 @@ rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 mkdir test_tree || { echo "Couldn't create test_tree dir for mounting"; exit 1; }
 $BOARMOUNT $REPO BoarMount test_tree || { echo "Couldn't mount session"; exit 1; }
 (mount -l -t fuse.boarmount | grep ~+/test_tree) || { echo "Mounted session does not seem to really be mounted"; exit 1; }
-[ `find test_tree|grep -c .` -eq 8 ] || { echo "Mounted tree does not contain expected number of files"; fusermount -u test_tree; exit 1; }
+[ `find test_tree|grep -c .` -eq 9 ] || { echo "Mounted tree does not contain expected number of files"; fusermount -u test_tree; exit 1; }
 md5sum -c test_tree.md5 || { echo "Mounted session was corrupt"; fusermount -u test_tree; exit 1; }
 fusermount -u test_tree
 
