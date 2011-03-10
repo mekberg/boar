@@ -62,6 +62,7 @@ class BoarFS(Fuse):
         
 
     def getattr(self, path):
+        path = unicode(path, locale.getpreferredencoding())
         st = MyStat()
         st.st_uid = os.geteuid()
         st.st_gid = os.getegid()
@@ -90,10 +91,11 @@ class BoarFS(Fuse):
         for i in self.files.values():
             fn = i['filename']
             if i['dir'] == path:
-                yield fuse.Direntry(os.path.basename(str(fn)))
+                yield fuse.Direntry(os.path.basename(fn).encode(locale.getpreferredencoding()))
                 
 
     def open(self, path, flags):
+        path = unicode(path, locale.getpreferredencoding())
         fn = path[1:]
         if fn not in self.files:
             return -errno.ENOENT
@@ -102,6 +104,7 @@ class BoarFS(Fuse):
             return -errno.EACCES
 
     def read(self, path, size, offset):
+        path = unicode(path, locale.getpreferredencoding())
         fn = path[1:]
         if fn not in self.files:
             return -errno.ENOENT
@@ -136,6 +139,9 @@ def main():
                     dash_s_do='setsingle')
 
     server.parse(errex=1)
+    #sys.stdout = StreamEncoder(open("boarmount.log", "w"))
+    sys.stdout = StreamEncoder(sys.stdout)
+    sys.stderr = StreamEncoder(sys.stderr)
     server.main()
 
 if __name__ == '__main__':
