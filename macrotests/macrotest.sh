@@ -159,6 +159,10 @@ fusermount -u test_tree
 # EOF
 # rm -r reciperepo || { echo "Couldn't remove recipe repo"; exit 1; }
 
+for issue in issue*.sh; do
+    ./${issue} || { echo "Regression test $issue failed"; exit 1; }
+done
+
 rm -r $REPO test_tree
 echo "All tests completed ok!"
 
