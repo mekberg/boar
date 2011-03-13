@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Test co and update for offset workdirs. 
+
 boar="`pwd`/../boar"
 testdir="/tmp/issue12_tmp$$"
 
@@ -17,6 +19,7 @@ cd workdir_longer || exit 1
 echo hello > file2.txt || exit 1
 $boar ci || exit 1
 cd .. || exit 1
+$boar --repo=TESTREPO co a/workdir || exit 1
 cd workdir || exit 1
 $boar update || exit 1
 cd ../.. || exit 1

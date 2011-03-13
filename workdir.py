@@ -49,6 +49,7 @@ class FakeFile:
     def write(self, s):
         pass
 
+
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
         assert isinstance(root, unicode)
@@ -109,7 +110,7 @@ class Workdir:
         if write_meta:
             self.write_metadata()
         for info in front.get_session_bloblist(self.revision):
-            if not info['filename'].startswith(self.offset):
+            if not is_child_path(self.offset, info['filename']):
                 continue
             target = strip_path_offset(self.offset, info['filename'])
             target_path = os.path.join(self.root, target)
@@ -129,7 +130,7 @@ class Workdir:
         new_bloblist_dict = bloblist_to_dict(new_bloblist)
         old_bloblist = self.get_bloblist()
         for b in new_bloblist:
-            if not b['filename'].startswith(self.offset):
+            if not is_child_path(self.offset, b['filename']):
                 continue
             if b['filename'] in modified_files:
                 print >>log, "Skipping update of modified file", b['filename']
