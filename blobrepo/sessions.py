@@ -87,6 +87,8 @@ class SessionWriter:
         self.metadatas = {}
         # Summers for new blobs. { blobname: summer, ... }
         self.blob_checksummers = {}
+        self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
+        self.session_mutex.lock()
         assert os.path.exists(self.repo.repopath)
         self.session_path = tempfile.mkdtemp( \
             prefix = "tmp_", 
@@ -259,6 +261,7 @@ class SessionWriter:
         queue_dir = self.repo.get_queue_path(str(session_id))
         shutil.move(self.session_path, queue_dir)
         self.repo.process_queue()
+        self.session_mutex.release()
         return session_id
 
 
