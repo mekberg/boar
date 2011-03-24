@@ -163,7 +163,8 @@ class Workdir:
         print >>log, "Workdir now at revision", self.revision
 
     def checkin(self, write_meta = True, force_primary_session = False, \
-                      fail_on_modifications = False, add_only = False, dry_run = False):
+                    fail_on_modifications = False, add_only = False, dry_run = False, \
+                    log_message = None):
         front = self.get_front()
         if dry_run:
             front = DryRunFront(front)
@@ -189,13 +190,13 @@ class Workdir:
             deleted_files = ()
             modified_files = ()
 
-        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front)
+        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message)
 
         if write_meta:
             self.write_metadata()
         return self.revision
 
-    def __create_snapshot(self, files, deleted_files, base_snapshot, front):
+    def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message):
         """ Creates a new snapshot of the files in this
         workdir. Modified and new files are passed in the 'files'
         argument, deleted files in the 'deleted_files' argument. The
@@ -228,6 +229,9 @@ class Workdir:
         session_info["name"] = self.sessionName
         session_info["timestamp"] = int(time.time())
         session_info["date"] = time.ctime()
+        if log_message != None:
+            assert type(log_message) == unicode, "Log message must be in unicode"
+            session_info["log_message"] = log_message
         self.revision = front.commit(session_info)
         self.blobinfos = None # Force reload of blobinfos
         return self.revision
