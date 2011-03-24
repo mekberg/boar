@@ -279,6 +279,39 @@ def get_tree(root, skip = [], absolute_paths = False):
     return all_files
 
 
+
+class FileMutex:
+    class MutexLocked(Exception):
+        def __init__(self, mutex_name, mutex_file):
+            self.mutex_name = mutex_name
+            self.mutex_file = mutex_file
+            self.value = "Mutex '%s' was already locked. Lockfile is '%s'" % (mutex_name, mutex_file)
+        def __str__(self):
+            return self.value
+
+    def __init__(self, mutex_dir, mutex_name):
+        assert isinstance(mutex_name, basestring)
+        self.mutex_dir = mutex_dir
+        self.mutex_name = mutex_name
+        self.mutex_id = md5sum(mutex_name.encode("utf-8"))
+        self.mutex_file = os.path.join(self.mutex_dir, "mutex-" + self.mutex_id)
+    
+    def lock(self):
+        try:
+            os.mkdir(self.mutex_file)
+        except OSError:
+            raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
+    
+    def release(self):
+        try:
+            os.rmdir(self.mutex_file)
+        except OSError:
+            print "Warning: could not remove lockfile", self.mutex_file
+            pass
+
+    def __del__(self):
+        self.release()
+
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all
     written strings according to the current preferred encoding, with

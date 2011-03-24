@@ -214,7 +214,10 @@ class Workdir:
             # from disk. But that's complicated.
             self.cached_md5sum(strip_path_offset(self.offset, f))
 
-        front.create_session(session_name = self.sessionName, base_session = base_snapshot)
+        try:
+            front.create_session(session_name = self.sessionName, base_session = base_snapshot)
+        except FileMutex.MutexLocked, e:
+            raise UserError("The session '%s' is in use (lockfile %s)" % (self.sessionName, e.mutex_file))
 
         for sessionpath in files:
             wd_path = strip_path_offset(self.offset, sessionpath)
