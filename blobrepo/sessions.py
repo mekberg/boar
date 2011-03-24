@@ -77,8 +77,10 @@ def bloblist_fingerprint(bloblist):
     return md5.hexdigest()
 
 class SessionWriter:
-    def __init__(self, repo, base_session = None, session_id = None):
+    def __init__(self, repo, session_name, base_session = None, session_id = None):
+        assert session_name and isinstance(session_name, basestring)
         self.repo = repo
+        self.session_name = session_name
         self.max_blob_size = None
         self.base_session = base_session
         self.session_path = None
@@ -88,7 +90,12 @@ class SessionWriter:
         assert os.path.exists(self.repo.repopath)
         self.session_path = tempfile.mkdtemp( \
             prefix = "tmp_", 
-            dir = os.path.join(self.repo.repopath, repository.TMP_DIR))         
+            dir = os.path.join(self.repo.repopath, repository.TMP_DIR))
+
+        # The latest_snapshot is used to detect any unexpected
+        # concurrent changes in the repo when it is time to commit.
+        self.latest_snapshot = repo.find_last_revision(session_name)
+
         self.base_session_info = {}
         self.base_bloblist_dict = {}
         if self.base_session != None:
@@ -215,6 +222,9 @@ class SessionWriter:
         assert self.session_path != None
         for name, summer in self.blob_checksummers.items():
             assert name == summer.hexdigest(), "Corrupted blob found in new session. Commit aborted."
+        assert self.session_name == sessioninfo['name'], \
+            "Committed session name '%s' did not match expected name '%s'" % \
+            (sessioninfo['name'], self.session_name)
         fingerprint = bloblist_fingerprint(self.resulting_blobdict.values())
         metainfo = { 'base_session': self.base_session,
                      'fingerprint': fingerprint,
@@ -233,6 +243,11 @@ class SessionWriter:
         fingerprint_marker = os.path.join(self.session_path, fingerprint + ".fingerprint")
         with open(fingerprint_marker, "wb") as f:
             pass
+
+        # This is a fail-safe to reduce the risk of lockfile problems going undetected. 
+        # It is not meant to be 100% safe. That responsibility lies with the lockfile.
+        assert self.latest_snapshot == self.repo.find_last_revision(self.session_name), \
+            "Session has been updated concurrently (Should not happen. Lockfile problems?) Commit aborted."
 
         assert not self.repo.get_queued_session_id()
         if self.forced_session_id: 
@@ -264,6 +279,11 @@ class SessionReader:
 
     def get_properties(self):
         return copy.copy(self.properties)
+
+    def get_client_value(self, key):
+        """ Returns the value of the client property with the name
+        'key', or None if there are no such value """
+        return self.properties['client_data'].get(key, None)
 
     def get_fingerprint(self):
         return self.properties['fingerprint']
