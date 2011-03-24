@@ -61,8 +61,10 @@ class Front:
             seen.add(b['filename'])
         return bloblist
 
-    def create_session(self, base_session = None):
-        self.new_session = self.repo.create_session(base_session)
+    def create_session(self, session_name, base_session = None):
+        assert isinstance(session_name, basestring), session_name
+        self.new_session = self.repo.create_session(session_name = session_name, \
+                                                        base_session = base_session)
 
     def has_snapshot(self, session_name, snapshot_id):
         """ Returns True if there exists a session with the given
@@ -92,7 +94,7 @@ class Front:
     def mksession(self, sessionName):
         if self.find_last_revision(sessionName) != None:
             raise Exception("There already exists a session named '%s'" % (session_name))
-        self.create_session()
+        self.create_session(session_name = sessionName)
         session_info = { "name": sessionName,
                          "timestamp": int(time()),
                          "date": ctime() }
@@ -121,18 +123,8 @@ class Front:
             return self.repo.has_blob(sum) or self.new_session.has_blob(sum)
         return self.repo.has_blob(sum)
 
-    def find_last_revision(self, session_name, sessions_to_search = None):
-        all_sids = self.get_session_ids()
-        if sessions_to_search != None:
-            all_sids = [sid for sid in all_sids if sid in sessions_to_search]
-        all_sids.sort()
-        all_sids.reverse()
-        for sid in all_sids:
-            session_info = self.get_session_info(sid)
-            name = session_info.get("name", "<no name>")
-            if name == session_name:
-                return sid
-        return None
+    def find_last_revision(self, session_name):
+        return self.repo.find_last_revision(session_name)
 
     def init_verify_blobs(self):
         assert self.blobs_to_verify == []
