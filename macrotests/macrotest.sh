@@ -44,10 +44,12 @@ tar -xvzf test_tree.tar.gz || { echo "Couldn't create test tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 before check-in"; exit 1; }
 $BOAR mkrepo $REPO || { echo "Couldn't create repo"; exit 1; }
 REPO_PATH=$REPO $BOAR mksession MyTestSession || { echo "Couldn't create session"; exit 1; }
-REPO_PATH=$REPO $BOAR import -v test_tree MyTestSession || { echo "Couldn't import tree"; exit 1; }
+REPO_PATH=$REPO $BOAR import -m"import åäö" -v test_tree MyTestSession || { echo "Couldn't import tree"; exit 1; }
 rm -r test_tree || { echo "Couldn't remove test tree after import"; exit 1; }
 REPO_PATH=$REPO $BOAR co MyTestSession test_tree || { echo "Couldn't check out tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after check-out"; exit 1; }
+(REPO_PATH=$REPO $BOAR list MyTestSession | grep "import åäö") || { echo "List command for session did not contain expected log message"; exit 1; }
+
 
 echo --- Test unchanged check-in
 (cd test_tree && $BOAR ci) || { echo "Couldn't check in tree"; exit 1; }
@@ -63,6 +65,11 @@ echo --- Test status command
 echo --- Test info command
 ( cd test_tree && $BOAR info ) || { echo "Couldn't execute info command"; exit 1; }
 ( cd test_tree && $BOAR info | grep "Workdir root" >/dev/null ) || { echo "Info command didn't return expected data"; exit 1; }
+
+echo --- Test list command
+REPO_PATH=$REPO $BOAR list || { echo "Couldn't execute list command"; exit 1; }
+REPO_PATH=$REPO $BOAR list MyTestSession || { echo "Couldn't execute list command for session "; exit 1; }
+REPO_PATH=$REPO $BOAR list MyTestSession 3 || { echo "Couldn't execute list command for snapshot "; exit 1; }
 
 echo --- Test exportmd5 command
 ( cd test_tree && $BOAR exportmd5 ) || { echo "Couldn't export md5sum"; exit 1; }
@@ -97,7 +104,8 @@ test `find test_tree -type f -a ! -ipath *.meta*` == "test_tree/fil1.txt" || { e
 
 echo --- Test offset checkin
 echo "Some content" >test_tree/nysubfil.txt
-(cd test_tree && $BOAR ci) || { echo "Couldn't check in tree"; exit 1; }
+(cd test_tree && $BOAR ci -m "ci åäö") || { echo "Couldn't check in tree"; exit 1; }
+(REPO_PATH=$REPO $BOAR list MyTestSession | grep "ci åäö") || { echo "List command for session did not contain expected log message"; exit 1; }
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 REPO_PATH=$REPO $BOAR co MyTestSession/subdir test_tree || { echo "Couldn't check out tree"; exit 1; }
 md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
