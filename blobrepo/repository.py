@@ -215,8 +215,21 @@ class Repo:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]
 
-    def create_session(self, base_session = None, session_id = None):
-        return sessions.SessionWriter(self, base_session = base_session, session_id = session_id)
+    def create_session(self, session_name, base_session = None, session_id = None):
+        return sessions.SessionWriter(self, session_name = session_name, \
+                                          base_session = base_session, \
+                                          session_id = session_id)
+
+    def find_last_revision(self, session_name):
+        all_sids = self.get_all_sessions()
+        all_sids.sort()
+        all_sids.reverse()
+        for sid in all_sids:
+            session = self.get_session(sid)
+            name = session.get_client_value("name")
+            if name == session_name:
+                return sid
+        return None
 
     def find_next_session_id(self):
         assert os.path.exists(self.repopath)
@@ -305,7 +318,7 @@ class Repo:
         for session_id in sessions_to_copy:
             reader = other_repo.get_session(session_id)
             base_session = reader.get_properties().get('base_session', None)
-            writer = self.create_session(base_session, session_id)
+            writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
             writer.commitClone(reader)
 
     def get_queued_session_id(self):

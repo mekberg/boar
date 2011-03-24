@@ -213,7 +213,7 @@ class Workdir:
             # from disk. But that's complicated.
             self.cached_md5sum(strip_path_offset(self.offset, f))
 
-        front.create_session(base_snapshot)
+        front.create_session(session_name = self.sessionName, base_session = base_snapshot)
 
         for sessionpath in files:
             wd_path = strip_path_offset(self.offset, sessionpath)
