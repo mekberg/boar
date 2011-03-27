@@ -114,7 +114,11 @@ class Repo:
         integrity_assert(os.path.exists(self.repopath + "/sessions"), assert_msg)
         integrity_assert(os.path.exists(self.repopath + "/blobs"), assert_msg)
         integrity_assert(os.path.exists(self.repopath + "/tmp"), assert_msg)
-        self.process_queue()
+        self.repo_mutex.lock_with_timeout(60)
+        try:
+            self.process_queue()
+        finally:
+            self.repo_mutex.release()
 
     def __str__(self):
         return "repo:"+self.repopath
@@ -333,6 +337,14 @@ class Repo:
         return result
 
     def consolidate_snapshot(self, session_path, forced_session_id = None):
+        self.repo_mutex.lock_with_timeout(60)
+        try:
+            return self.__consolidate_snapshot(session_path, forced_session_id)
+        finally:
+            self.repo_mutex.release()
+
+    def __consolidate_snapshot(self, session_path, forced_session_id):
+        assert self.repo_mutex.is_locked()
         assert not self.get_queued_session_id()
         if forced_session_id: 
             session_id = forced_session_id
@@ -346,6 +358,7 @@ class Repo:
         return session_id
 
     def process_queue(self):
+        assert self.repo_mutex.is_locked()
         session_id = self.get_queued_session_id()
         if session_id == None:
             return

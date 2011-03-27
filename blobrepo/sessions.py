@@ -260,6 +260,10 @@ class SessionWriter:
             "Session has been updated concurrently (Should not happen. Lockfile problems?) Commit aborted."
         session_id = self.repo.consolidate_snapshot(self.session_path, self.forced_session_id)
         return session_id
+    
+    def __del__(self):
+        if self.session_mutex.is_locked():
+            self.session_mutex.release()
 
 
 class SessionReader:

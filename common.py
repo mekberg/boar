@@ -300,6 +300,7 @@ class FileMutex:
         self.locked = False
     
     def lock(self):
+        assert not self.locked, "Tried to lock a mutex twice"
         try:
             os.mkdir(self.mutex_file)
             self.locked = True
@@ -307,6 +308,7 @@ class FileMutex:
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
 
     def lock_with_timeout(self, timeout):
+        assert not self.locked, "Tried to lock a mutex twice"
         t0 = time.time()
         while True:
             try:
@@ -318,8 +320,12 @@ class FileMutex:
                 time.sleep(1)
         if not self.locked:
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
+
+    def is_locked(self):
+        return self.locked
     
     def release(self):
+        assert self.locked, "Tried to release unlocked mutex"
         try:
             os.rmdir(self.mutex_file)
             self.locked = False
