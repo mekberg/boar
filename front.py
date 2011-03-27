@@ -158,7 +158,7 @@ class DryRunFront:
     def get_session_bloblist(self, id):
         return self.realfront.get_session_bloblist(id)
 
-    def create_session(self, base_session = None):
+    def create_session(self, session_name, base_session = None):
         pass
 
     def add_blob_data(self, blob_md5, b64data):
