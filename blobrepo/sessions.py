@@ -258,17 +258,7 @@ class SessionWriter:
         # It is not meant to be 100% safe. That responsibility lies with the lockfile.
         assert self.latest_snapshot == self.repo.find_last_revision(self.session_name), \
             "Session has been updated concurrently (Should not happen. Lockfile problems?) Commit aborted."
-
-        assert not self.repo.get_queued_session_id()
-        if self.forced_session_id: 
-            session_id = self.forced_session_id
-        else:
-            session_id = self.repo.find_next_session_id()
-        assert session_id > 0
-        assert session_id not in self.repo.get_all_sessions()
-        queue_dir = self.repo.get_queue_path(str(session_id))
-        shutil.move(self.session_path, queue_dir)
-        self.repo.process_queue()
+        session_id = self.repo.consolidate_snapshot(self.session_path, self.forced_session_id)
         return session_id
 
 
