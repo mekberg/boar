@@ -117,7 +117,7 @@ class Workdir:
             fetch_blob(front, info['md5sum'], target_path, overwrite = False)
 
     def update(self, new_revision = None, log = sys.stdout, ignore_errors = False):
-        assert self.revision
+        assert self.revision, "Cannot update. Current revision is unknown: '%s'" % self.revision
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
         front = self.get_front()
