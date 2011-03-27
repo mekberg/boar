@@ -627,9 +627,6 @@ class ServerProxy:
         return "<ServerProxy for %s, with serializer %s>" % (self.__transport, self.__data_serializer)
 
     def __req( self, methodname, args=None, kwargs=None, id=0 ):
-        # JSON-RPC 1.0: only positional parameters
-        if len(kwargs) > 0 and isinstance(self.data_serializer, JsonRpc10):
-            raise ValueError("Only positional parameters allowed in JSON-RPC 1.0")
         # JSON-RPC 2.0: only args OR kwargs allowed!
         if len(args) > 0 and len(kwargs) > 0:
             raise ValueError("Only positional or named parameters are allowed!")
