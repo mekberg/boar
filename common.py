@@ -286,6 +286,7 @@ class FileMutex:
             self.mutex_name = mutex_name
             self.mutex_file = mutex_file
             self.value = "Mutex '%s' was already locked. Lockfile is '%s'" % (mutex_name, mutex_file)
+
         def __str__(self):
             return self.value
 
@@ -295,22 +296,26 @@ class FileMutex:
         self.mutex_name = mutex_name
         self.mutex_id = md5sum(mutex_name.encode("utf-8"))
         self.mutex_file = os.path.join(self.mutex_dir, "mutex-" + self.mutex_id)
+        self.locked = False
     
     def lock(self):
         try:
             os.mkdir(self.mutex_file)
+            self.locked = True
         except OSError:
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
     
     def release(self):
         try:
             os.rmdir(self.mutex_file)
+            self.locked = False
         except OSError:
             print "Warning: could not remove lockfile", self.mutex_file
-            pass
 
     def __del__(self):
-        self.release()
+        if self.locked:
+            print "Warning: lockfile %s was forgotten. Cleaning up..." % self.mutex_name
+            self.release()
 
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all
