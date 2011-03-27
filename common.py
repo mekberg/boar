@@ -23,6 +23,7 @@ import sys
 import platform
 import locale
 import codecs
+import time
 
 if sys.version_info >= (2, 6):
     import json
@@ -303,6 +304,19 @@ class FileMutex:
             os.mkdir(self.mutex_file)
             self.locked = True
         except OSError:
+            raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
+
+    def lock_with_timeout(self, timeout):
+        t0 = time.time()
+        while True:
+            try:
+                self.lock()
+                break
+            except MutexLocked:                
+                if time.time() - t0 > timeout:
+                    break
+                time.sleep(1)
+        if not self.locked:
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
     
     def release(self):
