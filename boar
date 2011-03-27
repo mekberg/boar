@@ -18,7 +18,7 @@
 from __future__ import with_statement
 import sys
 import os
-from time import time, ctime
+import time
 import cProfile
 from optparse import OptionParser
 from blobrepo import repository
@@ -491,7 +491,7 @@ def main():
 
 return_code = 0
 if __name__ == "__main__":
-    t1 = time()
+    t1 = time.time()
     sys.stdout = StreamEncoder(sys.stdout)
     #cProfile.run('main()', "prof.txt")
     #import pstats
@@ -509,6 +509,6 @@ if __name__ == "__main__":
         print "REPO CORRUPTION:", e
         return_code = 1
  
-    t2 = time()
+    t2 = time.time()
     print "Finished in", round(t2-t1, 2), "seconds"
     sys.exit(return_code)
