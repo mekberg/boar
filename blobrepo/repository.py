@@ -108,6 +108,7 @@ class Repo:
             +"Was: " + repopath
         self.repopath = unicode(repopath)
         self.session_readers = {}
+        self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
         integrity_assert(os.path.exists(self.repopath + "/sessions"), assert_msg)
@@ -331,6 +332,18 @@ class Repo:
         assert result > 0, "Corrupted queue directory - illegal session id"
         return result
 
+    def consolidate_snapshot(self, session_path, forced_session_id = None):
+        assert not self.get_queued_session_id()
+        if forced_session_id: 
+            session_id = forced_session_id
+        else:
+            session_id = self.find_next_session_id()
+        assert session_id > 0
+        assert session_id not in self.get_all_sessions()
+        queue_dir = self.get_queue_path(str(session_id))
+        shutil.move(session_path, queue_dir)
+        self.process_queue()
+        return session_id
 
     def process_queue(self):
         session_id = self.get_queued_session_id()
