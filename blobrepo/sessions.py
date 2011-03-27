@@ -221,6 +221,12 @@ class SessionWriter:
 
 
     def commit(self, sessioninfo = {}):
+        try:
+            return self.__commit(sessioninfo)
+        finally:
+            self.session_mutex.release()
+
+    def __commit(self, sessioninfo):
         assert self.session_path != None
         for name, summer in self.blob_checksummers.items():
             assert name == summer.hexdigest(), "Corrupted blob found in new session. Commit aborted."
@@ -263,7 +269,6 @@ class SessionWriter:
         queue_dir = self.repo.get_queue_path(str(session_id))
         shutil.move(self.session_path, queue_dir)
         self.repo.process_queue()
-        self.session_mutex.release()
         return session_id
 
 
