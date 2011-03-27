@@ -224,6 +224,8 @@ class SessionWriter:
         assert self.session_path != None
         for name, summer in self.blob_checksummers.items():
             assert name == summer.hexdigest(), "Corrupted blob found in new session. Commit aborted."
+        if sessioninfo == {}:
+            sessioninfo['name'] = self.session_name
         assert self.session_name == sessioninfo['name'], \
             "Committed session name '%s' did not match expected name '%s'" % \
             (sessioninfo['name'], self.session_name)
