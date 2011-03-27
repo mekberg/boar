@@ -27,6 +27,8 @@ DATA3_MD5 = "cafa2ed1e085869b3bfe9e43b60e7a5a"
 
 TMPDIR=tempfile.gettempdir()
 
+SESSION_NAME = "RepoTestSession"
+
 if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -37,7 +39,8 @@ class TestBlobRepo(unittest.TestCase):
         self.repopath = tempfile.mktemp(dir=TMPDIR)
         repository.create_repository(self.repopath)
         self.repo = repository.Repo(self.repopath)
-        self.sessioninfo1 = {"foo": "bar"}
+        self.sessioninfo1 = {"foo": "bar",
+                             "name": SESSION_NAME}
         self.fileinfo1 = {"filename": "testfilename.txt",
                           "md5sum": DATA1_MD5}
         self.fileinfo2 = {"filename": "testfilename2.txt",
@@ -56,20 +59,20 @@ class TestBlobRepo(unittest.TestCase):
             self.assert_(i in lst1)
 
     def test_empty_commit(self):
-        writer = self.repo.create_session()
+        writer = self.repo.create_session(SESSION_NAME)
         id = writer.commit()        
         self.assertEqual(1, id, "Session ids starts from 1") 
         self.assertEqual(self.repo.get_all_sessions(), [1], 
                          "There should be exactly one session")
 
     def test_double_commit(self):
-        writer = self.repo.create_session()
+        writer = self.repo.create_session(SESSION_NAME)
         writer.commit()        
         self.assertRaises(Exception, writer.commit)        
         
     def test_session_info(self):
         committed_info = copy(self.sessioninfo1)
-        writer = self.repo.create_session()
+        writer = self.repo.create_session(SESSION_NAME)
         id = writer.commit(committed_info)
         self.assertEqual(committed_info, self.sessioninfo1,
                          "Given info dict was changed during commit")
@@ -79,7 +82,7 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_simple_blob(self):
         committed_info = copy(self.fileinfo1)
-        writer = self.repo.create_session()
+        writer = self.repo.create_session(SESSION_NAME)
         writer.add_blob_data(DATA1_MD5, DATA1)
         writer.add(committed_info)
         self.assertEqual(committed_info, self.fileinfo1)
@@ -89,11 +92,11 @@ class TestBlobRepo(unittest.TestCase):
         self.assertEqual(blobinfos, [self.fileinfo1])
 
     def test_secondary_session(self):
-        writer1 = self.repo.create_session()
+        writer1 = self.repo.create_session(SESSION_NAME)
         writer1.add_blob_data(DATA1_MD5, DATA1)
         writer1.add(self.fileinfo1)
         id1 = writer1.commit()
-        writer2 = self.repo.create_session(base_session = id1)
+        writer2 = self.repo.create_session(SESSION_NAME, base_session = id1)
         writer2.add_blob_data(DATA2_MD5, DATA2)
         writer2.add(self.fileinfo2)
         id2 = writer2.commit()
@@ -102,11 +105,11 @@ class TestBlobRepo(unittest.TestCase):
         self.assertListsEqualAsSets(blobinfos, [self.fileinfo1, self.fileinfo2])
 
     def test_remove(self):
-        writer1 = self.repo.create_session()
+        writer1 = self.repo.create_session(SESSION_NAME)
         writer1.add_blob_data(DATA1_MD5, DATA1)
         writer1.add(self.fileinfo1)
         id1 = writer1.commit()
-        writer2 = self.repo.create_session(base_session = id1)
+        writer2 = self.repo.create_session(SESSION_NAME, base_session = id1)
         writer2.remove(self.fileinfo1['filename'])
         id2 = writer2.commit()
         blobinfos = list(self.repo.get_session(id1).get_all_blob_infos())
@@ -115,7 +118,7 @@ class TestBlobRepo(unittest.TestCase):
         self.assertEqual(blobinfos, [])
 
     def test_remove_nonexisting(self):
-        writer1 = self.repo.create_session()
+        writer1 = self.repo.create_session(SESSION_NAME)
         self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")        
 
     def test_split(self):
@@ -123,11 +126,11 @@ class TestBlobRepo(unittest.TestCase):
         #  0123456789012345678901234567890123456789
         # "tjosan hejsan tjosan hejsan hejsan"
         # cafa2ed1e085869b3bfe9e43b60e7a5a
-        writer = self.repo.create_session()
+        writer = self.repo.create_session(SESSION_NAME)
         writer.add_blob_data(DATA3_MD5, DATA3)
         writer.add(self.fileinfo3)
         writer.commit()
-        writer = self.repo.create_session()
+        writer = self.repo.create_session(SESSION_NAME)
         writer.split_blob("cafa2ed1e085869b3bfe9e43b60e7a5a", [14,28])
         split_snapshot = writer.commit()
         redundant = list(self.repo.find_redundant_raw_blobs())
