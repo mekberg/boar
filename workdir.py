@@ -146,6 +146,8 @@ class Workdir:
                     if not ignore_errors:
                         raise UserError("Errors during update - update aborted")
         for b in old_bloblist:
+            if not is_child_path(self.offset, b['filename']):
+                continue
             if b['filename'] not in new_bloblist_dict:
                 if b['filename'] in modified_files:
                     print >>log, "Skipping deletion of modified file", b['filename']
