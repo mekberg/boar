@@ -116,8 +116,12 @@ class Workdir:
             target_path = os.path.join(self.root, target)
             fetch_blob(front, info['md5sum'], target_path, overwrite = False)
 
-    def update(self, new_revision = None, log = sys.stdout, ignore_errors = False):
+    def update(self, new_revision = None, log = None, ignore_errors = False):
         assert self.revision, "Cannot update. Current revision is unknown: '%s'" % self.revision
+        if not log:
+            # Don't do this as a default argument, as sys.stdout may
+            # have been redirected (see issue 18)
+            log = StreamEncoder(sys.stdout)
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes()
         front = self.get_front()
