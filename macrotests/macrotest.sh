@@ -50,6 +50,12 @@ REPO_PATH=$REPO $BOAR co MyTestSession test_tree || { echo "Couldn't check out t
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after check-out"; exit 1; }
 (REPO_PATH=$REPO $BOAR list MyTestSession | grep "import åäö") || { echo "List command for session did not contain expected log message"; exit 1; }
 
+echo --- Test --repo flag
+$BOAR list && { echo "Did not get expected error when listing undefined repo --repo option"; exit 1; }
+$BOAR --repo $REPO list || { echo "Couldn't access repo by pre-cmd --repo option"; exit 1; }
+$BOAR list --repo $REPO || { echo "Couldn't access repo by post-cmd --repo option"; exit 1; }
+$BOAR --repo=$REPO list || { echo "Couldn't access repo by pre-cmd --repo= option"; exit 1; }
+$BOAR list --repo=$REPO || { echo "Couldn't access repo by post-cmd --repo= option"; exit 1; }
 
 echo --- Test unchanged check-in
 (cd test_tree && $BOAR ci) || { echo "Couldn't check in tree"; exit 1; }
