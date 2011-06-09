@@ -28,8 +28,8 @@ rm -r $REPO test_tree $CLONE 2>/dev/null
 
 echo --- Test basic command line behaviour
 
-($BOAR | grep "Boar commands:" >/dev/null ) || { echo "No subcommand did not yield help"; exit 1; }
-($BOAR --help | grep "Boar commands:" >/dev/null ) || { echo "No subcommand did not yield help"; exit 1; }
+($BOAR | grep "Commands:" >/dev/null ) || { echo "Missing subcommand did not yield help"; exit 1; }
+($BOAR --help | grep "Commands:" >/dev/null ) || { echo "No subcommand did not yield help"; exit 1; }
 $BOAR >/dev/null && { echo "No subcommand should cause an exit error code"; exit 1; }
 $BOAR nonexisting_cmd >/dev/null && { echo "Non-existing subcommand should cause an exit error code"; exit 1; }
 
@@ -39,6 +39,11 @@ for subcmd in ci clone co diffrepo info import list locate mkrepo mksession stat
     ( REPO_PATH="" $BOAR $subcmd --help | grep "Usage:" >/dev/null ) || \
 	{ echo "Subcommand '$subcmd' did not give a help message with --help flag"; exit 1; }
 done
+
+echo --- Test --version flag
+($BOAR --version | grep "Copyright" >/dev/null ) || { echo "--version did not give expected output"; exit 1; }
+$BOAR --version mkrepo ErrRepo1 && { echo "--version accepted extra commands"; exit 1; }
+$BOAR mkrepo ErrRepo2 --version && { echo "--version accepted extra commands"; exit 1; }
 
 tar -xvzf test_tree.tar.gz || { echo "Couldn't create test tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 before check-in"; exit 1; }
