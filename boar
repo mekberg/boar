@@ -36,9 +36,13 @@ import workdir
 from common import *
 import settings
 
-def print_help():
-    print """Boar commands: 
+BOAR_VERSION = "<UNDEFINED>"
 
+def print_help():
+    print """Boar version %s
+Usage: boar <command> 
+
+Commands:
 ci        Commit changes in a work directory
 clone     Create or update a clone of a repository
 co        Check out files from the repository
@@ -56,7 +60,7 @@ verify    Verify the integrity of the repository
 For most commands, you can type "boar <command> --help" to get more
 information. The full command reference is available online at
 http://code.google.com/p/boar/wiki/CommandReference
-"""
+"""  % BOAR_VERSION
 
 def list_sessions(front):
     sessions_count = {}
@@ -437,6 +441,14 @@ def main():
     args = sys.argv[1:]
     global cmdline_repo
     cmdline_repo = None
+    if "--version" in args:
+        if len(args) != 1:
+            raise UserError("The --version option can not be combined with other options")
+        print "Boar, version %s" % BOAR_VERSION
+        print "Copyright (C) 2010-2011 Mats Ekberg."
+        print "Licensed under the Apache License, Version 2.0"
+        return 0
+
     for i in range(0, len(args)):
         # This is ridiculous, but I just can't get OptParse to just
         # look for --repo without exploding on other "unknown options".
