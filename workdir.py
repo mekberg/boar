@@ -280,7 +280,7 @@ class Workdir:
             if os.path.exists(self.metadir):
                 cPickle.dump(self.blobinfos, open(bloblist_file, "wb"))
         self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
-        expected_fingerprint = self.get_front().get_session_property(self.revision, 'fingerprint')
+        expected_fingerprint = self.get_front().get_session_fingerprint(self.revision)
         calc_fingerprint = bloblist_fingerprint(self.blobinfos)
         assert calc_fingerprint == expected_fingerprint, \
             "Cached bloblist did not match repo bloblist"

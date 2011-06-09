@@ -44,13 +44,15 @@ class Front:
         return self.repo.get_all_sessions()
 
     def get_session_info(self, id):
-        return self.get_session_property(id, 'client_data')
+        session_reader = self.repo.get_session(id)
+        properties = session_reader.get_properties()
+        return properties['client_data']
 
-    def get_session_property(self, id, property_name):
+    def get_session_fingerprint(self, id):
         session_reader = self.repo.get_session(id)        
         properties = session_reader.get_properties()
-        assert property_name in properties
-        return properties[property_name]
+        assert "fingerprint" in properties
+        return properties["fingerprint"]
 
     def get_session_bloblist(self, id):
         session_reader = self.repo.get_session(id)

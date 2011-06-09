@@ -101,7 +101,7 @@ def verify_repo(repo, verify_blobs = True):
         id = session_ids[i]
         bloblist = front.get_session_bloblist(id)
         calc_fingerprint = bloblist_fingerprint(bloblist)
-        assert calc_fingerprint == front.get_session_property(id, "fingerprint"), \
+        assert calc_fingerprint == front.get_session_fingerprint(id), \
             "Fingerprint didn't match for session "+str(id)
         for bi in bloblist:
             assert bi['md5sum'] in ok_blobs or \
