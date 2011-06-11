@@ -45,15 +45,20 @@ echo --- Test --version flag
 $BOAR --version mkrepo ErrRepo1 && { echo "--version accepted extra commands"; exit 1; }
 $BOAR mkrepo ErrRepo2 --version && { echo "--version accepted extra commands"; exit 1; }
 
+echo --- Test mkrepo, mksession and import
 tar -xvzf test_tree.tar.gz || { echo "Couldn't create test tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 before check-in"; exit 1; }
 $BOAR mkrepo $REPO || { echo "Couldn't create repo"; exit 1; }
 REPO_PATH=$REPO $BOAR mksession MyTestSession || { echo "Couldn't create session"; exit 1; }
+REPO_PATH=$REPO $BOAR import -nv test_tree MyTestSession || { echo "Couldn't dry-run import tree"; exit 1; }
+REPO_PATH=$REPO $BOAR list MyTestSession 2 && { echo "Dry-run import actually performed an import"; exit 1; }
 REPO_PATH=$REPO $BOAR import -m"import åäö" -v test_tree MyTestSession || { echo "Couldn't import tree"; exit 1; }
+(REPO_PATH=$REPO $BOAR list MyTestSession | grep "import åäö") || { echo "List command for session did not contain expected log message"; exit 1; }
+
+echo --- Test co
 rm -r test_tree || { echo "Couldn't remove test tree after import"; exit 1; }
 REPO_PATH=$REPO $BOAR co MyTestSession test_tree || { echo "Couldn't check out tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after check-out"; exit 1; }
-(REPO_PATH=$REPO $BOAR list MyTestSession | grep "import åäö") || { echo "List command for session did not contain expected log message"; exit 1; }
 
 echo --- Test --repo flag
 $BOAR list && { echo "Did not get expected error when listing undefined repo --repo option"; exit 1; }
