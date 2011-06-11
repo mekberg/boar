@@ -214,8 +214,13 @@ class Repo:
         session_dirs.sort()
         return session_dirs
 
+    def has_snapshot(self, id):
+        path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
+        return os.path.exists(path)
+
     def get_session(self, id):
         assert id, "Id was: "+ str(id)
+        misuse_assert(self.has_snapshot(id), "There is no snapshot with id %s" % id)
         if id not in self.session_readers:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]

@@ -40,10 +40,22 @@ class Front:
     def get_repo_path(self):
         return self.repo.get_repo_path()
 
-    def get_session_ids(self, filter = {}):
-        return self.repo.get_all_sessions()
+    def get_session_ids(self, session_name = None):
+        sids = self.repo.get_all_sessions()
+        if not session_name:
+            return sids
+        result = []
+        for sid in sids:
+            session_info = self.get_session_info(sid)
+            name = session_info.get("name")
+            if name == session_name:
+                result.append(sid)
+        return result
 
+    """ Returns None if there is no such snapshot """
     def get_session_info(self, id):
+        if not self.repo.has_snapshot(id):
+            return None
         session_reader = self.repo.get_session(id)
         properties = session_reader.get_properties()
         return properties['client_data']
@@ -151,8 +163,8 @@ class DryRunFront:
     def get_repo_path(self):
         return self.realfront.get_repo_path()
 
-    def get_session_ids(self, filter = {}):
-        return self.realfront.get_session_ids(filter)
+    def get_session_ids(self):
+        return self.realfront.get_session_ids()
 
     def get_session_info(self, id):
         return self.realfront.get_session_properties(id)['client_data']
