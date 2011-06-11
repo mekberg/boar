@@ -72,22 +72,20 @@ def list_sessions(front):
         print name, "(" + str(sessions_count[name]) + " revs)"
 
 def list_revisions(front, session_name):
-    for sid in front.get_session_ids():
+    sids = front.get_session_ids(session_name)
+    if not sids:
+        raise UserError("There is no such session: %s" % session_name)
+    for sid in sids:
         session_info = front.get_session_info(sid)
-        name = session_info.get("name", "<no name>")
         log_message = session_info.get("log_message", "<not specified>")
-        if name != session_name:
-            continue
         bloblist = front.get_session_bloblist(sid)
         print "Revision id", str(sid), "(" + session_info['date'] + "),", \
             len(bloblist), "files,", "Log: %s" % (log_message)
 
 def list_files(front, session_name, revision):
     session_info = front.get_session_info(revision)
-    name = session_info.get("name", "<no name>")
-    if name != session_name:
-        print "There is no such session/revision"
-        return
+    if session_info == None or session_info.get("name") != session_name:
+        raise UserError("There is no such session/revision")
     for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
