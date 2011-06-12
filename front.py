@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" The Front class is a facade for the Repository, SessionWriter and
-SessionReader classes. It provides some convenience methods, but its
-primary purpose is to provide an interface that is easy to use over
-RPC. All arguments and return values are primitive values that can be
-serialized easily.
+""" The Front class serves two important purposes. First, it is the
+API of boar. All interaction with a repository must happen through
+this interface. Secondly, all arguments and return values are
+primitive values that can be serialized easily, which makes it easy to
+implement an RPC mechanism for this interface.
 """
 
 from blobrepo import repository
@@ -52,8 +52,8 @@ class Front:
                 result.append(sid)
         return result
 
-    """ Returns None if there is no such snapshot """
     def get_session_info(self, id):
+        """ Returns None if there is no such snapshot """
         if not self.repo.has_snapshot(id):
             return None
         session_reader = self.repo.get_session(id)
