@@ -118,6 +118,46 @@ class WorkdirHelper:
     #                        add_only = True, dry_run = options.dry_run)
         
 
+class TestFront(unittest.TestCase, WorkdirHelper):
+    def setUp(self):
+        self.remove_at_teardown = []
+        self.workdir = self.createTmpName()
+        self.repopath = self.createTmpName()
+        repository.create_repository(self.repopath)
+        os.mkdir(self.workdir)
+        self.wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
+        self.front = self.wd.front
+        id = self.wd.get_front().mksession("TestSession")
+        assert id == 1
+        
+    def testGetIgnoreDefault(self):
+        got_list = self.front.get_session_ignore_list("TestSession")
+        self.assertEquals(got_list, [])
+
+    def testSetAndGetIgnore(self):
+        ignore_list = ["ignore1", "ignore2"]
+        self.front.set_session_ignore_list("TestSession", copy(ignore_list))
+        got_list = self.front.get_session_ignore_list("TestSession")
+        self.assertEquals(ignore_list, got_list)
+
+    def testSetAndGetIgnoreRepeated(self):
+        self.front.set_session_ignore_list("TestSession", ["ignore1"])
+        self.front.set_session_ignore_list("TestSession", ["ignore2"])
+        got_list = self.front.get_session_ignore_list("TestSession")
+        self.assertEquals(got_list, ["ignore2"])
+
+    def testSetIgnoreErrorDetect(self):
+        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+                          "TestSession", "string must not be accepted")
+        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+                          "TestSession", 19) # no numbers allowed
+        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+                          "TestSession", None) # None not allowed
+
+    def tearDown(self):
+        for d in self.remove_at_teardown:
+            shutil.rmtree(d, ignore_errors = True)
+
 class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def setUp(self):
         self.remove_at_teardown = []
