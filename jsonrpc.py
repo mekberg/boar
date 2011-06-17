@@ -202,7 +202,9 @@ class FileDataSource(DataSource):
     def bytes_left(self):
         return self.remaining
 
-    def read(self, n):
+    def read(self, n = None):
+        if n == None:
+            n = self.remaining
         if self.remaining == 0:
             return ""
         bytes_to_read = min(n, self.remaining)
