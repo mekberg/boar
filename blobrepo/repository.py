@@ -231,6 +231,8 @@ class Repo:
                                           session_id = session_id)
 
     def find_last_revision(self, session_name):
+        """ Returns the id of the latest snapshot in the specified
+        session. Returns None if there is no such session. """
         all_sids = self.get_all_sessions()
         all_sids.sort()
         all_sids.reverse()

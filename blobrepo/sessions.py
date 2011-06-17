@@ -282,6 +282,7 @@ class SessionReader:
         self.properties = read_json(path)
 
     def get_properties(self):
+        """Returns a copy of the session properties."""
         return copy.copy(self.properties)
 
     def get_client_value(self, key):
