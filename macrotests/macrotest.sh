@@ -19,6 +19,7 @@ TESTDIR=~+/`dirname $0`
 cd $TESTDIR
 
 #export PATH="$PATH:$TESTDIR/../"
+unset REPO_PATH
 BOAR="$TESTDIR/../boar"
 BOARMOUNT="$TESTDIR/../boarmount"
 REPO="$TESTDIR/TESTREPO"
