@@ -22,14 +22,57 @@ implement an RPC mechanism for this interface.
 """
 
 from blobrepo import repository
+from boar_exceptions import *
 import sys
 from time import ctime, time
+from common import md5sum
 
 if sys.version_info >= (2, 6):
     import json
 else:
     import simplejson as json
 import base64
+
+def get_file_contents(front, session_name, file_name):
+    """This is a convenience function to get the full contents of a
+    named file from the latest revision of a named session. It must
+    only be used on files that are known to be of a reasonable
+    size. The session must exist or an SessionNotFoundError will the
+    thrown. If there is a session, but no matching file, None is
+    returned."""
+    rev = front.find_last_revision(session_name)
+    if not rev:
+        raise SessionNotFoundError("No such session: %s" % session_name)
+    for blobinfo in front.get_session_bloblist(rev):
+        if blobinfo['filename'] == file_name:
+            blob_reader = front.get_blob(blobinfo['md5sum'])
+            return blob_reader.read()
+    return None
+
+def add_file_simple(front, filename, contents):
+    """Adds a file with contents to a new snapshot. The front instance
+    "create_session()" must have been called before this function is
+    used, or an exception will be thrown."""
+    content_checksum = md5sum(contents)
+    if not front.has_blob(content_checksum):
+        front.add_blob_data(content_checksum, base64.b64encode(contents))
+    now = int(time())
+    front.add({'filename': filename,
+               'md5sum': content_checksum,
+               'ctime': now,
+               'mtime': now,
+               'size': len(contents)})
+
+def set_file_contents(front, session_name, filename, contents):
+    """Creates a new snapshot and replaces/creates the given file in
+    the session."""
+    if get_file_contents(front, session_name, filename) == contents:
+        return # No changes necessary
+    rev = front.find_last_revision(session_name)
+    front.create_session(session_name, base_session = rev)
+    add_file_simple(front, filename, contents)
+    front.commit({'name': session_name, 
+                  'date': ctime()})
 
 class Front:
     def __init__(self, repo):
@@ -51,6 +94,31 @@ class Front:
             if name == session_name:
                 result.append(sid)
         return result
+
+    def __set_session_property(self, session_name, property_name, new_value):
+        assert property_name in ("ignore")
+        value_string = json.dumps(new_value, indent = 4)
+        assert value_string == json.dumps(new_value, indent = 4), "Memory corruption?"
+        set_file_contents(self, session_name, ".meta/" + property_name + ".json", value_string)
+
+    def __get_session_property(self, session_name, property_name):
+        """Returns the value of the given session property, or None if
+        there is no such property."""
+        assert property_name in ("ignore")
+        value_string = get_file_contents(self, session_name, ".meta/" + property_name + ".json")
+        if value_string == None:
+            return None
+        return json.loads(value_string)
+
+    def set_session_ignore_list(self, session_name, new_list):
+        assert isinstance(new_list, (tuple, list))
+        self.__set_session_property(session_name, "ignore", new_list)
+        
+    def get_session_ignore_list(self, session_name):        
+        value = self.__get_session_property(session_name, "ignore")
+        if value == None:
+            return []
+        return value
 
     def get_session_info(self, id):
         """ Returns None if there is no such snapshot """
@@ -76,7 +144,9 @@ class Front:
         return bloblist
 
     def create_session(self, session_name, base_session = None):
+        """Creates a new snapshot for the given session."""
         assert isinstance(session_name, basestring), session_name
+        assert not self.new_session, "There already exists an active new snapshot"
         self.new_session = self.repo.create_session(session_name = session_name, \
                                                         base_session = base_session)
 
@@ -97,6 +167,7 @@ class Front:
         """ Must be called after a create_session(). Adds a link to a existing
         blob. Will throw an exception if there is no such blob """
         assert metadata.has_key("md5sum")
+        assert metadata.has_key("filename")
         self.new_session.add(metadata)
 
     def remove(self, filename):
@@ -115,7 +186,9 @@ class Front:
         return self.commit(session_info)
 
 
-    def commit(self, sessioninfo = {}):
+    def commit(self, sessioninfo):
+        assert self.new_session, "There is no active snapshot to commit"
+        assert "name" in sessioninfo
         id = self.new_session.commit(sessioninfo)
         self.new_session = None
         return id
@@ -138,6 +211,8 @@ class Front:
         return self.repo.has_blob(sum)
 
     def find_last_revision(self, session_name):
+        """ Returns the id of the latest snapshot in the specified
+        session. Returns None if there is no such session. """
         return self.repo.find_last_revision(session_name)
 
     def init_verify_blobs(self):
