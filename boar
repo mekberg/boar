@@ -47,6 +47,7 @@ ci        Commit changes in a work directory
 clone     Create or update a clone of a repository
 co        Check out files from the repository
 diffrepo  Check if two repositories are identical
+getprop   Get session properties, such as file ignore lists
 info      Show some information about the current workdir
 import    Import the contents of a folder into your repository
 list      Show the contents of a repository or snapshot
@@ -380,9 +381,41 @@ def cmd_setprop(args):
         session_name, property_name, new_value = args
 
     if property_name == "ignore":
-        front.set_session_ignore_list(session_name, new_value.splitlines())
+        valid_lines = [line for line in new_value.splitlines() if line]
+        front.set_session_ignore_list(session_name, valid_lines)
     else:
         raise UserError("Property name must be one of the following: ignore")
+
+def cmd_getprop(args):
+    parser = OptionParser(usage="usage: boar getprop [options] <session name> <property>")
+    parser.add_option("-f", "--file", action="store", dest = "file", 
+                      help="Write the property value to the given file instead of printing it")
+    (options, args) = parser.parse_args(args)
+    if len(args) < 2:
+        raise UserError("You must specify a session and a property name")
+    if len(args) > 2:
+        raise UserError("Too many arguments")
+
+    session_name, property_name = args
+    front = init_repo_from_env(cmdline_repo)
+
+    property_value = u""
+    if property_name == "ignore":
+        ignore_list = front.get_session_ignore_list(session_name)
+        for item in ignore_list:
+            property_value += item + os.linesep
+    else:
+        raise UserError("Property name must be one of the following: ignore")
+
+    if options.file:
+        try:        
+            with open(options.file, "w") as f:
+                f.write(property_value)
+        except Exception, e:
+            raise UserError("Problems writing file %s: %s" % (options.file, e))
+    else:
+        print property_value
+
 
 def cmd_find(front, args):
     cs, sessionName = args
@@ -528,6 +561,8 @@ def main():
         return cmd_diffrepo(args[1:])
     elif args[0] == "setprop":
         return cmd_setprop(args[1:])
+    elif args[0] == "getprop":
+        return cmd_getprop(args[1:])
     else:
         print_help()
         return 1
