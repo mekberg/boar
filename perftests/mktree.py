@@ -45,10 +45,13 @@ def write_random_contents(filename, count, blocksize = 1024):
             for x in range(0, count):
                 f.write(rand.read(blocksize))
 
+def add_random_files(path, count, filesize_kb):
+    for x in range(0, count):
+        add_randomized_file(path)    
+
 def main():
     random.seed(0) # Make deterministic
-    for x in range(0, 1000):
-        add_randomized_file("test/")
+    add_random_files("test", 1000, 1)
 
 if __name__ == "__main__":
     main()
