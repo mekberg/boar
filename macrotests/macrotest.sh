@@ -35,7 +35,7 @@ $BOAR >/dev/null && { echo "No subcommand should cause an exit error code"; exit
 $BOAR nonexisting_cmd >/dev/null && { echo "Non-existing subcommand should cause an exit error code"; exit 1; }
 
 echo --- Test --help flag
-for subcmd in ci clone co diffrepo info import list locate mkrepo mksession status update verify; do
+for subcmd in ci clone co diffrepo info import list locate mkrepo mksession setprop status update verify; do
     echo Testing $subcmd --help
     ( REPO_PATH="" $BOAR $subcmd --help | grep "Usage:" >/dev/null ) || \
 	{ echo "Subcommand '$subcmd' did not give a help message with --help flag"; exit 1; }

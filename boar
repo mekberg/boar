@@ -31,7 +31,7 @@ if sys.version_info >= (2, 6):
 else:
     import simplejson as json
 
-from front import Front
+from front import Front, set_file_contents
 import workdir
 from common import *
 import settings
@@ -53,6 +53,7 @@ list      Show the contents of a repository or snapshot
 locate    Check if some non-versioned files are already present in a repository
 mkrepo    Create a new repository
 mksession Create a new session
+setprop   Set session properties, such as file ignore lists
 status    List any changes in the current work directory
 update    Update the current work directory from the repository
 verify    Verify the integrity of the repository
@@ -226,8 +227,8 @@ def cmd_list(args):
     elif len(args) == 2:
         list_files(front, args[0], args[1])
     else:
-        print "Duuuh?"
-
+        raise UserError("Too many arguments")
+        
 def cmd_verify(args):
     parser = OptionParser(usage="usage: boar verify [options]")
     parser.add_option("-q", "--quick", dest = "quick", action="store_true",
@@ -351,6 +352,37 @@ def cmd_co(args):
     os.mkdir(workdir_path)
     wd = workdir.Workdir(front.get_repo_path(), session_name, offset, sid, workdir_path)
     wd.checkout()
+
+def cmd_setprop(args):
+    parser = OptionParser(usage="usage: boar setprop [options] <session name> <property> [new value]")
+    parser.add_option("-f", "--file", action="store", dest = "file", 
+                      help="Read the new property value from the given file")
+    (options, args) = parser.parse_args(args)
+    if len(args) < 2:
+        raise UserError("You must specify a session and a property name")
+    if len(args) > 3:
+        raise UserError("Too many arguments")
+    if not options.file and len(args) != 3:
+        raise UserError("Not enough arguments")
+    if options.file and len(args) > 2:
+        raise UserError("You can not specify both a source file and a new value")
+
+    front = init_repo_from_env(cmdline_repo)
+
+    if options.file:
+        session_name, property_name = args
+        try:        
+            with open(options.file, "r") as f:
+                new_value = f.read().decode("utf-8")
+        except Exception, e:
+            raise UserError("Problems reading file %s: %s" % (options.file, e))
+    else:
+        session_name, property_name, new_value = args
+
+    if property_name == "ignore":
+        front.set_session_ignore_list(session_name, new_value.splitlines())
+    else:
+        raise UserError("Property name must be one of the following: ignore")
 
 def cmd_find(front, args):
     cs, sessionName = args
@@ -494,6 +526,8 @@ def main():
         return cmd_clone(args[1:])
     elif args[0] == "diffrepo":
         return cmd_diffrepo(args[1:])
+    elif args[0] == "setprop":
+        return cmd_setprop(args[1:])
     else:
         print_help()
         return 1
