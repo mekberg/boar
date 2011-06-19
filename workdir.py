@@ -34,7 +34,7 @@ import copy
 import cPickle
 import anydbm
 import tempfile
-
+import fnmatch
 # shelve and dbhash are only imported as a workaround for py2exe,
 # which otherwise for some reason will forget to include a dbm implementation
 import shelve
@@ -93,7 +93,7 @@ class Workdir:
             json.dump({'repo_path': self.repoUrl,
                        'session_name': self.sessionName,
                        'offset': self.offset,
-                       'session_id': self.revision}, f, indent = 4)    
+                       'session_id': self.revision}, f, indent = 4)
 
     def export_md5(self):
         assert not os.path.exists("md5sum.txt")
@@ -373,7 +373,11 @@ class Workdir:
 
         comp = TreeComparer(bloblist, filelist)
         unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
-        ignored_files = ()
+
+        ignore_patterns = front.get_session_ignore_list(self.sessionName)
+        ignored_files = tuple([fn for fn in new_files if fnmatch_multi(ignore_patterns, fn)])
+        new_files = tuple([fn for fn in new_files if fn not in ignored_files])
+
         if self.revision == None:
             assert not unchanged_files
             assert not modified_files
@@ -381,20 +385,10 @@ class Workdir:
         result = unchanged_files, new_files, modified_files, deleted_files, ignored_files
         return result
 
-def is_ignored(dirname, entryname = None):
-    if entryname == None:
-        entryname = os.path.basename(dirname)
-        dirname = os.path.dirname(dirname)
-    full_path = os.path.join(dirname, entryname)
-    assert os.path.exists(full_path), "Path '%s' does not exist " % (full_path)
-    if settings.metadir == entryname:
-        return True
-    if os.path.isdir(full_path):
-        return False
-    elif not os.path.isfile(full_path):
-        return True
-    elif os.path.islink(full_path):
-        return True
+def fnmatch_multi(patterns, filename):
+    for pattern in patterns:
+        if fnmatch.fnmatch(filename, pattern):
+            return True
     return False
 
 def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum, log = FakeFile()):

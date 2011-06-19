@@ -415,6 +415,19 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         co_tree = read_tree(wd.root, skip = ".meta")
         self.assertEquals(tree, co_tree)
 
+    def testIgnore(self):        
+        tree = {'file.txt': 'f1',
+                'file.ignore': 'f2'}
+        wd = self.createWorkdir(self.repoUrl, tree)
+        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.checkout()
+        wd.checkin()
+
+        wd = self.createWorkdir(self.repoUrl)
+        wd.checkout()
+        co_tree = read_tree(wd.root, skip = ".meta")
+        self.assertEquals({'file.txt': 'f1'}, co_tree)        
+
 
 class TestWorkdirWithServer(TestWorkdir):
     def create_server(self):
