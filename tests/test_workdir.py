@@ -46,15 +46,18 @@ class DevNull:
     def write(self, s):
         pass
 
-def read_tree(path, skip = None):
+boar_dirs = [".meta", ".boar_session"]
+
+def read_tree(path, skiplist = []):
     """Returns a mapping {filename: content, ...} for the given directory
     tree"""
     assert os.path.exists(path)
     def visitor(out_map, dirname, names):
         encoding = sys.getfilesystemencoding()
         dirname = dirname.decode(encoding)
-        if skip in names:
-            names.remove(skip)
+        for skip in skiplist:
+            if skip in names:
+                names.remove(skip)
         for name in names:
             name = name.decode(encoding)
             fullpath = os.path.join(dirname, name)
@@ -248,7 +251,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
         wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
         wd.checkout()
-        subtree = read_tree(wd.root, skip = ".meta")
+        subtree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2'})
 
     def testOffsetCheckin(self):
@@ -258,12 +261,12 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
         wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
         wd.checkout()
-        subtree = read_tree(wd.root, skip = ".meta")
+        subtree = read_tree(wd.root, skiplist = boar_dirs)
         write_tree(wd.root, {'newfile.txt': 'nf'}, create_root = False)
         wd.checkin()
         wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
         wd.checkout()
-        subtree = read_tree(wd.root, skip = ".meta")
+        subtree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2',
                                    'newfile.txt': 'nf'})        
 
@@ -280,7 +283,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin(add_only = True)
         wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
-        newtree = read_tree(wd.root, skip = ".meta")
+        newtree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEqual(newtree, {'modified.txt': 'mod1',
                                    'deleted.txt': 'del',
                                    'new.txt': 'new'})
@@ -304,7 +307,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEquals(id, 0)
         wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
-        newtree = read_tree(wd.root, skip = ".meta")
+        newtree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEquals(newtree, {'file1.txt': 'fc1',
                                     'file2.txt': 'fc2'})
 
@@ -320,7 +323,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                        {'file2.txt': 'f2 mod1'}, 
                                        revision = rev1)
         wd_update.update(log = DevNull())
-        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file2.txt': 'f2 mod1',
                                          'file3.txt': 'f3'})
 
@@ -343,7 +346,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'file3.txt': 'f3 mod'},# normal modification, but not v2
                                        revision = rev1)
         wd_update.update(log = DevNull())
-        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file1.txt': 'f1 v2',
                                          'file2.txt': 'f2 v2',
                                          'file3.txt': 'f3 mod'})
@@ -361,7 +364,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                        revision = rev1,
                                        offset = "subdir")
         wd_update.update(log = DevNull())
-        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'d/file2.txt': 'f2 mod1',
                                          'd/file3.txt': 'f3'})
 
@@ -381,7 +384,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'file3.txt': 'f3'}, 
                                        revision = rev1)
         wd_update.update(log = DevNull())
-        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file1.txt': 'f1 mod',
                                          'file2.txt': 'f2 mod'})
 
@@ -402,7 +405,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                        revision = rev1,
                                        offset = "subdir")
         wd_update.update(log = DevNull())
-        updated_tree = read_tree(wd_update.root, skip = ".meta")
+        updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'d/file1.txt': 'f1 mod',
                                          'd/file2.txt': 'f2 mod'})
 
@@ -412,7 +415,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
         wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
-        co_tree = read_tree(wd.root, skip = ".meta")
+        co_tree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEquals(tree, co_tree)
 
     def testIgnore(self):
@@ -425,7 +428,22 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
 
         wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
-        co_tree = read_tree(wd.root, skip = ".meta")
+        co_tree = read_tree(wd.root, skiplist = boar_dirs)
+        self.assertEquals({'file.txt': 'f1'}, co_tree)
+
+    def testIgnoreStickyness(self):
+        tree = {'file.txt': 'f1',
+                'file.ignore': 'f2'}
+        wd = self.createWorkdir(self.repoUrl, tree)
+        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.checkout()
+        wd.checkin()
+        id = wd.checkin()
+        # Need to change this test if we make non-changing commits become NOPs.
+        self.assertEquals(id, 4) 
+        wd = self.createWorkdir(self.repoUrl)
+        wd.checkout()
+        co_tree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEquals({'file.txt': 'f1'}, co_tree)
 
     def testIgnoreModifications(self):
@@ -445,8 +463,23 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
 
         wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
-        co_tree = read_tree(wd.root, skip = ".meta")
+        co_tree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEquals(tree, co_tree)
+
+    def testExpectedMetaFilesUpdate(self):
+        tree = {'file.txt': 'f1'}
+        wd = self.createWorkdir(self.repoUrl, tree)
+        wd.checkin()
+        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.update(log = DevNull())
+        wd.get_changes()
+        full_tree_filenames = set(read_tree(wd.root).keys())
+        expected_filenames = set([u'file.txt', 
+                                  u'.meta/info', 
+                                  u'.meta/bloblistcache2.bin', 
+                                  u'.meta/bloblistcache3.bin',
+                                  u'.boar_session/ignore.json'])
+        self.assertEquals(expected_filenames, full_tree_filenames)
 
 
 

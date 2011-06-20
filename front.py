@@ -99,13 +99,13 @@ class Front:
         assert property_name in ("ignore")
         value_string = json.dumps(new_value, indent = 4)
         assert value_string == json.dumps(new_value, indent = 4), "Memory corruption?"
-        set_file_contents(self, session_name, ".meta/" + property_name + ".json", value_string)
+        set_file_contents(self, session_name, ".boar_session/" + property_name + ".json", value_string)
 
     def __get_session_property(self, session_name, property_name):
         """Returns the value of the given session property, or None if
         there is no such property."""
         assert property_name in ("ignore")
-        value_string = get_file_contents(self, session_name, ".meta/" + property_name + ".json")
+        value_string = get_file_contents(self, session_name, ".boar_session/" + property_name + ".json")
         if value_string == None:
             return None
         return json.loads(value_string)
