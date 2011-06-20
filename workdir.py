@@ -339,14 +339,11 @@ class Workdir:
         result = self.root + "/" + without_offset
         return result
 
-    def get_changes(self, skip_checksum = False):
-        """ Compares the work dir with the checked out revision. Returns a
-            tuple of four lists: unchanged files, new files, modified
-            files, deleted files. By default, checksum is used to
-            determine changed files. If skip_checksum is set to True,
-            only file modification date is used to determine if a file
-            has been changed. """
-        assert not skip_checksum, "skip_checksum is not yet implemented"
+    def get_changes(self):
+        """ Compares the work dir with the checked out
+            revision. Returns a tuple of five lists: unchanged files,
+            new files, modified files, deleted files, ignored
+            files. """
         front = self.get_front()
         self.__reload_tree()
         existing_files_list = copy.copy(self.tree)
@@ -375,8 +372,10 @@ class Workdir:
         unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
 
         ignore_patterns = front.get_session_ignore_list(self.sessionName)
-        ignored_files = tuple([fn for fn in new_files if fnmatch_multi(ignore_patterns, fn)])
-        new_files = tuple([fn for fn in new_files if fn not in ignored_files])
+        ignored_files = ()
+        if ignore_patterns: # optimization
+            ignored_files = tuple([fn for fn in new_files if fnmatch_multi(ignore_patterns, fn)])
+            new_files = tuple([fn for fn in new_files if fn not in ignored_files])
 
         if self.revision == None:
             assert not unchanged_files
