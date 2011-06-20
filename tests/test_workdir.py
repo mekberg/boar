@@ -415,7 +415,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         co_tree = read_tree(wd.root, skip = ".meta")
         self.assertEquals(tree, co_tree)
 
-    def testIgnore(self):        
+    def testIgnore(self):
         tree = {'file.txt': 'f1',
                 'file.ignore': 'f2'}
         wd = self.createWorkdir(self.repoUrl, tree)
@@ -426,7 +426,28 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
         co_tree = read_tree(wd.root, skip = ".meta")
-        self.assertEquals({'file.txt': 'f1'}, co_tree)        
+        self.assertEquals({'file.txt': 'f1'}, co_tree)
+
+    def testIgnoreModifications(self):
+        """Expected behavior is that modifications of previously
+        committed (but now ignored) files should be ignored. But they
+        should still be checked out if they exist."""
+        tree = {'file.txt': 'f1',
+                'file.ignore': 'f2',
+                'file-modified.ignore': 'f3'}
+        wd = self.createWorkdir(self.repoUrl, tree)
+        wd.checkin()
+
+        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.update(log = DevNull())
+        write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
+        wd.checkin()
+
+        wd = self.createWorkdir(self.repoUrl)
+        wd.checkout()
+        co_tree = read_tree(wd.root, skip = ".meta")
+        self.assertEquals(tree, co_tree)
+
 
 
 class TestWorkdirWithServer(TestWorkdir):
