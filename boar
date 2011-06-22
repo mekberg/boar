@@ -64,11 +64,13 @@ information. The full command reference is available online at
 http://code.google.com/p/boar/wiki/CommandReference
 """  % BOAR_VERSION
 
-def list_sessions(front):
+def list_sessions(front, show_meta = False):
     sessions_count = {}
     for sid in front.get_session_ids():
         session_info = front.get_session_info(sid)
         name = session_info.get("name", "<no name>")
+        if not show_meta and name.startswith("__"):
+            continue
         sessions_count[name] = sessions_count.get(name, 0) + 1
     for name in sessions_count:
         print name, "(" + str(sessions_count[name]) + " revs)"
@@ -217,12 +219,14 @@ def cmd_mkrepo(args):
 
 def cmd_list(args):
     parser = OptionParser(usage="usage: boar list [session name [snapshot id]]")
+    parser.add_option("-m", "--show-meta", dest = "show_meta", action="store_true",
+                      help="Show meta sessions (stores session properties, normally hidden)")
     (options, args) = parser.parse_args(args)
     if len(args) > 2:
         raise UserError("Too many arguments")
     front = init_repo_from_env(cmdline_repo)
     if len(args) == 0:
-        list_sessions(front)
+        list_sessions(front, options.show_meta)
     elif len(args) == 1:
         list_revisions(front, args[0])
     elif len(args) == 2:

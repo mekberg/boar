@@ -440,7 +440,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
         id = wd.checkin()
         # Need to change this test if we make non-changing commits become NOPs.
-        self.assertEquals(id, 4) 
+        self.assertEquals(id, 5) 
         wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
         co_tree = read_tree(wd.root, skiplist = boar_dirs)
@@ -476,9 +476,8 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         full_tree_filenames = set(read_tree(wd.root).keys())
         expected_filenames = set([u'file.txt', 
                                   u'.meta/info', 
-                                  u'.meta/bloblistcache2.bin', 
-                                  u'.meta/bloblistcache3.bin',
-                                  u'.boar_session/ignore.json'])
+                                  u'.meta/bloblistcache2.bin'])
+
         self.assertEquals(expected_filenames, full_tree_filenames)
 
 
