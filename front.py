@@ -97,15 +97,22 @@ class Front:
 
     def __set_session_property(self, session_name, property_name, new_value):
         assert property_name in ("ignore")
+        meta_session_name = "__meta_" + session_name
+        if self.find_last_revision(meta_session_name) == None:
+            self.__mksession(meta_session_name)
         value_string = json.dumps(new_value, indent = 4)
         assert value_string == json.dumps(new_value, indent = 4), "Memory corruption?"
-        set_file_contents(self, session_name, ".boar_session/" + property_name + ".json", value_string)
+        set_file_contents(self, meta_session_name, property_name + ".json", value_string)
 
     def __get_session_property(self, session_name, property_name):
         """Returns the value of the given session property, or None if
         there is no such property."""
         assert property_name in ("ignore")
-        value_string = get_file_contents(self, session_name, ".boar_session/" + property_name + ".json")
+        meta_session_name = "__meta_" + session_name
+        try:
+            value_string = get_file_contents(self, meta_session_name, property_name + ".json")
+        except SessionNotFoundError:
+            return None
         if value_string == None:
             return None
         return json.loads(value_string)
@@ -177,6 +184,11 @@ class Front:
         self.new_session.remove(filename)
 
     def mksession(self, sessionName):
+        if sessionName.startswith("__"):
+            raise UserError("Session names must not begin with double underscores.")
+        return self.__mksession(sessionName)
+
+    def __mksession(self, sessionName):
         if self.find_last_revision(sessionName) != None:
             raise Exception("There already exists a session named '%s'" % (session_name))
         self.create_session(session_name = sessionName)
