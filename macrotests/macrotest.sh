@@ -130,6 +130,17 @@ md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
 581ab2d89f05c294d4fe69c623bdef83  test_tree/nysubfil.txt
 EOF
 
+echo --- Test ignore files
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
+REPO_PATH=$REPO $BOAR mksession IgnoreSession || { echo "Couldn't create ignore session"; exit 1; }
+REPO_PATH=$REPO $BOAR setprop IgnoreSession ignore "*.ignore"
+echo "contents1" >test_tree/included_file.txt
+echo "contents2" >test_tree/ignored_file.txt.ignore
+REPO_PATH=$REPO $BOAR import -w -m"Testing ignore" test_tree IgnoreSession || { echo "Couldn't import tree"; exit 1; }
+(REPO_PATH=$REPO $BOAR list IgnoreSession 10 | grep included_file.txt) || { echo "List command for session did not contain expected file"; exit 1; }
+(REPO_PATH=$REPO $BOAR list IgnoreSession 10 | grep ignored_file.txt.ignore) && { echo "List command for session DID contain an ignored file"; exit 1; }
+
 echo --- Test offset import / add file / status
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
