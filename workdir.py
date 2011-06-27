@@ -372,9 +372,13 @@ class Workdir:
         unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
 
         ignore_patterns = front.get_session_ignore_list(self.sessionName)
+        include_patterns = front.get_session_include_list(self.sessionName)
         ignored_files = ()
+        if include_patterns: # optimization
+            ignored_files = tuple([fn for fn in new_files if not fnmatch_multi(include_patterns, fn)])
+            new_files = tuple([fn for fn in new_files if fn not in ignored_files])
         if ignore_patterns: # optimization
-            ignored_files = tuple([fn for fn in new_files if fnmatch_multi(ignore_patterns, fn)])
+            ignored_files += tuple([fn for fn in new_files if fnmatch_multi(ignore_patterns, fn)])
             new_files = tuple([fn for fn in new_files if fn not in ignored_files])
 
         if self.revision == None:
