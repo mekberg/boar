@@ -141,6 +141,31 @@ REPO_PATH=$REPO $BOAR import -w -m"Testing ignore" test_tree IgnoreSession || { 
 (REPO_PATH=$REPO $BOAR list IgnoreSession 10 | grep included_file.txt) || { echo "List command for session did not contain expected file"; exit 1; }
 (REPO_PATH=$REPO $BOAR list IgnoreSession 10 | grep ignored_file.txt.ignore) && { echo "List command for session DID contain an ignored file"; exit 1; }
 
+echo --- Test include files
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
+REPO_PATH=$REPO $BOAR mksession IncludeSession || { echo "Couldn't create include session"; exit 1; }
+REPO_PATH=$REPO $BOAR setprop IncludeSession include "*.include"
+echo "contents3" >test_tree/included_file.txt.include
+echo "contents4" >test_tree/ignored_file.txt
+REPO_PATH=$REPO $BOAR import -w -m"Testing include" test_tree IncludeSession || { echo "Couldn't import tree"; exit 1; }
+(REPO_PATH=$REPO $BOAR list IncludeSession 14 | grep included_file.txt.include) || { echo "List command for session did not contain expected file"; exit 1; }
+(REPO_PATH=$REPO $BOAR list IncludeSession 14 | grep ignored_file.txt) && { echo "List command for session DID contain an non-included file"; exit 1; }
+
+echo --- Test combined ignore / include files
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
+REPO_PATH=$REPO $BOAR mksession IncIgnSession || { echo "Couldn't create IncIgnSession session"; exit 1; }
+REPO_PATH=$REPO $BOAR setprop IncIgnSession include "*include*"
+REPO_PATH=$REPO $BOAR setprop IncIgnSession ignore "*ignore*"
+echo "contents5" >test_tree/ignore-file.txt
+echo "contents6" >test_tree/include-file.txt
+echo "contents7" >test_tree/include-ignore-file.txt
+REPO_PATH=$REPO $BOAR import -w -m"Testing include" test_tree IncIgnSession || { echo "Couldn't import tree"; exit 1; }
+(REPO_PATH=$REPO $BOAR list IncIgnSession 19 | grep include-file.txt) || { echo "List command for session did not contain expected file"; exit 1; }
+(REPO_PATH=$REPO $BOAR list IncIgnSession 19 | grep ignore-file.txt) && { echo "List command for session DID contain an non-included file"; exit 1; }
+(REPO_PATH=$REPO $BOAR list IncIgnSession 19 | grep include-ignore-file.txt) && { echo "List command for session DID contain an non-included file"; exit 1; }
+
 echo --- Test offset import / add file / status
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
