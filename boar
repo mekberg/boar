@@ -387,8 +387,11 @@ def cmd_setprop(args):
     if property_name == "ignore":
         valid_lines = [line for line in new_value.splitlines() if line]
         front.set_session_ignore_list(session_name, valid_lines)
+    elif property_name == "include":
+        valid_lines = [line for line in new_value.splitlines() if line]
+        front.set_session_include_list(session_name, valid_lines)
     else:
-        raise UserError("Property name must be one of the following: ignore")
+        raise UserError("Property name must be one of the following: ignore, include")
 
 def cmd_getprop(args):
     parser = OptionParser(usage="usage: boar getprop [options] <session name> <property>")

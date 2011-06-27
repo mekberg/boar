@@ -74,6 +74,8 @@ def set_file_contents(front, session_name, filename, contents):
     front.commit({'name': session_name, 
                   'date': ctime()})
 
+valid_session_props = set(["ignore", "include"])
+
 class Front:
     def __init__(self, repo):
         self.repo = repo
@@ -96,7 +98,7 @@ class Front:
         return result
 
     def __set_session_property(self, session_name, property_name, new_value):
-        assert property_name in ("ignore")
+        assert property_name in valid_session_props
         meta_session_name = "__meta_" + session_name
         if self.find_last_revision(meta_session_name) == None:
             self.__mksession(meta_session_name)
@@ -107,7 +109,7 @@ class Front:
     def __get_session_property(self, session_name, property_name):
         """Returns the value of the given session property, or None if
         there is no such property."""
-        assert property_name in ("ignore")
+        assert property_name in valid_session_props
         meta_session_name = "__meta_" + session_name
         try:
             value_string = get_file_contents(self, meta_session_name, property_name + ".json")
@@ -123,6 +125,16 @@ class Front:
         
     def get_session_ignore_list(self, session_name):        
         value = self.__get_session_property(session_name, "ignore")
+        if value == None:
+            return []
+        return value
+
+    def set_session_include_list(self, session_name, new_list):
+        assert isinstance(new_list, (tuple, list))
+        self.__set_session_property(session_name, "include", new_list)
+        
+    def get_session_include_list(self, session_name):        
+        value = self.__get_session_property(session_name, "include")
         if value == None:
             return []
         return value
