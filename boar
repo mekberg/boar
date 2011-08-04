@@ -252,6 +252,8 @@ def cmd_import(args):
                       help="Don't actually do anything. Just show what will happen.")
     parser.add_option("-w", "--create-workdir", dest = "create_workdir", action="store_true",
                       help="Turn the imported directory into a workdir.")
+    parser.add_option("--ignore-errors", dest = "ignore_errors", action="store_true",
+                      help="Continue operation even if unreadable files are detected.")
     base_session = None
     (options, args) = parser.parse_args(args)
     assert len(args) <= 2
@@ -279,7 +281,7 @@ def cmd_import(args):
         log_message = options.message.decode(locale.getpreferredencoding())
     session_id = wd.checkin(write_meta = options.create_workdir, 
                             fail_on_modifications = True, add_only = True, dry_run = options.dry_run,
-                            log_message = log_message)
+                            log_message = log_message, ignore_errors = options.ignore_errors)
     print "Checked in session id", session_id
 
 def cmd_update(args):
@@ -579,6 +581,7 @@ return_code = 0
 if __name__ == "__main__":
     t1 = time.time()
     sys.stdout = StreamEncoder(sys.stdout)
+    sys.stderr = StreamEncoder(sys.stderr)
     #cProfile.run('main()', "prof.txt")
     #import pstats
     #p = pstats.Stats('prof.txt')

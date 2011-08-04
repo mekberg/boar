@@ -170,7 +170,7 @@ class Workdir:
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
-                    log_message = None):
+                    log_message = None, ignore_errors = False):
         front = self.get_front()
         if dry_run:
             front = DryRunFront(front)
@@ -186,7 +186,7 @@ class Workdir:
             base_snapshot = front.find_last_revision(self.sessionName)
         
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes()
+            self.get_changes(ignore_errors = ignore_errors)
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
 
         if fail_on_modifications and modified_files:
@@ -339,7 +339,7 @@ class Workdir:
         result = self.root + "/" + without_offset
         return result
 
-    def get_changes(self):
+    def get_changes(self, ignore_errors = False):
         """ Compares the work dir with the checked out
             revision. Returns a tuple of five lists: unchanged files,
             new files, modified files, deleted files, ignored
@@ -353,9 +353,15 @@ class Workdir:
         filelist = {}
         for fn in existing_files_list:
             f = prefix + fn
-            filelist[f] = self.cached_md5sum(fn)
             assert not is_windows_path(f), "Was:" + f
             assert not os.path.isabs(f)
+            try:
+                filelist[f] = self.cached_md5sum(fn)
+            except IOError, e:
+                if ignore_errors:
+                    warn("Ignoring unreadable file: %s" % f)
+                else:
+                    raise UserError("Unreadable file: %s" % f)
         
         bloblist = {}
         if self.revision == None:

@@ -50,6 +50,11 @@ def is_md5sum(str):
 
 assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 
+def warn(s):
+    sys.stderr.write("WARNING: ")
+    sys.stderr.write(s)
+    sys.stderr.write("\n")
+
 def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
     """Accepts a file object and yields the specified part of the file
     as a sequence of blocks with length <= blocksize."""

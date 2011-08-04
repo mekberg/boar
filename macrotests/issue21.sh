@@ -2,7 +2,7 @@
 
 # Test option to ignore errors during import
 
-boar="`pwd`/../boar"
+boar=~+/`dirname $0`/../boar
 testdir="/tmp/issue21_tmp$$"
 
 mkdir $testdir || exit 1
@@ -16,4 +16,4 @@ $boar --repo=TESTREPO mksession "Test" || exit 1
 $boar --repo=TESTREPO import workdir "Test/workdir" && { echo "Import of non-readable file succeeded - should fail"; exit 1; }
 $boar --repo=TESTREPO import --ignore-errors workdir "Test/workdir" || { echo "Import failed even though --ignore-errors was given"; exit 1; }
 rm -r $testdir || exit 1
-
+echo "Test succeeded"
