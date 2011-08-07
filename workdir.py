@@ -231,7 +231,7 @@ class Workdir:
             abspath = self.abspath(sessionpath)
             try:
                 check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
-            except IOError, e:
+            except EnvironmentError, e:
                 if ignore_errors:
                     warn("Ignoring unreadable file: %s" % abspath)
                 else:
@@ -363,7 +363,7 @@ class Workdir:
             assert not os.path.isabs(f)
             try:
                 filelist[f] = self.cached_md5sum(fn)
-            except IOError, e:
+            except EnvironmentError, e:
                 if ignore_errors:
                     warn("Ignoring unreadable file: %s" % f)
                 else:
