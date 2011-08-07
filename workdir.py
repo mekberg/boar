@@ -196,13 +196,13 @@ class Workdir:
             deleted_files = ()
             modified_files = ()
 
-        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message)
+        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message, ignore_errors)
 
         if write_meta:
             self.write_metadata()
         return self.revision
 
-    def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message):
+    def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors):
         """ Creates a new snapshot of the files in this
         workdir. Modified and new files are passed in the 'files'
         argument, deleted files in the 'deleted_files' argument. The
@@ -229,7 +229,13 @@ class Workdir:
             wd_path = strip_path_offset(self.offset, sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
             abspath = self.abspath(sessionpath)
-            check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
+            try:
+                check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
+            except IOError, e:
+                if ignore_errors:
+                    warn("Ignoring unreadable file: %s" % abspath)
+                else:
+                    raise UserError("Unreadable file: %s" % abspath)
 
         for f in deleted_files:
             front.remove(f)
