@@ -513,6 +513,13 @@ def main():
     args = sys.argv[1:]
     global cmdline_repo
     cmdline_repo = None
+
+    # --EXEC is only intended for whitebox testing code that needs
+    # invasive access. It should never be used in normal usage.
+    if args[0] == "--EXEC":
+        execfile(args[1])
+        args = args[2:]
+
     if "--version" in args:
         if len(args) != 1:
             raise UserError("The --version option can not be combined with other options")
