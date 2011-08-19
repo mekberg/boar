@@ -444,13 +444,14 @@ def __clone_once(repo1, repo2):
     repo2.pullFrom(repo1)
     print "Performing full verify on cloned repo"
     verify_repo(repo2, verify_blobs = True)
+    print "Repos are in sync."
 
 def __clone_replicate(repo1, repo2):
     print "Entering continous replication mode."
     print "Will replicate all incoming changes on %s to %s" % (repo1, repo2)
     while True:
         if repo1.isIdentical(repo2):
-            time.sleep(1)
+            time.sleep(60)
             continue
         print "Incoming changes found. Cloning..."
         verify_repo(repo1, verify_blobs = False)
