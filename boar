@@ -124,6 +124,7 @@ def verify_repo(repo, verify_blobs = True):
             str(round(1.0*done/count * 100,1)) + "% done."
     return True
 
+
 def cmd_locate(args):
     if len(args) == 0:
         args = ["--help"]
@@ -131,30 +132,31 @@ def cmd_locate(args):
     (options, args) = parser.parse_args(args)
     if len(args) == 0:
         raise UserError("You must specify which session to look in.")
-    if len(args) > 1:
-        raise UserError("Too many arguments.")
     sessionName = args[0]
-
-    root = os.getcwd().decode(sys.getfilesystemencoding())
-    tree = get_tree(root)
-    tree.sort()
-    front = init_repo_from_env(cmdline_repo)
-    wd = workdir.Workdir(front.get_repo_path(), sessionName, "", None, root)
-    missing = []
-    found = 0
-    for f in tree:
-        csum = md5sum_file(f)
-        session_filenames = list(wd.get_filesnames(csum))
-        session_dirs = [os.path.dirname(fn) for fn in session_filenames]
-        if not session_filenames:
-            print "Missing:", f
-            missing.append(f)
-            continue
-        if session_filenames:
-            print "OK:", f
-            found += 1
-            for p in session_filenames:
-                print "   " + p
+    files_to_look_for = args[1:]
+    if not files_to_look_for:
+        files_to_look_for = ["."]
+    files_to_look_for = [os.path.abspath(fn).decode(sys.getfilesystemencoding()) for fn in files_to_look_for] 
+    front = init_repo_from_env(cmdline_repo)    
+    for root in files_to_look_for:
+        tree = get_tree(root)
+        tree.sort()
+        wd = workdir.Workdir(front.get_repo_path(), sessionName, "", None, None)
+        missing = []
+        found = 0
+        for f in tree:
+            csum = md5sum_file(f)
+            session_filenames = list(wd.get_filesnames(csum))
+            session_dirs = [os.path.dirname(fn) for fn in session_filenames]
+            if not session_filenames:
+                print "Missing:", f
+                missing.append(f)
+                continue
+            if session_filenames:
+                print "OK:", f
+                found += 1
+                for p in session_filenames:
+                    print "   " + p
     print "%s files exists in the given session, %s do not." % (found, len(missing))
     for f in missing:
         print "Missing:", f

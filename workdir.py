@@ -17,8 +17,7 @@
 from __future__ import with_statement
 
 import os
-from front import Front, DryRunFront
-from blobrepo.sessions import bloblist_fingerprint
+from front import Front, DryRunFront, RevisionFront
 from blobrepo.repository import Repo
 from treecomp import TreeComparer
 from common import *
@@ -49,7 +48,6 @@ class FakeFile:
     def write(self, s):
         pass
 
-
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
         assert isinstance(root, unicode)
@@ -69,9 +67,7 @@ class Workdir:
         else:
             self.md5cache = {}
         assert self.revision == None or self.revision > 0
-
-        self.blobinfos = None
-        self.bloblist_csums = None
+        self.revision_front = None
         self.tree_csums = None
         self.tree = None
         self.output = FakeFile()
@@ -162,8 +158,6 @@ class Workdir:
                 except:
                     print >>log, "Deletion failed:", b['filename']
         self.revision = new_revision
-        self.blobinfos = None
-        self.bloblist_csums = None
         self.tree = None
         self.write_metadata()
         print >>log, "Workdir now at revision", self.revision
@@ -248,7 +242,7 @@ class Workdir:
             assert type(log_message) == unicode, "Log message must be in unicode"
             session_info["log_message"] = log_message
         self.revision = front.commit(session_info)
-        self.blobinfos = None # Force reload of blobinfos
+        self.revision_front = None
         return self.revision
 
 
@@ -258,43 +252,44 @@ class Workdir:
         self.front = create_front(self.repoUrl)
         return self.front
 
+    def get_revision_front(self):
+        if not self.revision_front:
+            front = self.get_front()
+            self.revision_front = RevisionFront(front, self.revision, 
+                                                self.__load_cached_bloblist, 
+                                                self.__save_cached_bloblist)
+        return self.revision_front
+
     def exists_in_session(self, csum):
         """ Returns true if a file with the given checksum exists in the
             current session. """
-        assert is_md5sum(csum)
-        self.get_bloblist() # ensure self.bloblist_csums is initialized
-        return csum in self.bloblist_csums
+        return self.get_revision_front().exists_in_session(csum)
 
     def get_filesnames(self, csum):
-        assert is_md5sum(csum)
-        bloblist = self.get_bloblist()
-        for b in bloblist:
-            if b['md5sum'] == csum:
-                yield b['filename']
+        return self.get_revision_front().get_filesnames(csum)
 
-    def __load_bloblist(self):
+    def __load_cached_bloblist(self):
+        assert self.revision
+        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
+        if os.path.exists(bloblist_file):
+            try:
+                return cPickle.load(open(bloblist_file, "rb"))
+            except: 
+                return None
+        return None
+
+    def __save_cached_bloblist(self, bloblist):
+        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
+        if os.path.exists(self.metadir):
+            cPickle.dump(bloblist, open(bloblist_file, "wb"))        
+
+    def get_bloblist(self):
         if not self.revision:
             front = self.get_front()
             self.revision = front.find_last_revision(self.sessionName)
         if not self.revision:
             raise UserError("There is no session named '%s'" % (self.sessionName))
-        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
-        if os.path.exists(bloblist_file):
-            self.blobinfos = cPickle.load(open(bloblist_file, "rb"))
-        else:
-            self.blobinfos = self.get_front().get_session_bloblist(self.revision)
-            if os.path.exists(self.metadir):
-                cPickle.dump(self.blobinfos, open(bloblist_file, "wb"))
-        self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
-        expected_fingerprint = self.get_front().get_session_fingerprint(self.revision)
-        calc_fingerprint = bloblist_fingerprint(self.blobinfos)
-        assert calc_fingerprint == expected_fingerprint, \
-            "Cached bloblist did not match repo bloblist"
-
-    def get_bloblist(self):
-        if self.blobinfos == None:
-            self.__load_bloblist()
-        return self.blobinfos
+        return self.get_revision_front().get_bloblist()
 
     def exists_in_workdir(self, csum):
         """ Returns true if at least one file with the given checksum exists
