@@ -268,18 +268,20 @@ class Workdir:
     def get_filesnames(self, csum):
         return self.get_revision_front().get_filesnames(csum)
 
-    def __load_cached_bloblist(self):
-        assert self.revision
-        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
+    def __load_cached_bloblist(self, revision):
+        assert type(revision) == int and revision > 0
+        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
         if os.path.exists(bloblist_file):
             try:
                 return cPickle.load(open(bloblist_file, "rb"))
             except: 
+                warn("Exception while accessing bloblist cache - ignoring")
                 return None
         return None
 
-    def __save_cached_bloblist(self, bloblist):
-        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(self.revision)+".bin")
+    def __save_cached_bloblist(self, revision, bloblist):
+        assert type(revision) == int and revision > 0
+        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
         if os.path.exists(self.metadir):
             cPickle.dump(bloblist, open(bloblist_file, "wb"))        
 
