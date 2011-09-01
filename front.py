@@ -261,14 +261,15 @@ class RevisionFront:
     convenience methods to access some of the contents of a specific
     revision. 
 
-    The bloblist_cache_fn is an optional callback that must return the
-    bloblist for this revision (thus providing a clean way for client
-    code to cache the bloblist). The resulting bloblist will be
-    verified against session fingerprint. The function may return
-    None, which is the same as not giving any cache function. That is,
-    the full bloblist will be fetched from the repo. When a bloblist
-    is loaded from the repo, save_bloblist_cache_fn() will be called
-    with the bloblist as argument."""
+    The bloblist_cache_fn is an optional callback that must accept an
+    revision and return the bloblist for that revision (thus providing
+    a clean way for client code to cache the bloblist). The resulting
+    bloblist will be verified against session fingerprint. The
+    function may return None, which is the same as not giving any
+    cache function. That is, the full bloblist will be fetched from
+    the repo. When a bloblist is loaded from the repo,
+    save_bloblist_cache_fn() will be called with the revision and the
+    bloblist as arguments."""
 
     def __init__(self, front, revision,
                  load_bloblist_cache_fn = None,
@@ -284,7 +285,7 @@ class RevisionFront:
         if self.blobinfos == None:
             expected_fingerprint = self.front.get_session_fingerprint(self.revision)
             if self.load_bloblist_cache_fn:
-                self.blobinfos = self.load_bloblist_cache_fn()
+                self.blobinfos = self.load_bloblist_cache_fn(self.revision)
                 if self.blobinfos:
                     calc_fingerprint = bloblist_fingerprint(self.blobinfos)
                     assert calc_fingerprint == expected_fingerprint, \
@@ -296,7 +297,7 @@ class RevisionFront:
                 assert calc_fingerprint == expected_fingerprint, \
                     "Bloblist from repo did not match repo fingerprint? Repo corruption?"
                 if self.save_bloblist_cache_fn:
-                    self.save_bloblist_cache_fn(self.blobinfos)
+                    self.save_bloblist_cache_fn(self.revision, self.blobinfos)
             self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
         return self.blobinfos
 
