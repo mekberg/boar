@@ -31,7 +31,7 @@ if sys.version_info >= (2, 6):
 else:
     import simplejson as json
 
-from front import Front, set_file_contents
+from front import Front, RevisionFront, set_file_contents
 import workdir
 from common import *
 import settings
@@ -138,15 +138,22 @@ def cmd_locate(args):
         files_to_look_for = ["."]
     files_to_look_for = [os.path.abspath(fn).decode(sys.getfilesystemencoding()) for fn in files_to_look_for] 
     front = init_repo_from_env(cmdline_repo)    
+    revision = front.find_last_revision(sessionName)
+    if not revision:
+        raise UserError("No such session: %s" % sessionName)
+    revision_front = RevisionFront(front, revision)
+
+    missing = []
+    found = 0
     for root in files_to_look_for:
-        tree = get_tree(root)
-        tree.sort()
-        wd = workdir.Workdir(front.get_repo_path(), sessionName, "", None, None)
-        missing = []
-        found = 0
+        if os.path.isdir(root):
+            tree = get_tree(root)
+            tree.sort()
+        else:
+            tree = [root]
         for f in tree:
             csum = md5sum_file(f)
-            session_filenames = list(wd.get_filesnames(csum))
+            session_filenames = list(revision_front.get_filesnames(csum))
             session_dirs = [os.path.dirname(fn) for fn in session_filenames]
             if not session_filenames:
                 print "Missing:", f
@@ -174,7 +181,7 @@ def cmd_status(args):
     filestats = {}
     def in_session(f):
         f_wd = strip_path_offset(wd.offset, f)
-        return "S" if wd.exists_in_session(wd.cached_md5sum(f_wd)) else " "
+        return "S" if wd.get_revision_front().exists_in_session(wd.cached_md5sum(f_wd)) else " "
     def in_workdir(f):
         csum = wd.get_blobinfo(f)['md5sum']
         return "W" if wd.exists_in_workdir(csum) else " "
