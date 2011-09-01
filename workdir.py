@@ -260,14 +260,6 @@ class Workdir:
                                                 self.__save_cached_bloblist)
         return self.revision_front
 
-    def exists_in_session(self, csum):
-        """ Returns true if a file with the given checksum exists in the
-            current session. """
-        return self.get_revision_front().exists_in_session(csum)
-
-    def get_filesnames(self, csum):
-        return self.get_revision_front().get_filesnames(csum)
-
     def __load_cached_bloblist(self, revision):
         assert type(revision) == int and revision > 0
         bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")

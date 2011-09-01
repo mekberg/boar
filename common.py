@@ -257,8 +257,9 @@ def open_raw(filename):
     #     return open(filename, "rb")
 
 def get_tree(root, skip = [], absolute_paths = False):
-    """ Returns a simple list of all the files and directories in the
-        workdir (except meta directories). """
+    """ Returns a simple list of all the files under the given root
+    directory. Any files or directories given in the skip argument
+    will not be returned or scanned."""
     assert isinstance(root, unicode) # type affects os.path.walk callback args
     def visitor(out_list, dirname, names):
         for file_to_skip in skip:
