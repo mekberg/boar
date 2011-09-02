@@ -55,6 +55,11 @@ def warn(s):
     sys.stderr.write(s)
     sys.stderr.write("\n")
 
+def notice(s):
+    sys.stderr.write("NOTICE: ")
+    sys.stderr.write(s)
+    sys.stderr.write("\n")
+
 def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
     """Accepts a file object and yields the specified part of the file
     as a sequence of blocks with length <= blocksize."""
@@ -373,3 +378,5 @@ class StreamEncoder:
         """ Support for the 'with' statement """
         self.close()
 
+def dir_exists(path):
+    return os.path.exists(path) and os.path.isdir(path)

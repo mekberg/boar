@@ -139,7 +139,15 @@ class TestBlobRepo(unittest.TestCase):
         reader = self.repo.get_session(split_snapshot)
         blobinfos = reader.get_all_blob_infos()
         for bi in blobinfos:
-            assertTrue(self.repo.verify_blob(bi['md5sum']))
+            self.assertTrue(self.repo.verify_blob(bi['md5sum']))
+
+    def testSha256(self):
+        writer = self.repo.create_session(SESSION_NAME)
+        writer.add_blob_data(DATA3_MD5, DATA3)
+        writer.add(self.fileinfo3)
+        writer.commit()
+        sha256 = self.repo.sha256.get_sha256(DATA3_MD5)
+        self.assertEquals(sha256, "c61711eee86561d24bba9b541f2c3621a39f0e80e36a6407abfb68bc51264c10")
 
 if __name__ == '__main__':
     unittest.main()
