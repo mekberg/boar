@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import sessions
+import derived
 
 #TODO: use/modify the session reader so that we don't have to use json here
 import sys
@@ -32,11 +33,17 @@ from common import *
 from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
 
+
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
 SESSIONS_DIR = "sessions"
 RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
+DERIVED_DIR = "derived"
+DERIVED_SHA256_DIR = "derived/sha256"
+
+REQUIRED_DIRS = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR)
+UPGRADABLE_DIRS = (DERIVED_DIR, DERIVED_SHA256_DIR)
 
 recoverytext = """Repository format 0.1
 
@@ -90,6 +97,8 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
     os.mkdir(os.path.join(repopath, RECIPES_DIR))
     os.mkdir(os.path.join(repopath, TMP_DIR))
+    os.mkdir(os.path.join(repopath, DERIVED_DIR))
+    os.mkdir(os.path.join(repopath, DERIVED_SHA256_DIR))
     with open(os.path.join(repopath, "recovery.txt"), "w") as f:
         f.write(recoverytext)
 
@@ -99,7 +108,9 @@ def is_recipe_filename(filename):
         and filename_parts[1] == "recipe" \
         and is_md5sum(filename_parts[0])
             
-    
+
+
+
 class Repo:
     def __init__(self, repopath):
         # The path must be absolute to avoid problems with clients
@@ -111,14 +122,22 @@ class Repo:
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        integrity_assert(os.path.exists(self.repopath + "/sessions"), assert_msg)
-        integrity_assert(os.path.exists(self.repopath + "/blobs"), assert_msg)
-        integrity_assert(os.path.exists(self.repopath + "/tmp"), assert_msg)
+        for directory in REQUIRED_DIRS:
+            integrity_assert(dir_exists(os.path.join(repopath, directory)), assert_msg)
         self.repo_mutex.lock_with_timeout(60)
+        self.__upgrade_repo()
+        self.sha256 = derived.blobs_sha256(self, self.repopath + "/derived/sha256")
         try:
             self.process_queue()
         finally:
             self.repo_mutex.release()
+
+    def __upgrade_repo(self):
+        assert self.repo_mutex.locked
+        for directory in UPGRADABLE_DIRS:
+            if not dir_exists(self.repopath + "/" + directory):
+                notice("Upgrading repo - creating '%s' dir" % directory)
+                os.mkdir(self.repopath + "/" + directory)
 
     def __str__(self):
         return "repo:"+self.repopath
