@@ -83,19 +83,38 @@ def md5sum(data):
 
 def md5sum_fileobj(f, start = 0, end = None):
     """Accepts a file object and returns the md5sum."""
-    m = hashlib.md5()
-    for block in file_reader(f, start, end):
-        assert block != "", "Got an empty read"
-        m.update(block)
-    return m.hexdigest()
+    return checksum_fileobj(f, ["md5"], start, end)[0]
 
 def md5sum_file(f, start = 0, end = None):
     """Accepts a filename or a file object and returns the md5sum."""
+    return checksum_file(f, ["md5"], start, end)[0]
+
+def checksum_fileobj(f, checksum_names, start = 0, end = None):
+    """Accepts a file object and returns one or more checksums. The
+    desired checksums are specified in a list by name in the
+    'checksum_names' argument."""
+    checksummers = []
+    for name in checksum_names:
+        assert name in ("md5", "sha256", "sha512")
+        checksummers.append(eval("hashlib.%s()" % name))
+    for block in file_reader(f, start, end):
+        assert block != "", "Got an empty read"
+        for m in checksummers:
+            m.update(block)
+    result = []
+    for m in checksummers:
+        result.append(m.hexdigest())
+    return result
+
+def checksum_file(f, checksum_names, start = 0, end = None):
+    """Accepts a filename or a file object and returns one or more
+    checksums. The desired checksums are specified in a list by name
+    in the 'checksum_names' argument."""
     assert f, "File must not be None"
     if isinstance(f, basestring):
         with open(f, "rb") as fobj:
-            return md5sum_fileobj(fobj, start, end)
-    return md5sum_fileobj(f, start, end)
+            return checksum_fileobj(fobj, checksum_names, start, end)
+    return checksum_fileobj(f, checksum_names, start, end)
 
 def copy_file(source, destination, start = 0, end = None, expected_md5sum = None):
     assert os.path.exists(source), "Source doesn't exist"
