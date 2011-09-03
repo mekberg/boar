@@ -22,6 +22,7 @@ from blobrepo.repository import Repo
 from treecomp import TreeComparer
 from common import *
 from boar_exceptions import *
+from boar_common import *
 import client
 
 from base64 import b64decode, b64encode
@@ -60,17 +61,25 @@ class Workdir:
         self.root = root
         self.metadir = os.path.join(self.root, settings.metadir)
         self.front = None
+
+        self.__upgrade()
+
         if self.repoUrl:
             self.front = self.get_front()
         if os.path.exists(self.metadir):
-            self.md5cache = anydbm.open(self.metadir + "/" + 'md5sumcache', 'c')
+            self.cscache = anydbm.open(self.metadir + "/" + 'csumcache', 'c')
         else:
-            self.md5cache = {}
+            self.cscache = {}
         assert self.revision == None or self.revision > 0
         self.revision_front = None
         self.tree_csums = None
         self.tree = None
         self.output = FakeFile()
+
+    def __upgrade(self):
+        if os.path.exists(self.metadir + "/" + 'md5sumcache'):
+            notice("Upgrading file checksum cache - rescan necessary, may take some time.")
+            safe_delete_file(self.metadir + "/" + 'md5sumcache')
 
     def __reload_tree(self):
         self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
@@ -222,6 +231,7 @@ class Workdir:
         for sessionpath in files:
             wd_path = strip_path_offset(self.offset, sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
+            sha256_checksum = self.cached_sha256(wd_path)
             abspath = self.abspath(sessionpath)
             try:
                 check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
@@ -305,16 +315,29 @@ class Workdir:
                 return info
         return None
 
-    def cached_md5sum(self, relative_path):
+    def __get_cached_checksums(self, relative_path):
+        """Return a list consisting of the md5 and sha256 checksums of
+        the given file as hex encoded strings."""
         assert not os.path.isabs(relative_path), "Path must be relative to the workdir. Was: "+relative_path
         abspath = self.wd_abspath(relative_path)
         stat = os.stat(abspath)
         key = relative_path.encode("utf-8") + "!" + str(int(stat.st_mtime))
-        if key in self.md5cache:
-            return self.md5cache[key]
-        csum = md5sum_file(abspath)
-        self.md5cache[key] = csum
-        return self.md5cache[key]
+        if key in self.cscache:
+            result = self.cscache[key].split(",")
+        else:
+            result = checksum_file(abspath, ("md5", "sha256"))
+            self.cscache[key] = ",".join(result)
+        assert len(result) == 2 and len(result[0]) == 32 and len(result[1]) == 64
+        return result
+
+    def cached_md5sum(self, relative_path):
+        md5, sha256 = self.__get_cached_checksums(relative_path)
+        assert is_md5sum(md5)
+        return md5
+
+    def cached_sha256(self, relative_path):
+        md5, sha256 = self.__get_cached_checksums(relative_path)
+        return sha256
 
     def wd_abspath(self, wd_path):
         """Transforms the given workdir path into a system absolute
@@ -409,7 +432,10 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum, log = Fa
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
     log.write("Checking in %s => %s\n" % (abspath, sessionpath))
-    if not sessionwriter.has_blob(expected_md5sum):
+    if sessionwriter.has_blob(expected_md5sum):
+        # check that it is not an md5 collision
+        pass
+    else:
         with open_raw(abspath) as f:
             m = hashlib.md5()
             while True:
