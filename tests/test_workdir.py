@@ -19,6 +19,7 @@ from __future__ import with_statement
 import sys, os, unittest, tempfile, shutil
 from copy import copy
 import socket, errno
+import base64
 
 DATA1 = "tjosan"
 DATA1_MD5 = "5558e0551622725a5fa380caffa94c5d"
@@ -37,7 +38,7 @@ if __name__ == '__main__':
 
 import workdir
 from blobrepo import repository
-from common import get_tree, my_relpath, convert_win_path_to_unix
+from common import get_tree, my_relpath, convert_win_path_to_unix, md5sum
 from boar_exceptions import UserError
 import server
 from front import Front
@@ -481,6 +482,33 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEquals(expected_filenames, full_tree_filenames)
 
 
+    def testMd5Collision(self):
+        # Quoted from issue16: "There will be no attempt at making the
+        # boar repository store md5 collisions. If a collision is
+        # found during an import or checkin, boar will abort the
+        # operation and print an error message." 
+        #
+        # md5 collisions borrowed from
+        # http://www2.mat.dtu.dk/people/S.Thomsen/wangmd5/samples.html
+        coll1 = base64.b64decode("M5FHQOcdE5P1Bf/74X6spW7leee/4OvwSKh8XL+IZSrR7DJ"+
+                                 "eCLay7JP/VJaKD/kOC298GFghayjRk5Aj2v1sxOuiFyosV+"+
+                                 "MqFkadI6HaBebbj/1EVoDCTSaJJDjTVjWtTTA3bkm+esoKe"+
+                                 "l17UbQJ3M1kE4Z9zZuQxx1Lf3OTz9o=")
+        coll2 = base64.b64decode("M5FHQOcdE5P1Bf/74X6spW7leWe/4OvwSKh8XL+IZSrR7DJ"+
+                                 "eCLay7JP/VJaKj/kOC298GFghayjRk5Cj2v1sxOuiFyosV+"+
+                                 "MqFkadI6HaBebbj/3EVoDCTSaJJDjTVjWtTTA3bkm+esoKe"+
+                                 "l17UTQJ3M1kE4Z9zZuQxx1L/3OTz9o=")
+        self.assertNotEquals(coll1, coll2)
+        self.assertEquals(md5sum(coll1), md5sum(coll2))
+        wd = self.createWorkdir(self.repoUrl, 
+                                {'coll1.bin': coll1, 'coll2.bin': coll2})
+        self.assertRaises(UserError, wd.checkin)
+        wd = self.createWorkdir(self.repoUrl, {'coll1.bin': coll1})
+        wd.checkin()
+        write_tree(wd.root, {'coll2.bin': coll2}, False)
+        self.assertRaises(UserError, wd.checkin)
+                   
+                              
 
 class TestWorkdirWithServer(TestWorkdir):
     def create_server(self):
