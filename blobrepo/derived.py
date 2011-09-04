@@ -27,27 +27,33 @@ class blobs_sha256:
         assert os.path.exists(datadir)
         assert os.path.isdir(datadir)
         self.datadir = datadir
-        self.__init_db()
+        self.conn = None
 
     def __init_db(self):
+        if self.conn:
+            return
         try:
             self.conn = sqlite3.connect(os.path.join(self.datadir, "sha256cache"))
             c = self.conn.cursor()
             c.execute("CREATE TABLE IF NOT EXISTS checksums (md5 char(32) PRIMARY KEY, sha256 char(64) NOT NULL)")
-        except:
+        except Exception, e:
             warn("Exception while initializing blobs_sha256 derived database - harmless but things may be slow\n")
+            warn("The reason was: "+ str(e))
 
     def __set_result(self, md5, sha256):
+        self.__init_db()
         try:
             c = self.conn.cursor()
             c.execute("INSERT INTO checksums (md5, sha256) VALUES (?, ?)", (md5, sha256))
-        except:
+        except Exception, e:
             warn("Exception while writing to blobs_sha256 derived database - harmless but things may be slow\n")
+            warn("The reason was: "+ str(e))
+
 
     def __get_result(self, md5):
+        self.__init_db()
         try:
             c = self.conn.cursor()
-            print md5
             c.execute("SELECT sha256 FROM checksums WHERE md5 = ?", (md5,))
             rows = c.fetchall()
             if rows:
