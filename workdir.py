@@ -178,7 +178,6 @@ class Workdir:
         if dry_run:
             front = DryRunFront(front)
         assert os.path.exists(self.root) and os.path.isdir(self.root)
-
         latest_rev = front.find_last_revision(self.sessionName)
         if self.revision != None and latest_rev != self.revision:
             assert latest_rev > self.revision, \
@@ -228,17 +227,29 @@ class Workdir:
         except FileMutex.MutexLocked, e:
             raise UserError("The session '%s' is in use (lockfile %s)" % (self.sessionName, e.mutex_file))
 
+        # md5 -> sha256 for all files that has been checked into this new snapshot
+        seen_checksums = {}
+
         for sessionpath in files:
             wd_path = strip_path_offset(self.offset, sessionpath)
+            abspath = self.abspath(sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
             sha256_checksum = self.cached_sha256(wd_path)
-            abspath = self.abspath(sessionpath)
+            if expected_md5sum in seen_checksums and seen_checksums[expected_md5sum] != sha256_checksum:
+                front.cancel_snapshot()
+                raise UserError("Local md5 checksum collision detected on %s. md5 collisions are not supported." % abspath)
+            if front.has_blob(expected_md5sum):
+                if sha256_checksum != front.get_blob_sha256(expected_md5sum):
+                    front.cancel_snapshot()
+                    raise UserError("Remote md5 checksum collision detected on %s. md5 collisions are not supported." % abspath)
+            seen_checksums[expected_md5sum] = sha256_checksum
             try:
-                check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
+                check_in_file(front, abspath, sessionpath, expected_md5sum, sha256_checksum, seen_checksums, log = self.output)
             except EnvironmentError, e:
                 if ignore_errors:
                     warn("Ignoring unreadable file: %s" % abspath)
                 else:
+                    front.cancel_snapshot()
                     raise UserError("Unreadable file: %s" % abspath)
 
         for f in deleted_files:
@@ -418,9 +429,9 @@ def fnmatch_multi(patterns, filename):
             return True
     return False
 
-def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum, log = FakeFile()):
+def check_in_file(front, abspath, sessionpath, expected_md5sum, sha256_checksum, seen_checksums, log = FakeFile()):
     """ Checks in the file found at the given "abspath" into the
-    active "sessionwriter" with the path in the session given as
+    active "front" with the path in the session given as
     "sessionpath". The md5sum of the file has to be provided. The
     checksum is compared to the file while it is read, to ensure it is
     consistent."""
@@ -432,21 +443,19 @@ def check_in_file(sessionwriter, abspath, sessionpath, expected_md5sum, log = Fa
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
     log.write("Checking in %s => %s\n" % (abspath, sessionpath))
-    if sessionwriter.has_blob(expected_md5sum):
-        # check that it is not an md5 collision
-        pass
-    else:
+    if not front.has_blob(expected_md5sum) and not front.new_snapshot_has_blob(expected_md5sum):
+        # File does not exist in repo or previously in this new snapshot. Upload it.
         with open_raw(abspath) as f:
             m = hashlib.md5()
             while True:
                 data = f.read(1048576) # 1048576 = 2^20
                 m.update(data)
-                sessionwriter.add_blob_data(expected_md5sum, b64encode(data))
+                front.add_blob_data(expected_md5sum, b64encode(data))
                 if data == "":
                     assert m.hexdigest() == expected_md5sum, \
                         "File changed during checkin process: " + path
                     break
-    sessionwriter.add(blobinfo)
+    front.add(blobinfo)
 
 def init_workdir(path):
     """ Tries to find a workdir root directory at the given path or
