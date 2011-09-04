@@ -79,6 +79,7 @@ def bloblist_fingerprint(bloblist):
 class SessionWriter:
     def __init__(self, repo, session_name, base_session = None, session_id = None):
         assert session_name and isinstance(session_name, basestring)
+        self.dead = False
         self.repo = repo
         self.session_name = session_name
         self.max_blob_size = None
@@ -111,12 +112,17 @@ class SessionWriter:
             self.forced_session_id = int(session_id)
             assert self.forced_session_id > 0
 
+    def cancel(self):
+        self.dead = True
+        self.session_mutex.release()
+        
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""
         assert is_md5sum(blob_md5)
         assert not self.repo.has_blob(blob_md5), "blob already exists"
         if not self.blob_checksummers.has_key(blob_md5):
             self.blob_checksummers[blob_md5] = hashlib.md5()
+        assert not self.dead
         summer = self.blob_checksummers[blob_md5]
         summer.update(fragment)
         fname = os.path.join(self.session_path, blob_md5)
@@ -128,6 +134,7 @@ class SessionWriter:
         return os.path.exists(fname)
 
     def add(self, metadata):
+        assert not self.dead
         assert metadata.has_key('md5sum')
         assert metadata.has_key('filename')
         assert metadata['filename'].find("\\") == -1, \
@@ -146,6 +153,7 @@ class SessionWriter:
         self.resulting_blobdict[metadata['filename']] = metadata
 
     def remove(self, filename):
+        assert not self.dead
         assert self.base_session
         assert self.base_bloblist_dict.has_key(filename)
         metadata = {'filename': filename,
@@ -154,6 +162,7 @@ class SessionWriter:
         del self.resulting_blobdict[metadata['filename']]
 
     def commitClone(self, session):
+        assert not self.dead
         other_bloblist = session.get_all_blob_infos()
         self.resulting_blobdict = bloblist_to_dict(other_bloblist)
         self.metadatas = bloblist_to_dict(session.get_raw_bloblist())
@@ -186,6 +195,7 @@ class SessionWriter:
         cut is at position n, the first part will end at byte n-1, and
         the second part will begin with byte n as the first byte."""
 
+        assert not self.dead
         blob_path = self.repo.get_blob_path(blob)
         pieces = split_file(blob_path, self.session_path, cut_positions, \
                                 lambda b: not self.repo.has_blob(b))
@@ -221,12 +231,14 @@ class SessionWriter:
 
 
     def commit(self, sessioninfo = {}):
+        assert not self.dead
         try:
             return self.__commit(sessioninfo)
         finally:
             self.session_mutex.release()
 
     def __commit(self, sessioninfo):
+        assert not self.dead
         assert self.session_path != None
         for name, summer in self.blob_checksummers.items():
             assert name == summer.hexdigest(), "Corrupted blob found in new session. Commit aborted."

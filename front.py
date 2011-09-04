@@ -25,7 +25,7 @@ from blobrepo import repository
 from boar_exceptions import *
 import sys
 from time import ctime, time
-from common import md5sum, is_md5sum
+from common import md5sum, is_md5sum, warn
 from blobrepo.sessions import bloblist_fingerprint
 
 if sys.version_info >= (2, 6):
@@ -55,7 +55,7 @@ def add_file_simple(front, filename, contents):
     "create_session()" must have been called before this function is
     used, or an exception will be thrown."""
     content_checksum = md5sum(contents)
-    if not front.has_blob(content_checksum):
+    if not front.has_blob(content_checksum) and not front.new_snapshot_has_blob(content_checksum):
         front.add_blob_data(content_checksum, base64.b64encode(contents))
     now = int(time())
     front.add({'filename': filename,
@@ -170,6 +170,13 @@ class Front:
         self.new_session = self.repo.create_session(session_name = session_name, \
                                                         base_session = base_session)
 
+    def cancel_snapshot(self):
+        if not self.new_session:
+            warn("Tried to cancel non-active new snapshot")
+            return
+        self.new_session.cancel()
+        self.new_session = None
+
     def has_snapshot(self, session_name, snapshot_id):
         """ Returns True if there exists a session with the given
         session_name and snapshot id """
@@ -226,14 +233,19 @@ class Front:
     def get_blob_size(self, sum):
         return self.repo.get_blob_size(sum)
 
+    def get_blob_sha256(self, sum):
+        return self.repo.get_blob_sha256(sum)
+
     def get_blob(self, sum, offset = 0, size = -1):
         datasource = self.repo.get_blob_reader(sum, offset, size)
         return datasource
 
     def has_blob(self, sum):
-        if self.new_session:
-            return self.repo.has_blob(sum) or self.new_session.has_blob(sum)
         return self.repo.has_blob(sum)
+
+    def new_snapshot_has_blob(self, sum):
+        assert self.new_session, "new_snapshot_has_blob() must only be called when a new snapshot is underway"
+        return self.new_session.has_blob(sum)
 
     def find_last_revision(self, session_name):
         """ Returns the id of the latest snapshot in the specified
@@ -357,8 +369,17 @@ class DryRunFront:
     def has_blob(self, sum):
         return self.realfront.has_blob(sum)
 
+    def new_snapshot_has_blob(self, sum):
+        return False
+
     def find_last_revision(self, session_name):
         return self.realfront.find_last_revision(session_name)
 
     def mksession(self, sessionName):
         pass
+
+for attrib in Front.__dict__:
+    if not attrib.startswith("_") and callable(Front.__dict__[attrib]):
+        if not attrib in DryRunFront.__dict__:
+            pass
+            #warn("Missing in DryRunFront: "+ attrib)
