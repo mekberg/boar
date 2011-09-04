@@ -507,6 +507,20 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
         write_tree(wd.root, {'coll2.bin': coll2}, False)
         self.assertRaises(UserError, wd.checkin)
+
+    def testExistingFileTwice(self):
+        """Test derived sha256 checksum. It is only returned from the
+        derived storage at the third checkin (at the first, it is
+        never requested since there is no file with that md5 in the
+        repo. At the second, it is generated and returned. At the
+        third, it is not generated, only loaded from storage."""
+        wd = self.createWorkdir(self.repoUrl, 
+                                {'file1.txt': "data"})
+        wd.checkin()
+        write_tree(wd.root, {'subdir/file2.txt': "data"}, False)
+        wd.checkin()
+        write_tree(wd.root, {'subdir/file3.txt': "data"}, False)
+        wd.checkin()
                    
                               
 
