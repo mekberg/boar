@@ -58,7 +58,7 @@ class blobs_sha256:
             rows = c.fetchall()
             if rows:
                 assert len(rows) == 1
-                return rows[0]
+                return rows[0][0]
         except:
             warn("Exception while reading from blobs_sha256 derived database - harmless but things may be slow\n")
         return None
