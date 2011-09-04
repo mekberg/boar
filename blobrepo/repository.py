@@ -190,6 +190,9 @@ class Repo:
             raise ValueError("No such blob or recipe exists: "+sum)
         return recipe['size']
 
+    def get_blob_sha256(self, sum):
+        return self.sha256.get_sha256(sum)
+
     def get_blob_reader(self, sum, offset = 0, size = -1):
         if self.has_raw_blob(sum):
             blobsize = self.get_blob_size(sum)
