@@ -79,6 +79,14 @@ class MisuseError(Exception):
         Exception.__init__(self, msg)
 
 class CorruptionError(Exception):
+    """A serious integrity problem of the repository that cannot be
+    repaired automatically, if at all."""
+    def __init__(self, msg):
+        Exception.__init__(self, msg)
+
+class SoftCorruptionError(Exception):
+    """A harmless integrity problem of the repository requiring
+    rebuilding of derived information."""
     def __init__(self, msg):
         Exception.__init__(self, msg)
 
@@ -125,12 +133,15 @@ class Repo:
         for directory in REQUIRED_DIRS:
             integrity_assert(dir_exists(os.path.join(repopath, directory)), assert_msg)
         self.repo_mutex.lock_with_timeout(60)
-        self.__upgrade_repo()
-        self.sha256 = derived.blobs_sha256(self, self.repopath + "/derived/sha256")
         try:
+            self.__upgrade_repo()
+            self.sha256 = derived.blobs_sha256(self, self.repopath + "/derived/sha256")
             self.process_queue()
         finally:
             self.repo_mutex.release()
+
+    def close(self):
+        self.sha256.close()
 
     def __upgrade_repo(self):
         assert self.repo_mutex.locked
