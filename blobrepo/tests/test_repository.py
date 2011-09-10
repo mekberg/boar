@@ -49,7 +49,8 @@ class TestBlobRepo(unittest.TestCase):
                           "md5sum": DATA3_MD5}
 
     def tearDown(self):
-        shutil.rmtree(self.repopath, ignore_errors = True)
+        #shutil.rmtree(self.repopath, ignore_errors = True)
+        pass
 
     def assertListsEqualAsSets(self, lst1, lst2):
         self.assertEqual(len(lst1), len(lst2))
@@ -148,6 +149,24 @@ class TestBlobRepo(unittest.TestCase):
         writer.commit()
         sha256 = self.repo.sha256.get_sha256(DATA3_MD5)
         self.assertEquals(sha256, "c61711eee86561d24bba9b541f2c3621a39f0e80e36a6407abfb68bc51264c10")
+
+    def testSha256CacheCorruption(self):
+        expected_sha256 = "c61711eee86561d24bba9b541f2c3621a39f0e80e36a6407abfb68bc51264c10"
+        writer = self.repo.create_session(SESSION_NAME)
+        writer.add_blob_data(DATA3_MD5, DATA3)
+        writer.add(self.fileinfo3)
+        writer.commit()
+        sha256 = self.repo.sha256.get_sha256(DATA3_MD5)
+        self.assertEquals(sha256, expected_sha256)
+        self.repo.close()
+        dbname = os.path.join(self.repopath, "derived/sha256/sha256cache")
+        dbfile = open(dbname, "w")        
+        dbfile.write("hejsanhoppsan")
+        print "Db file at %s successfully mangled" % dbname
+        self.repo = repository.Repo(self.repopath)
+        sha256 = self.repo.sha256.get_sha256(DATA3_MD5)
+        self.assertEquals(sha256, expected_sha256)
+        
 
 if __name__ == '__main__':
     unittest.main()
