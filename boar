@@ -22,6 +22,7 @@ import time
 import cProfile
 from optparse import OptionParser
 from blobrepo import repository
+from blobrepo import derived
 from blobrepo.sessions import bloblist_fingerprint
 from boar_exceptions import *
 import client
@@ -54,6 +55,7 @@ list      Show the contents of a repository or snapshot
 locate    Check if some non-versioned files are already present in a repository
 mkrepo    Create a new repository
 mksession Create a new session
+repair    Clear and regenerate caches in the repository.
 setprop   Set session properties, such as file ignore lists
 status    List any changes in the current work directory
 update    Update the current work directory from the repository
@@ -94,8 +96,15 @@ def list_files(front, session_name, revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
 def verify_repo(repo, verify_blobs = True):
+    """Returns True if the repo was clean. Otherwise throws an
+    exception."""
     front = Front(repo)
     print "Verifying repo", repo
+    print "Verifying derived"
+    if front.verify_derived():
+        print "Derived data is ok"
+    else:
+        raise repository.SoftCorruptionError()
     session_ids = front.get_session_ids()
     print "Verifying %s sessions" % (len(session_ids))
     ok_blobs = set()
@@ -251,6 +260,30 @@ def cmd_verify(args):
     front = init_repo_from_env(cmdline_repo)
     verify_repo(front.repo, verify_blobs = not options.quick)
 
+def cmd_repair(args):
+    parser = OptionParser(usage="usage: boar repair [options]")
+    parser.add_option("-f", "--force", dest = "force", action="store_true",
+                      help="Do not scan for errors before repairing")
+    (options, args) = parser.parse_args(args)
+    clean = False
+    repo_url = get_repo_from_env(cmdline_repo)
+    if repo_url.startswith("boar://"):
+        raise UserError("Repairing can only be executed with a local boar repository")
+    if not options.force:
+        try:
+            front = init_repo_from_env(cmdline_repo)
+            clean = verify_repo(front.repo, verify_blobs = not options.quick)
+        except repository.SoftCorruptionError, e:
+            print "Repairable error found:", e
+        except Exception, e:
+            print "Possibly hard error found (repairing may not help):", e
+    if clean:
+        print "No errors found. Not repairing anything."
+        return
+    print "Repairing..."
+    sha256_dir = os.path.join(repo_url, repository.DERIVED_SHA256_DIR)
+    derived.reset_blobs_sha256(sha256_dir)
+
 def cmd_import(args):
     parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
     parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
@@ -320,6 +353,20 @@ def cmd_ci(args):
         log_message = options.message.decode(locale.getpreferredencoding())
     session_id = wd.checkin(add_only = options.addonly, log_message = log_message)
     print "Checked in session id", session_id
+
+"""
+def cmd_relocate(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar relocate <new repo location>")
+    (options, args) = parser.parse_args(args)
+    if len(args) > 1:
+        raise UserError("Too many arguments")
+    new_location, = args
+    wd = workdir.init_workdir(os.getcwd())
+    wd.repoUrl = new_location
+    wd.write_metadata()
+"""
 
 def cmd_mksession(args):
     if len(args) == 0:
@@ -521,21 +568,24 @@ def cmd_diffrepo(args):
 def cmd_export_md5(wd, args):
     wd.export_md5()
 
-def init_repo_from_env(repo_from_cmdline):
+def get_repo_from_env(repo_from_cmdline):
     repopath = os.getenv("REPO_PATH")
     if repo_from_cmdline:
         repopath = repo_from_cmdline
-    front = None
-    msg = None
     if not repopath:
         raise UserError("You need to specify a repository to operate on. "+\
                             "Use the --repo option or set $REPO_PATH.")
-    elif repopath.startswith("boar://"):
-        front = client.connect(repopath)
-    else:
+    if not repopath.startswith("boar://"):
         repopath = os.path.abspath(repopath)
         if not os.path.exists(repopath):
             raise UserError("Provided repository path does not exist: "+repopath)
+    return repopath
+
+def init_repo_from_env(repo_from_cmdline):
+    repopath = get_repo_from_env(repo_from_cmdline)
+    if repopath.startswith("boar://"):
+        front = client.connect(repopath)
+    else:
         front = Front(repository.Repo(repopath))
     assert front
     return front
@@ -586,6 +636,8 @@ def main():
         return cmd_list(args[1:])
     elif args[0] == "verify":
         return cmd_verify(args[1:])
+    elif args[0] == "repair":
+        return cmd_repair(args[1:])
     elif args[0] == "co":
         return cmd_co(args[1:])
     elif args[0] == "status":
@@ -638,7 +690,12 @@ if __name__ == "__main__":
         return_code = 1
     except repository.CorruptionError as e:
         print "REPO CORRUPTION:", e
-        return_code = 1
+        return_code = 13
+    except repository.SoftCorruptionError as e:
+        print "SOFT REPO CORRUPTION:", e
+        print "No need to panic. This means that there are problems in some non-vital cache files in the repository."
+        print "Execute a 'repair' command on the repository to fix this problem."
+        return_code = 7
  
     t2 = time.time()
     print "Finished in", round(t2-t1, 2), "seconds"

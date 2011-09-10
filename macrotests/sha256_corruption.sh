@@ -21,5 +21,7 @@ if [ "$?" -ne 7 ]; then
     exit 1; 
 fi
 echo Executing verify
-REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
+REPO_PATH=$REPO $BOAR verify && { echo "Verify didn't detect error"; exit 1; }
+REPO_PATH=$REPO $BOAR repair || { echo "Repair failed"; exit 1; }
+REPO_PATH=$REPO $BOAR verify || { echo "Verify failed after repair"; exit 1; }
 rm -r $testdir

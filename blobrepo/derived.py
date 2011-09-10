@@ -21,8 +21,25 @@ import os
 import sqlite3
 from weakref import proxy
 from common import *
+from boar_common import safe_delete_file
 import atexit
 import repository
+
+BLOBS_SHA256_DBFILE = "sha256cache"
+
+def verify_blobs_sha256(repo, datadir):
+    try:
+        sha256cache = blobs_sha256(repo, datadir)
+    except repository.SoftCorruptionError, e:
+        warn(str(e))
+        return False
+    if sha256cache.verify():
+        return True
+    warn("blobs_sha256 failed verification")
+    return False
+
+def reset_blobs_sha256(datadir):
+    safe_delete_file(os.path.join(datadir, BLOBS_SHA256_DBFILE))
 
 class blobs_sha256:
     def __init__(self, repo, datadir):
@@ -41,10 +58,9 @@ class blobs_sha256:
         if self.conn:
             return
         try:
-            self.conn = sqlite3.connect(os.path.join(self.datadir, "sha256cache"), check_same_thread = False)
+            self.conn = sqlite3.connect(os.path.join(self.datadir, BLOBS_SHA256_DBFILE), check_same_thread = False)
             self.conn.execute("CREATE TABLE IF NOT EXISTS checksums (md5 char(32) PRIMARY KEY, sha256 char(64) NOT NULL, row_md5 char(32))")
             self.conn.commit()
-            print "Db at %s opened with no problems" % os.path.join(self.datadir, "sha256cache")
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError(e)
             #raise repository.SoftCorruptionError("Exception while accessing the sha256 cache: "+str(e))
@@ -52,38 +68,34 @@ class blobs_sha256:
     def __set_result(self, md5, sha256):
         md5_row = md5sum(md5 + sha256)
         try:
-            self.conn.execute("INSERT INTO checksums (md5, sha256, row_md5) VALUES (?, ?)", (md5, sha256, md5_row))
+            self.conn.execute("INSERT INTO checksums (md5, sha256, row_md5) VALUES (?, ?, ?)", (md5, sha256, md5_row))
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError("Exception while writing to the sha256 cache: "+str(e))
-        print "Result written to db"
 
     def __get_result(self, md5):
         try:
             c = self.conn.cursor()
-            c.execute("SELECT sha256 FROM checksums WHERE md5 = ?", (md5,))
+            c.execute("SELECT md5, sha256, row_md5 FROM checksums WHERE md5 = ?", (md5,))
             rows = c.fetchall()
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError("Exception while reading from the sha256 cache: "+str(e))
         if not rows:
-            print "Result not found in cache"
             return None
         assert len(rows) == 1
-        md5, sha256, md5_row = rows[0]
-        if md5_row != md5sum(md5 + sha256):
+        md5, sha256, row_md5 = rows[0]
+        if row_md5 != md5sum(md5 + sha256):
             raise repository.SoftCorruptionError("Integrity check failed on a row in sha256 cache")
-        print "Result successfully loaded from cache"
         return sha256
 
     def verify(self):
         try:
             c = self.conn.cursor()
             c.execute("SELECT md5, sha256 FROM checksums")
+            rows = c.fetchall()
         except Exception, e:
             warn("Exception while verifying sha256 storage: "+str(e))
             self.__reset()
             return False
-        rows = c.fetchall()
-        print "Sha256 cache verifying %s items" % len(rows)
         for row in rows:
             md5, sha256 = row
             fresh_sha256 = self.__generate_sha256(md5)
@@ -92,13 +104,6 @@ class blobs_sha256:
                 return False
             notice("Stored sha256 for %s seems correct" % md5)
         return True
-
-    def __reset(self):
-        warn("Resetting sha256 cache.\n"+
-             "This is harmless, but things may be slow while the cache repopulates")
-        self.conn.close()
-        self.conn = None
-        self.__init_db()
 
     def __generate_sha256(self, blob):
         md5 = hashlib.md5()
@@ -123,7 +128,6 @@ class blobs_sha256:
         return result
         
     def sync(self):
-        print "Syncing db to disk"
         if self.conn:
             self.conn.commit()
 
