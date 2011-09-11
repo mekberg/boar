@@ -71,7 +71,6 @@ class Workdir:
         else:
             self.cscache = {}
         assert self.revision == None or self.revision > 0
-        self.revision_front = None
         self.tree_csums = None
         self.tree = None
         self.output = FakeFile()
@@ -137,7 +136,7 @@ class Workdir:
             new_revision = front.find_last_revision(self.sessionName)
         new_bloblist = front.get_session_bloblist(new_revision)
         new_bloblist_dict = bloblist_to_dict(new_bloblist)
-        old_bloblist = self.get_bloblist()
+        old_bloblist = self.get_bloblist(self.revision)
         for b in new_bloblist:
             if not is_child_path(self.offset, b['filename']):
                 continue
@@ -263,7 +262,6 @@ class Workdir:
             assert type(log_message) == unicode, "Log message must be in unicode"
             session_info["log_message"] = log_message
         self.revision = front.commit(session_info)
-        self.revision_front = None
         return self.revision
 
 
@@ -273,13 +271,11 @@ class Workdir:
         self.front = create_front(self.repoUrl)
         return self.front
 
-    def get_revision_front(self):
-        if not self.revision_front:
-            front = self.get_front()
-            self.revision_front = RevisionFront(front, self.revision, 
-                                                self.__load_cached_bloblist, 
-                                                self.__save_cached_bloblist)
-        return self.revision_front
+    def get_revision_front(self, revision):
+        front = self.get_front()
+        return RevisionFront(front, revision, 
+                             self.__load_cached_bloblist, 
+                             self.__save_cached_bloblist)
 
     def __load_cached_bloblist(self, revision):
         assert type(revision) == int and revision > 0
@@ -298,13 +294,9 @@ class Workdir:
         if os.path.exists(self.metadir):
             cPickle.dump(bloblist, open(bloblist_file, "wb"))        
 
-    def get_bloblist(self):
-        if not self.revision:
-            front = self.get_front()
-            self.revision = front.find_last_revision(self.sessionName)
-        if not self.revision:
-            raise UserError("There is no session named '%s'" % (self.sessionName))
-        return self.get_revision_front().get_bloblist()
+    def get_bloblist(self, revision):
+        assert type(revision) == int
+        return self.get_revision_front(revision).get_bloblist()
 
     def exists_in_workdir(self, csum):
         """ Returns true if at least one file with the given checksum exists
@@ -321,7 +313,7 @@ class Workdir:
         """ Returns the info dictionary for the given path and the current
             session. The given file does not need to exist, the information is
             fetched from the repository"""
-        for info in self.get_bloblist():
+        for info in self.get_bloblist(self.revision):
             if info['filename'] == relpath:
                 return info
         return None
@@ -399,7 +391,7 @@ class Workdir:
             if not self.revision:
                 raise UserError("No session found named '%s'" % (self.sessionName))
 
-        for i in self.get_bloblist():
+        for i in self.get_bloblist(self.revision):
             if is_child_path(self.offset, i['filename']):
                 bloblist[i['filename']] = i['md5sum']
 
