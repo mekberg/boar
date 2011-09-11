@@ -102,7 +102,7 @@ def integrity_assert(test, errormsg = None):
 
 def create_repository(repopath):
     os.mkdir(repopath)
-    create_file(os.path.join(repopath, VERSION_FILE), "0")
+    create_file(os.path.join(repopath, VERSION_FILE), "1")
     os.mkdir(os.path.join(repopath, QUEUE_DIR))
     os.mkdir(os.path.join(repopath, BLOB_DIR))
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
