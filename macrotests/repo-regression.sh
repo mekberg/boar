@@ -19,11 +19,11 @@ patch $testdir/regression-boar-daily.11-Jul-2011/workdir/.meta/info <<EOF || exi
 EOF
 
 REPO_PATH=$REPO $BOAR status || { echo "Couldn't execute status"; exit 1; }
-md5sum -c ../r6.md5
-REPO_PATH=$REPO $BOAR update -r2 || { echo "Couldn't execute status"; exit 1; }
-md5sum -c ../r2.md5
+md5sum -c ../r7.md5 || { echo "r7.md5 failed"; exit 1; }
+REPO_PATH=$REPO $BOAR update -r2 || { echo "Couldn't execute update"; exit 1; }
+md5sum -c ../r2.md5 || { echo "r2.md5 failed"; exit 1; }
 REPO_PATH=$REPO $BOAR update || { echo "Couldn't execute status"; exit 1; }
-md5sum -c ../r6.md5
+md5sum -c ../r6.md5 || { echo "r6.md5 failed"; exit 1; }
 cp some_text.txt some_text2.txt
 REPO_PATH=$REPO $BOAR ci || { echo "Couldn't execute ci"; exit 1; }
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
