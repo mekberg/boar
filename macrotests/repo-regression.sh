@@ -28,6 +28,8 @@ cp some_text.txt some_text2.txt
 REPO_PATH=$REPO $BOAR ci || { echo "Couldn't execute ci"; exit 1; }
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
 
+echo "--- Test explicit version 0 repository"
+# version 0 repos does not normally have a version.txt
 cd $testdir || exit 1
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
