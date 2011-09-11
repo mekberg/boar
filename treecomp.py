@@ -18,6 +18,8 @@ class TreeComparer:
     def __init__(self, basetree, newtree):
         """ A tree is defined by a dict on the form
         {filename: fingerprint} """
+        assert type(basetree) == dict
+        assert type(newtree) == dict
         self.basetree = basetree
         self.newtree = newtree
         self.__compare()
