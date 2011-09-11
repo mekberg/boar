@@ -127,16 +127,16 @@ class Workdir:
             # have been redirected (see issue 18)
             log = StreamEncoder(sys.stdout)
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes()
+            self.get_changes(self.revision)
         front = self.get_front()
         if new_revision:
             if not front.has_snapshot(self.sessionName, new_revision):
                 raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
         else:
             new_revision = front.find_last_revision(self.sessionName)
+        old_bloblist = self.get_bloblist(self.revision)
         new_bloblist = front.get_session_bloblist(new_revision)
         new_bloblist_dict = bloblist_to_dict(new_bloblist)
-        old_bloblist = self.get_bloblist(self.revision)
         for b in new_bloblist:
             if not is_child_path(self.offset, b['filename']):
                 continue
@@ -185,9 +185,9 @@ class Workdir:
         base_snapshot = None
         if not force_primary_session:
             base_snapshot = front.find_last_revision(self.sessionName)
-        
+
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes(ignore_errors = ignore_errors)
+            self.get_changes(self.revision, ignore_errors = ignore_errors)
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
 
         if fail_on_modifications and modified_files:
@@ -295,7 +295,7 @@ class Workdir:
             cPickle.dump(bloblist, open(bloblist_file, "wb"))        
 
     def get_bloblist(self, revision):
-        assert type(revision) == int
+        assert type(revision) == int, "Revision was '%s'" % revision
         return self.get_revision_front(revision).get_bloblist()
 
     def exists_in_workdir(self, csum):
@@ -360,11 +360,11 @@ class Workdir:
         result = self.root + "/" + without_offset
         return result
 
-    def get_changes(self, ignore_errors = False):
-        """ Compares the work dir with the checked out
-            revision. Returns a tuple of five lists: unchanged files,
-            new files, modified files, deleted files, ignored
-            files. """
+    def get_changes(self, revision = None, ignore_errors = False):
+        """ Compares the work dir with given revision, or the latest
+            revision if no revision is given. Returns a tuple of five
+            lists: unchanged files, new files, modified files, deleted
+            files, ignored files."""
         front = self.get_front()
         self.__reload_tree()
         existing_files_list = copy.copy(self.tree)
@@ -384,18 +384,22 @@ class Workdir:
                 else:
                     raise UserError("Unreadable file: %s" % f)
         
-        bloblist = {}
-        if self.revision == None:
-            assert self.sessionName
-            self.revision = front.find_last_revision(self.sessionName)
-            if not self.revision:
-                raise UserError("No session found named '%s'" % (self.sessionName))
+        if revision != None:
+            bloblist = self.get_bloblist(revision)
+        else:
+            if self.revision == None:
+                assert self.sessionName
+                self.revision = front.find_last_revision(self.sessionName)
+                if not self.revision:
+                    raise UserError("No session found named '%s'" % (self.sessionName))
+            bloblist = self.get_bloblist(self.revision)
 
-        for i in self.get_bloblist(self.revision):
+        bloblist_dict = {}
+        for i in bloblist:
             if is_child_path(self.offset, i['filename']):
-                bloblist[i['filename']] = i['md5sum']
+                bloblist_dict[i['filename']] = i['md5sum']
 
-        comp = TreeComparer(bloblist, filelist)
+        comp = TreeComparer(bloblist_dict, filelist)
         unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
 
         ignore_patterns = front.get_session_ignore_list(self.sessionName)
