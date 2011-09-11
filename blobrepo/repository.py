@@ -30,10 +30,12 @@ import derived
 #TODO: use/modify the session reader so that we don't have to use json here
 import sys
 from common import *
+from boar_common import *
 from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
+from boar_exceptions import UserError
 
-
+VERSION_FILE = "version.txt"
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
 SESSIONS_DIR = "sessions"
@@ -42,8 +44,8 @@ TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
 DERIVED_SHA256_DIR = "derived/sha256"
 
-REQUIRED_DIRS = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR)
-UPGRADABLE_DIRS = (DERIVED_DIR, DERIVED_SHA256_DIR)
+REPO_DIRS_V0 = QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR
+REPO_DIRS_V1 = QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR, DERIVED_DIR, DERIVED_SHA256_DIR
 
 recoverytext = """Repository format 0.1
 
@@ -100,6 +102,7 @@ def integrity_assert(test, errormsg = None):
 
 def create_repository(repopath):
     os.mkdir(repopath)
+    create_file(os.path.join(repopath, VERSION_FILE), "0")
     os.mkdir(os.path.join(repopath, QUEUE_DIR))
     os.mkdir(os.path.join(repopath, BLOB_DIR))
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
@@ -129,12 +132,10 @@ class Repo:
         self.session_readers = {}
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
-        assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        for directory in REQUIRED_DIRS:
-            integrity_assert(dir_exists(os.path.join(repopath, directory)), assert_msg)
         self.repo_mutex.lock_with_timeout(60)
         try:
             self.__upgrade_repo()
+            self.__quick_check()
             self.sha256 = derived.blobs_sha256(self, self.repopath + "/derived/sha256")
             self.process_queue()
         finally:
@@ -143,12 +144,53 @@ class Repo:
     def close(self):
         self.sha256.close()
 
+    def __quick_check(self):
+        """This method must be called after any repository upgrade
+        procedure. It will assert that the repository is upgraded to
+        the latest format and looks somewhat ok. It will raise an
+        exception if an error is found."""
+        repo_version = self.__get_repo_version()
+        assert repo_version, "Repo format obsolete. Upgrade failed?"
+        integrity_assert(repo_version == 1, ("Repo version %s can not be handled by this version of boar" % repo_version))
+        assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
+        for directory in REPO_DIRS_V1:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
+
     def __upgrade_repo(self):
+        version = self.__get_repo_version()
+        if version > 1:
+            raise UserError("Repo version %s can not be handled by this version of boar" % version)
+        if version == 1:
+            return
+        notice("Old repo format detected. Upgrading...")
+        assert version == 0
+        version_file = os.path.join(self.repopath, VERSION_FILE)
         assert self.repo_mutex.locked
-        for directory in UPGRADABLE_DIRS:
-            if not dir_exists(self.repopath + "/" + directory):
-                notice("Upgrading repo - creating '%s' dir" % directory)
-                os.mkdir(self.repopath + "/" + directory)
+        for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
+            if dir_exists(self.repopath + "/" + directory):
+                warn("Repo upgrade confusion: a folder already existed while upgrading to v1: %s" % directory)
+                continue
+            notice("Upgrading repo - creating '%s' dir" % directory)
+            os.mkdir(self.repopath + "/" + directory)
+        if os.path.exists(version_file):
+            warn("Version marker should not exist for repo format v0")
+            safe_delete_file(version_file)
+        create_file(version_file, "1")
+
+    def __get_repo_version(self):
+        version_file = os.path.join(self.repopath, VERSION_FILE)
+        if os.path.exists(version_file):
+            with open(version_file, "r") as f:
+                return int(f.read())
+        # Repo is from before repo format numbering started.
+        # Make sure it is a valid one and return v0
+        for directory in REPO_DIRS_V0:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), 
+                             "The repo at %s does not look like a repository" % self.repopath)
+        for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
+            integrity_assert(not dir_exists(os.path.join(self.repopath, directory)),
+                             "Repo %s does not seem to match repository contents" % VERSION_FILE)
+        return 0
 
     def __str__(self):
         return "repo:"+self.repopath
