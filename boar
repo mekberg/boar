@@ -186,7 +186,7 @@ def cmd_status(args):
     if not wd:
         raise UserError("No workdir found here.")
     unchanged_files, new_files, modified_files, deleted_files, ignored_files \
-        = wd.get_changes()
+        = wd.get_changes(wd.revision)
     filestats = {}
     def in_session(f):
         f_wd = strip_path_offset(wd.offset, f)
