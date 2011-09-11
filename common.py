@@ -138,7 +138,17 @@ def move_file(source, destination, mkdirs = False):
         os.makedirs(dirname)
     os.rename(source, destination)
 
-
+def create_file(destination, content, tmp_suffix = ".tmp"):
+    """Write the given content to a new file at the given path. The
+    file must not exist before. The contents will first be written to
+    a temporary file in the destination directory, with the given
+    suffix, and then moved to its destination. The suffix file may
+    exist and will in that case be overwritten and lost."""
+    assert not os.path.exists(destination)
+    tmpfile = destination + tmp_suffix
+    with open(tmpfile, "w") as f:
+        f.write(content)
+    move_file(tmpfile, destination)
 
 def split_file(source, dest_dir, cut_positions, want_piece = None):
     """'Cuts' is a list of positions where to split the source
