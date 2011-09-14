@@ -43,11 +43,13 @@ RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
 DERIVED_SHA256_DIR = "derived/sha256"
+DERIVED_BLOCKS_DIR = "derived/blocks"
 
-REPO_DIRS_V0 = QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR
-REPO_DIRS_V1 = QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR, DERIVED_DIR, DERIVED_SHA256_DIR
+REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR)
+REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR,\
+    DERIVED_DIR, DERIVED_SHA256_DIR, DERIVED_BLOCKS_DIR)
 
-recoverytext = """Repository format 0.1
+recoverytext = """Repository format v1
 
 This is a versioned repository of files. It is designed to be easy to
 recover in case the original software is unavailable. This document
@@ -110,6 +112,7 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, TMP_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_SHA256_DIR))
+    os.mkdir(os.path.join(repopath, DERIVED_BLOCKS_DIR))
     with open(os.path.join(repopath, "recovery.txt"), "w") as f:
         f.write(recoverytext)
 
@@ -166,7 +169,7 @@ class Repo:
         assert version == 0
         version_file = os.path.join(self.repopath, VERSION_FILE)
         assert self.repo_mutex.locked
-        for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
+        for directory in (DERIVED_DIR, DERIVED_SHA256_DIR, DERIVED_BLOCKS_DIR):
             if dir_exists(self.repopath + "/" + directory):
                 warn("Repo upgrade confusion: a folder already existed while upgrading to v1: %s" % directory)
                 continue
@@ -176,6 +179,11 @@ class Repo:
             warn("Version marker should not exist for repo format v0")
             safe_delete_file(version_file)
         create_file(version_file, "1")
+        try:
+            self.__quick_check()
+        except:
+            warn("Post-upgrade quickcheck of repository failed!")
+            raise
 
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
