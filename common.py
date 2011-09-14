@@ -409,3 +409,21 @@ class StreamEncoder:
 
 def dir_exists(path):
     return os.path.exists(path) and os.path.isdir(path)
+
+
+class RateLimiter:
+    """This class makes it easy to perform some action only when a
+    certain time has passed. The maxrate parameter is given in Hz and
+    may be a float. The first call to ready() will always return
+    True, and then the timer starts ticking."""
+
+    def __init__(self, maxrate):
+        self.min_period = 1.0 / maxrate
+        self.last_trig = 0.0
+    
+    def ready(self):
+        now = time.time()
+        if now - self.last_trig >= self.min_period:
+            self.last_trig = now
+            return True
+        return False
