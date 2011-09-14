@@ -53,6 +53,7 @@ class blobs_sha256:
         self.conn = None
         self.__init_db()
         atexit.register(self.sync)
+        self.rate_limiter = RateLimiter(1.0)
 
     def __init_db(self):
         if self.conn:
@@ -121,6 +122,8 @@ class blobs_sha256:
 
     def get_sha256(self, blob):
         result = self.__get_result(blob)
+        if self.rate_limiter.ready():
+            self.sync()
         if result:
             return result
         result = self.__generate_sha256(blob)
