@@ -325,7 +325,8 @@ class Workdir:
         abspath = self.wd_abspath(relative_path)
         stat = os.stat(abspath)
         key = relative_path.encode("utf-8") + "!" + str(int(stat.st_mtime))
-        if key in self.cscache:
+        recent_change =  abs(time.time() - stat.st_mtime) < 5.0
+        if key in self.cscache and not recent_change:
             result = self.cscache[key].split(",")
         else:
             result = checksum_file(abspath, ("md5", "sha256"))
