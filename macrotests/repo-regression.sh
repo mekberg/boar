@@ -38,13 +38,18 @@ REPO_PATH=$REPO $BOAR ci && { echo "Ci executed ok even though workdir is out of
 REPO_PATH=$REPO $BOAR update || { echo "Couldn't execute update to latest version"; exit 1; }
 REPO_PATH=$REPO $BOAR ci || { echo "Couldn't execute ci"; exit 1; }
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
+cd $testdir || exit 1
+rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test explicit version 0 repository"
 # version 0 repos does not normally have a version.txt
-cd $testdir || exit 1
-rm -r regression-boar-daily.11-Jul-2011 || exit 1
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 echo "0" >$REPO/version.txt
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
+rm -r regression-boar-daily.11-Jul-2011 || exit 1
+
+echo "--- Test repo cloning"
+tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+$BOAR clone $REPO clone || { echo "Couldn't clone"; exit 1; }
 
 rm -r $testdir
