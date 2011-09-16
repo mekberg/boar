@@ -128,6 +128,8 @@ class blobs_sha256:
             return result
         result = self.__generate_sha256(blob)
         self.__set_result(blob, result)
+        if self.rate_limiter.ready():
+            self.sync()
         return result
         
     def sync(self):
