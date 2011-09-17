@@ -173,7 +173,18 @@ REPO_PATH=$REPO $BOAR import -v -w test_tree MyTestSession/new_import || { echo 
 (cd test_tree && $BOAR status) || { echo "Status command 1 failed"; exit 1; }
 echo "Some new content" >test_tree/new_file.txt
 (cd test_tree && $BOAR status) || { echo "Status command 2 failed"; exit 1; }
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 #find test_tree -type f -a ! -ipath *.meta*` || { echo "More files than expected in checkout"; exit 1; }
+
+echo --- Test offset co with unicode chars
+mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
+mkdir test_tree/räksmörgåsar || { echo "Couldn't create test_tree dir"; exit 1; }
+echo "En räksmörgås" >test_tree/räksmörgåsar/räksmörgås.txt || { echo "Couldn't create unicode file"; exit 1; }
+REPO_PATH=$REPO $BOAR import -v -w test_tree MyTestSession || { echo "Couldn't import unicode dir"; exit 1; }
+(cd test_tree && $BOAR status) || { echo "Status command failed"; exit 1; }
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+REPO_PATH=$REPO $BOAR co MyTestSession/räksmörgåsar test_tree || { echo "Couldn't check out unicode offset dir"; exit 1; }
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 
 echo --- Test verify
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify repo"; exit 1; }
