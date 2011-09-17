@@ -36,6 +36,7 @@ from jsonrpc import FileDataSource
 from boar_exceptions import UserError
 
 VERSION_FILE = "version.txt"
+RECOVERYTEXT_FILE = "recovery.txt"
 QUEUE_DIR = "queue"
 BLOB_DIR = "blobs"
 SESSIONS_DIR = "sessions"
@@ -175,10 +176,20 @@ class Repo:
                 continue
             notice("Upgrading repo - creating '%s' dir" % directory)
             os.mkdir(self.repopath + "/" + directory)
+
+
+        try:
+            safe_delete_file(os.path.join(self.repopath, RECOVERYTEXT_FILE))
+        except OSError:
+            # Missing non-essential file should not be fatal
+            warn("Repo did not contain a recovery.txt")
+        create_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+
         if os.path.exists(version_file):
             warn("Version marker should not exist for repo format v0")
             safe_delete_file(version_file)
         create_file(version_file, "1")
+
         try:
             self.__quick_check()
         except:
