@@ -495,6 +495,17 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         co_tree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEquals(tree, co_tree)
 
+    def testFastModifications(self):
+        """Verify that the checksum cache is not confused by more than
+        one change per second"""
+        wd = self.createWorkdir(self.repoUrl)
+        wd.checkin()
+        for n in range(0, 10):
+            write_tree(wd.root, {'file.txt': 'content 1'}, False)
+            self.assertEqual(wd.cached_md5sum("file.txt"), "9297ab3fbd56b42f6566284119238125")
+            write_tree(wd.root, {'file.txt': 'content 2'}, False)        
+            self.assertEqual(wd.cached_md5sum("file.txt"), "6685cd62b95f2c58818cb20e7292168b")
+
     def testIncludeModifications(self):
         """Expected behavior is that modifications of previously
         committed (but now ignored) files should be ignored. But they
