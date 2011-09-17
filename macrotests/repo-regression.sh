@@ -44,8 +44,22 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 echo "--- Test explicit version 0 repository"
 # version 0 repos does not normally have a version.txt
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
-echo "0" >$REPO/version.txt
+echo "0" >$REPO/version.txt || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
+rm -r regression-boar-daily.11-Jul-2011 || exit 1
+
+echo "--- Test future version detection"
+tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+echo "2" >$REPO/version.txt || exit 1
+REPO_PATH=$REPO $BOAR verify && { echo "Future version repo should fail"; exit 1; }
+rm -r regression-boar-daily.11-Jul-2011 || exit 1
+
+echo "--- Test repository without recovery.txt"
+# version 0 repos does normally have a recovery.txt
+tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+rm $REPO/recovery.txt || exit 1
+REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
+test -e $REPO/recovery.txt || { echo "recovery.txt wasn't recreated"; exit 1; }
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test repo cloning"
