@@ -52,30 +52,65 @@ REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR,\
 recoverytext = """Repository format v1
 
 This is a versioned repository of files. It is designed to be easy to
-recover in case the original software is unavailable. This document
-describes the layout of the repository, so that a programmer can
-construct a simple program that recovers the data.
+recover in case the original software is unavailable.
+
+This document describes the layout of the repository, so that a
+programmer can construct a simple program that recovers the data. To
+extract the data, only basic programming skills are necessary. The
+extraction can also be performed manually for individual files.
+
+Note that it is always easier and safer to use the original software,
+if possible. At the time of this writing, the boar software can be
+downloaded at http://code.google.com/p/boar/
+
+== The non-vital files ==
+
+The repository contains files that are not useful for extracting
+data. These are the "tmp", "derived", and "queue" folders. They can be
+ignored for this purpose.
+
+== The blobs == 
 
 All files are stored verbatim in the "blobs" directory, named after
 their md5 checksum, and sorted in sub directories based on the start
 of their names. For instance, if a file "testimage.jpg" has the
 checksum bc7b0fb8c2e096693acacbd6cb070f16, it will be stored in
 blobs/bc/bc7b0fb8c2e096693acacbd6cb070f16 since the checksum starts
-with the letters "bc". The filename "testimage.jpg" is discarded. The
-information necessary to reconstruct a file tree is stored in a
-session file.
+with the letters "bc". The filename "testimage.jpg" is discarded. Such
+an anonymized file is called a "blob" in this document. 
 
-The individual sessions are stored in the "sessions" sub
-directory. Each session represents a point in time for a file
-tree. The session directory contains two files, bloblist.json and
-session.json. See RFC4627 for details on the json file format. For
-each entry in the list of blobs, a filename and a md5 checksum is
-stored. 
+== The sessions== 
 
-To restore a session, iterate over the bloblist and copy the blob with
-the corresponding checksum to a file with the name specified in the
-bloblist.
+All data files are in the JSON file format. It is quite simple, but if
+you need details, see RFC4627.
 
+The information necessary to reconstruct a file tree is stored under
+the "sessions" directory. Each session consists of a series of
+snapshots of a specific file tree. All snapshots have a revision id
+corresponding to the name of the directory under "sessions". Each
+snapshot represents a file tree at a point in time.
+
+The details of a snapshot will be given in the files "session.json"
+and "bloblist.json" (the bloblist). The bloblist contains the mapping
+between filenames and blobs. To restore a snapshot, iterate over the
+bloblist and copy the blob with the corresponding id to a file
+with the name specified in the bloblist.
+
+However, to completely restore a file tree, you must consider the
+"base_session" value in session.json. If there is such a value, the
+snapshot with that revision id must be extracted before the current
+snapshot is extracted on top of it. This may repeat recursively until
+a snapshot is found that does not have the base_session value set. In
+other words, extraction must begin from the bottom of this
+"base_session" chain. 
+
+Every snapshot with a "base_session" value describes the changes that
+needs to be applied to transform the base snapshot into the current
+snapshot. Therefore, there are also special entries in the bloblist
+that indicate that files should be removed from the base
+snapshot. These are the entries containing a keyword "action" with the
+value "remove". If you simply want to extract as much data as
+possible, these special entries can be ignored.
 """
 
 class MisuseError(Exception):
