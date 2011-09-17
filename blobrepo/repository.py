@@ -147,8 +147,7 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, TMP_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_SHA256_DIR))
-    with open(os.path.join(repopath, "recovery.txt"), "w") as f:
-        f.write(recoverytext)
+    create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
 
 def is_recipe_filename(filename):
     filename_parts = filename.split(".")
