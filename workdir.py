@@ -32,9 +32,11 @@ import hashlib
 import stat
 import copy
 import cPickle
-import anydbm
 import tempfile
 import fnmatch
+import sqlite3
+import atexit
+
 # shelve and dbhash are only imported as a workaround for py2exe,
 # which otherwise for some reason will forget to include a dbm implementation
 import shelve
@@ -48,6 +50,8 @@ else:
 class FakeFile:
     def write(self, s):
         pass
+
+VERSION_FILE = "version.txt"
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
@@ -66,10 +70,11 @@ class Workdir:
 
         if self.repoUrl:
             self.front = self.get_front()
+
+        self.sqlcache = None
         if os.path.exists(self.metadir):
-            self.cscache = anydbm.open(self.metadir + "/" + 'csumcache', 'c')
-        else:
-            self.cscache = {}
+            self.sqlcache = ChecksumCache(self.metadir + "/" + 'ccache.db')
+
         assert self.revision == None or self.revision > 0
         self.tree_csums = None
         self.tree = None
@@ -83,6 +88,13 @@ class Workdir:
     def __reload_tree(self):
         self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
         self.tree_csums == None
+
+    def __get_workdir_version(self):
+        version_file = os.path.join(self.metadir, VERSION_FILE)
+        if os.path.exists(version_file):
+            with open(version_file, "r") as f:
+                return int(f.read())
+        return 0
 
     def setLogOutput(self, fout):
         self.output = fout
@@ -323,16 +335,18 @@ class Workdir:
         the given file as hex encoded strings."""
         assert not os.path.isabs(relative_path), "Path must be relative to the workdir. Was: "+relative_path
         abspath = self.wd_abspath(relative_path)
+        if not self.sqlcache:
+            return checksum_file(abspath, ("md5", "sha256"))
         stat = os.stat(abspath)
-        key = relative_path.encode("utf-8") + "!" + str(int(stat.st_mtime))
         recent_change =  abs(time.time() - stat.st_mtime) < 5.0
-        if key in self.cscache and not recent_change:
-            result = self.cscache[key].split(",")
-        else:
-            result = checksum_file(abspath, ("md5", "sha256"))
-            self.cscache[key] = ",".join(result)
-        assert len(result) == 2 and len(result[0]) == 32 and len(result[1]) == 64
-        return result
+        sums = self.sqlcache.get(relative_path, stat.st_mtime)
+        if sums:
+            return sums
+        md5, sha256 = checksum_file(abspath, ("md5", "sha256"))
+        
+        self.sqlcache.set(relative_path, stat.st_mtime, md5, sha256)
+        assert len(md5) == 32 and len(sha256) == 64
+        return md5, sha256
 
     def cached_md5sum(self, relative_path):
         md5, sha256 = self.__get_cached_checksums(relative_path)
@@ -557,4 +571,59 @@ def bloblist_to_dict(bloblist):
     return d
     
     
-    
+class ChecksumCache:
+    def __init__(self, dbpath):
+        # Use a proxy to avoid circular reference to the repo,
+        # allowing this object to be garbed at shutdown and triggering
+        # the __del__ function.
+        assert os.path.isabs(dbpath)
+        assert os.path.exists(os.path.dirname(dbpath))
+        self.dbpath = dbpath
+        self.conn = None
+        self.__init_db()
+        atexit.register(self.sync)
+        self.rate_limiter = RateLimiter(1.0)
+
+    def __init_db(self):
+        if self.conn:
+            return
+        try:
+            self.conn = sqlite3.connect(self.dbpath, check_same_thread = False)
+            self.conn.execute("CREATE TABLE IF NOT EXISTS ccache (path text, mtime unsigned int, md5 char(32), sha256 char(64) NOT NULL, row_md5 char(32))")
+            self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ccache_index ON ccache (path, mtime)")
+            self.conn.commit()
+        except sqlite3.DatabaseError, e:
+            raise
+            #raise repository.SoftCorruptionError("Exception while accessing the sha256 cache: "+str(e))
+
+    def set(self, path, mtime, md5, sha256):
+        assert type(path) == unicode
+        md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5 + "!" + sha256)
+        try:
+            self.conn.execute("REPLACE INTO ccache (path, mtime, md5, sha256, row_md5) VALUES (?, ?, ?, ?, ?)", (path, mtime, md5, sha256, md5_row))
+            if self.rate_limiter.ready():
+                self.sync()
+        except sqlite3.DatabaseError, e:
+            raise
+
+    def get(self, path, mtime):
+        assert type(path) == unicode
+        try:
+            c = self.conn.cursor()
+            c.execute("SELECT md5, sha256, row_md5 FROM ccache WHERE path = ? AND mtime = ?", (path, mtime))
+            rows = c.fetchall()
+        except sqlite3.DatabaseError, e:
+            raise
+        if not rows:
+            return None
+        assert len(rows) == 1
+        md5, sha256, row_md5 = rows[0]
+        expected_md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5.encode("utf8") + "!" + sha256.encode("utf8"))
+        if row_md5 != expected_md5_row:
+            raise
+        return md5, sha256
+
+    def sync(self):
+        if self.conn:
+            self.conn.commit()
+
