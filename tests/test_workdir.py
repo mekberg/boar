@@ -129,7 +129,7 @@ class TestFront(unittest.TestCase, WorkdirHelper):
         self.repopath = self.createTmpName()
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
-        self.wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
+        self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
         self.front = self.wd.front
         id = self.wd.get_front().mksession("TestSession")
         assert id == 1
@@ -170,14 +170,14 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.repoUrl = self.repopath
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
-        self.wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
+        self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
         id = self.wd.get_front().mksession("TestSession")
         assert id == 1
 
-    def createWorkdir(self, repoUrl, tree = {}, offset = "", revision = None):
+    def createWorkdir(self, repoUrl, tree = {}, offset = u"", revision = None):
         wdroot = self.createTmpName()
         write_tree(wdroot, tree)
-        wd = workdir.Workdir(repoUrl, "TestSession", offset, revision, wdroot)
+        wd = workdir.Workdir(repoUrl, u"TestSession", offset, revision, wdroot)
         self.assertTrue(wd.get_front().find_last_revision("TestSession"))
         return wd
 
@@ -250,7 +250,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                  'subdir1/subdirfile1.txt': 'fc2'}
         wd = self.createWorkdir(self.repoUrl, tree1)
         wd.checkin()
-        wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
+        wd = self.createWorkdir(self.repoUrl, offset = u"subdir1")
         wd.checkout()
         subtree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2'})
@@ -260,12 +260,12 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                  'subdir1/subdirfile1.txt': 'fc2'}
         wd = self.createWorkdir(self.repoUrl, tree1)
         wd.checkin()
-        wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
+        wd = self.createWorkdir(self.repoUrl, offset = u"subdir1")
         wd.checkout()
         subtree = read_tree(wd.root, skiplist = boar_dirs)
         write_tree(wd.root, {'newfile.txt': 'nf'}, create_root = False)
         wd.checkin()
-        wd = self.createWorkdir(self.repoUrl, offset = "subdir1")
+        wd = self.createWorkdir(self.repoUrl, offset = u"subdir1")
         wd.checkout()
         subtree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2',
@@ -363,7 +363,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd_update = self.createWorkdir(self.repoUrl, 
                                        {'d/file2.txt': 'f2 mod1'}, 
                                        revision = rev1,
-                                       offset = "subdir")
+                                       offset = u"subdir")
         wd_update.update(log = DevNull())
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'d/file2.txt': 'f2 mod1',
@@ -404,7 +404,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'd/file2.txt': 'f2 mod',
                                         'd/file3.txt': 'f3'}, 
                                        revision = rev1,
-                                       offset = "subdir")
+                                       offset = u"subdir")
         wd_update.update(log = DevNull())
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'d/file1.txt': 'f1 mod',
@@ -603,7 +603,7 @@ class TestWorkdirWithServer(TestWorkdir):
         self.create_server()
         self.server.serve()
         self.repoUrl = "boar://localhost:%s/" % (self.port)
-        self.wd = workdir.Workdir(self.repoUrl, "TestSession", "", 
+        self.wd = workdir.Workdir(self.repoUrl, u"TestSession", u"", 
                                   None, self.workdir)
         front = self.wd.get_front()
         assert front.isRemote
@@ -619,7 +619,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
 
     def createTestRepo(self):
         os.mkdir(self.workdir)
-        wd = workdir.Workdir(self.repopath, "TestSession", "", None, self.workdir)
+        wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
         self.addWorkdirFile("onlyintopdir.txt", "nothing")
         self.mkdir("mysubdir")
         self.addWorkdirFile("mysubdir/insubdir.txt", "nothing2")
@@ -636,7 +636,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def testPartialCheckout(self):
         self.createTestRepo()
         os.mkdir(self.workdir)
-        wd = workdir.Workdir(self.repopath, "TestSession", "mysubdir", None, self.workdir)
+        wd = workdir.Workdir(self.repopath, u"TestSession", u"mysubdir", None, self.workdir)
         wd.checkout()
         tree = get_tree(wd.root, absolute_paths = False)
         #tree = wd.get_tree(absolute_paths = True)
