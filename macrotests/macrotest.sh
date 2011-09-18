@@ -174,7 +174,21 @@ REPO_PATH=$REPO $BOAR import -v -w test_tree MyTestSession/new_import || { echo 
 echo "Some new content" >test_tree/new_file.txt
 (cd test_tree && $BOAR status) || { echo "Status command 2 failed"; exit 1; }
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
-#find test_tree -type f -a ! -ipath *.meta*` || { echo "More files than expected in checkout"; exit 1; }
+
+echo --- Test successive imports
+SESSION=SuccImp
+mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
+echo "f1" >test_tree/file1.txt || { echo "Couldn't create file1"; exit 1; }
+REPO_PATH=$REPO $BOAR mksession $SESSION || { echo "Couldn't create session"; exit 1; }
+REPO_PATH=$REPO $BOAR import -v test_tree $SESSION/subdir || { echo "Couldn't import dir"; exit 1; }
+rm test_tree/file1.txt || exit 1
+echo "f2" >test_tree/file2.txt || { echo "Couldn't create file1"; exit 1; }
+REPO_PATH=$REPO $BOAR import -v test_tree $SESSION/subdir || { echo "Couldn't import dir"; exit 1; }
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+REPO_PATH=$REPO $BOAR co $SESSION/subdir test_tree || { echo "Couldn't check out session"; exit 1; }
+test -e test_tree/file1.txt || { echo "file1.txt does not exist in session"; exit 1; }
+test -e test_tree/file2.txt || { echo "file2.txt does not exist in session"; exit 1; }
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 
 echo --- Test offset co with unicode chars
 mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
