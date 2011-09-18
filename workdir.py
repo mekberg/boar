@@ -56,6 +56,7 @@ VERSION_FILE = "version.txt"
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
         assert isinstance(root, unicode)
+        assert type(offset) == unicode
         assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
         assert os.path.exists(root)
         self.repoUrl = repoUrl
@@ -338,12 +339,12 @@ class Workdir:
         if not self.sqlcache:
             return checksum_file(abspath, ("md5", "sha256"))
         stat = os.stat(abspath)
-        recent_change =  abs(time.time() - stat.st_mtime) < 5.0
         sums = self.sqlcache.get(relative_path, stat.st_mtime)
-        if sums:
+        recent_change = False #abs(time.time() - stat.st_mtime) < 5.0
+        if sums and not recent_change:
             return sums
+        #print "Re-generating checksums for", relative_path
         md5, sha256 = checksum_file(abspath, ("md5", "sha256"))
-        
         self.sqlcache.set(relative_path, stat.st_mtime, md5, sha256)
         assert len(md5) == 32 and len(sha256) == 64
         return md5, sha256

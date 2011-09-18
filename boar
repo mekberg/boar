@@ -145,7 +145,7 @@ def cmd_locate(args):
     files_to_look_for = args[1:]
     if not files_to_look_for:
         files_to_look_for = ["."]
-    files_to_look_for = [os.path.abspath(fn).decode(sys.getfilesystemencoding()) for fn in files_to_look_for] 
+    files_to_look_for = [tounicode(os.path.abspath(fn)) for fn in files_to_look_for] 
     front = init_repo_from_env(cmdline_repo)    
     revision = front.find_last_revision(sessionName)
     if not revision:
@@ -299,7 +299,7 @@ def cmd_import(args):
     base_session = None
     (options, args) = parser.parse_args(args)
     assert len(args) <= 2
-    path_to_ci = os.path.abspath(args[0]).decode()
+    path_to_ci = tounicode(os.path.abspath(args[0]))
     session_name = os.path.basename(args[0]) #TODO: what happens when giving only one arg?
     session_offset = ""
     if len(args) > 1:
@@ -308,6 +308,7 @@ def cmd_import(args):
             session_name, session_offset = args[1].split("/", 1)
         else:
             session_name = args[1]
+    session_offset = tounicode(session_offset)
     if options.verbose:
         print "Session name:", session_name, "Session offset:", session_offset
     if not os.path.exists(path_to_ci):
@@ -320,7 +321,7 @@ def cmd_import(args):
         wd.setLogOutput(sys.stdout)
     log_message = None
     if options.message:
-        log_message = options.message.decode(locale.getpreferredencoding())
+        log_message = tounicode(options.message)
     session_id = wd.checkin(write_meta = options.create_workdir, 
                             fail_on_modifications = True, add_only = True, dry_run = options.dry_run,
                             log_message = log_message, ignore_errors = options.ignore_errors)
@@ -350,7 +351,7 @@ def cmd_ci(args):
     wd = workdir.init_workdir(os.getcwd())
     log_message = None
     if options.message:
-        log_message = options.message.decode(locale.getpreferredencoding())
+        log_message = tounicode(options.message)
     session_id = wd.checkin(add_only = options.addonly, log_message = log_message)
     print "Checked in session id", session_id
 
@@ -391,10 +392,10 @@ def cmd_co(args):
         raise UserError("You must specify a session name with an optional subpath (i.e 'MyPictures/summer2010')")    
     if len(args) > 2:
         raise UserError("Too many arguments")
-    session_name, throwaway, offset = args.pop(0).partition("/")
-    workdir_path = os.path.abspath(session_name).decode()
+    session_name, throwaway, offset = tounicode(args.pop(0)).partition("/")
+    workdir_path = os.path.abspath(session_name)
     if args:
-        workdir_path = os.path.abspath(args.pop(0)).decode()
+        workdir_path = tounicode(os.path.abspath(args.pop(0)))
     if os.path.exists(workdir_path):
         raise UserError("Workdir path '%s' already exists" % (workdir_path))
     assert not args
