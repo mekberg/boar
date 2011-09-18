@@ -237,6 +237,8 @@ def strip_path_offset(offset, p):
     return result
 
 def is_child_path(parent, child):
+    assert type(parent) == unicode
+    assert type(child) == unicode
     if parent == "":
         return True
     result = child.startswith(parent + "/")
@@ -376,6 +378,12 @@ class FileMutex:
         if self.locked:
             print "Warning: lockfile %s was forgotten. Cleaning up..." % self.mutex_name
             self.release()
+
+def tounicode(s):
+    """Decodes a string from the system default encoding to unicode."""
+    s = s.decode(locale.getpreferredencoding())
+    assert type(s) == unicode
+    return s
 
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all

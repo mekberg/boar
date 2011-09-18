@@ -195,7 +195,6 @@ $BOAR diffrepo $REPO $CLONE || { echo "Some differences where found in cloned re
 rm -r $CLONE || { echo "Couldn't remove cloned repo"; exit 1; }
 
 echo --- Test repo cloning with duplicate files in a new session
-rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 mkdir test_tree || { echo "Couldn't create test tree"; exit 1; }
 echo "Identical Content" >test_tree/file1.txt || { echo "Couldn't create file1.txt"; exit 1; }
 echo "Identical Content" >test_tree/file2.txt || { echo "Couldn't create file2.txt"; exit 1; }
