@@ -602,7 +602,7 @@ class TestWorkdirWithServer(TestWorkdir):
         os.mkdir(self.workdir)
         self.create_server()
         self.server.serve()
-        self.repoUrl = "boar://localhost:%s/" % (self.port)
+        self.repoUrl = u"boar://localhost:%s/" % (self.port)
         self.wd = workdir.Workdir(self.repoUrl, u"TestSession", u"", 
                                   None, self.workdir)
         front = self.wd.get_front()
