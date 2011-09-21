@@ -162,9 +162,10 @@ class Repo:
     def __init__(self, repopath):
         # The path must be absolute to avoid problems with clients
         # that changes the cwd. For instance, fuse.
+        assert isinstance(repopath, unicode)
         assert(os.path.isabs(repopath)), "The repo path must be absolute. "\
             +"Was: " + repopath
-        self.repopath = unicode(repopath)
+        self.repopath = repopath
         self.session_readers = {}
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
@@ -249,8 +250,9 @@ class Repo:
     def get_repo_path(self):
         return self.repopath
 
-    def get_queue_path(self, filename):
-        return os.path.join(self.repopath, QUEUE_DIR, filename)
+    def get_queue_path(self, session_id):
+        assert isinstance(session_id, int)
+        return os.path.join(self.repopath, QUEUE_DIR, str(session_id))
 
     def get_blob_path(self, sum):
         assert is_md5sum(sum), "Was: %s" % (sum)
@@ -329,6 +331,7 @@ class Repo:
             raise ValueError("No such blob or recipe exists: "+sum)
 
     def get_session_path(self, session_id):
+        assert isinstance(session_id, int)
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
 
     def get_all_sessions(self):
@@ -341,17 +344,22 @@ class Repo:
         return session_dirs
 
     def has_snapshot(self, id):
+        assert isinstance(id, int)
         path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
         return os.path.exists(path)
 
     def get_session(self, id):
         assert id, "Id was: "+ str(id)
+        assert isinstance(id, int)
         misuse_assert(self.has_snapshot(id), "There is no snapshot with id %s" % id)
         if id not in self.session_readers:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]
 
     def create_session(self, session_name, base_session = None, session_id = None):
+        assert isinstance(session_name, unicode)
+        assert base_session == None or isinstance(base_session, int)
+        assert session_id == None or isinstance(session_id, int)
         return sessions.SessionWriter(self, session_name = session_name, \
                                           base_session = base_session, \
                                           session_id = session_id)
@@ -359,6 +367,7 @@ class Repo:
     def find_last_revision(self, session_name):
         """ Returns the id of the latest snapshot in the specified
         session. Returns None if there is no such session. """
+        assert isinstance(session_name, unicode)
         all_sids = self.get_all_sessions()
         all_sids.sort()
         all_sids.reverse()
@@ -470,6 +479,8 @@ class Repo:
         return result
 
     def consolidate_snapshot(self, session_path, forced_session_id = None):
+        assert isinstance(session_path, unicode)
+        assert forced_session_id == None or isinstance(forced_session_id, int)
         self.repo_mutex.lock_with_timeout(60)
         try:
             return self.__consolidate_snapshot(session_path, forced_session_id)
@@ -477,6 +488,7 @@ class Repo:
             self.repo_mutex.release()
 
     def __consolidate_snapshot(self, session_path, forced_session_id):
+        assert isinstance(session_path, unicode)
         assert self.repo_mutex.is_locked()
         assert not self.get_queued_session_id()
         if forced_session_id: 
@@ -485,7 +497,7 @@ class Repo:
             session_id = self.find_next_session_id()
         assert session_id > 0
         assert session_id not in self.get_all_sessions()
-        queue_dir = self.get_queue_path(str(session_id))
+        queue_dir = self.get_queue_path(session_id)
         shutil.move(session_path, queue_dir)
         self.process_queue()
         return session_id
@@ -495,7 +507,7 @@ class Repo:
         session_id = self.get_queued_session_id()
         if session_id == None:
             return
-        queued_item = self.get_queue_path(str(session_id))
+        queued_item = self.get_queue_path(session_id)
         items = os.listdir(queued_item)
 
         # Check the checksums of all blobs
