@@ -55,8 +55,11 @@ VERSION_FILE = "version.txt"
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
+        assert repoUrl == None or isinstance(repoUrl, unicode)
+        assert isinstance(sessionName, unicode)
+        assert isinstance(offset, unicode)
+        assert revision == None or isinstance(revision, int)
         assert isinstance(root, unicode)
-        assert type(offset) == unicode
         assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
         assert os.path.exists(root)
         self.repoUrl = repoUrl
