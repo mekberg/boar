@@ -200,6 +200,23 @@ rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 REPO_PATH=$REPO $BOAR co MyTestSession/räksmörgåsar test_tree || { echo "Couldn't check out unicode offset dir"; exit 1; }
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 
+echo --- Test unicode session name
+SESSION=Räksmörgås2
+rm -r $SESSION
+mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
+echo "Hello world" > test_tree/file1.txt || { echo "Couldn't create file"; exit 1; }
+REPO_PATH=$REPO $BOAR mksession $SESSION || { echo "Couldn't create session"; exit 1; }
+REPO_PATH=$REPO $BOAR import -v -w test_tree $SESSION || { echo "Couldn't import"; exit 1; }
+(cd test_tree && $BOAR status) || { echo "Status command failed"; exit 1; }
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+REPO_PATH=$REPO $BOAR list $SESSION || { echo "Couldn't list session versions"; exit 1; }
+ls
+REPO_PATH=$REPO $BOAR co $SESSION || { echo "Couldn't check out session"; exit 1; }
+(cd $SESSION && $BOAR status) || { echo "Status command failed"; exit 1; }
+echo "Hello world2" >$SESSION/file2.txt || { echo "Couldn't create file2.txt"; exit 1; }
+(cd $SESSION && $BOAR ci) || { echo "ci command failed"; exit 1; }
+rm -r $SESSION || { echo "Couldn't remove session dir"; exit 1; }
+
 echo --- Test verify
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify repo"; exit 1; }
 
