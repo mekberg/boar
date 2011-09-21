@@ -131,32 +131,32 @@ class TestFront(unittest.TestCase, WorkdirHelper):
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
         self.front = self.wd.front
-        id = self.wd.get_front().mksession("TestSession")
+        id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
         
     def testGetIgnoreDefault(self):
-        got_list = self.front.get_session_ignore_list("TestSession")
+        got_list = self.front.get_session_ignore_list(u"TestSession")
         self.assertEquals(got_list, [])
 
     def testSetAndGetIgnore(self):
         ignore_list = ["ignore1", "ignore2"]
-        self.front.set_session_ignore_list("TestSession", copy(ignore_list))
-        got_list = self.front.get_session_ignore_list("TestSession")
+        self.front.set_session_ignore_list(u"TestSession", copy(ignore_list))
+        got_list = self.front.get_session_ignore_list(u"TestSession")
         self.assertEquals(ignore_list, got_list)
 
     def testSetAndGetIgnoreRepeated(self):
-        self.front.set_session_ignore_list("TestSession", ["ignore1"])
-        self.front.set_session_ignore_list("TestSession", ["ignore2"])
-        got_list = self.front.get_session_ignore_list("TestSession")
+        self.front.set_session_ignore_list(u"TestSession", ["ignore1"])
+        self.front.set_session_ignore_list(u"TestSession", ["ignore2"])
+        got_list = self.front.get_session_ignore_list(u"TestSession")
         self.assertEquals(got_list, ["ignore2"])
 
     def testSetIgnoreErrorDetect(self):
         self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
-                          "TestSession", "string must not be accepted")
+                          u"TestSession", "string must not be accepted")
         self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
-                          "TestSession", 19) # no numbers allowed
+                          u"TestSession", 19) # no numbers allowed
         self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
-                          "TestSession", None) # None not allowed
+                          u"TestSession", None) # None not allowed
 
     def tearDown(self):
         for d in self.remove_at_teardown:
@@ -171,14 +171,14 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
-        id = self.wd.get_front().mksession("TestSession")
+        id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
 
     def createWorkdir(self, repoUrl, tree = {}, offset = u"", revision = None):
         wdroot = self.createTmpName()
         write_tree(wdroot, tree)
         wd = workdir.Workdir(repoUrl, u"TestSession", offset, revision, wdroot)
-        self.assertTrue(wd.get_front().find_last_revision("TestSession"))
+        self.assertTrue(wd.get_front().find_last_revision(u"TestSession"))
         return wd
 
     def tearDown(self):
@@ -423,7 +423,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         tree = {'file.txt': 'f1',
                 'file.ignore': 'f2'}
         wd = self.createWorkdir(self.repoUrl, tree)
-        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
         wd.checkout()
         wd.checkin()
 
@@ -436,7 +436,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         tree = {'file.txt': 'f1',
                 'file.ignore': 'f2'}
         wd = self.createWorkdir(self.repoUrl, tree)
-        wd.front.set_session_include_list("TestSession", ["*.txt"])
+        wd.front.set_session_include_list(u"TestSession", ["*.txt"])
         wd.checkout()
         wd.checkin()
 
@@ -449,8 +449,8 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         tree = {'file.txt': 'f1',
                 'file.ignore': 'f2'}
         wd = self.createWorkdir(self.repoUrl, tree)
-        wd.front.set_session_include_list("TestSession", ["file.*"])
-        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.front.set_session_include_list(u"TestSession", ["file.*"])
+        wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
         wd.checkout()
         wd.checkin()
 
@@ -464,7 +464,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         tree = {'file.txt': 'f1',
                 'file.ignore': 'f2'}
         wd = self.createWorkdir(self.repoUrl, tree)
-        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
         wd.checkout()
         wd.checkin()
         id = wd.checkin()
@@ -485,7 +485,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl, tree)
         wd.checkin()
 
-        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
         wd.update(log = DevNull())
         write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
         wd.checkin()
@@ -516,7 +516,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl, tree)
         wd.checkin()
 
-        wd.front.set_session_include_list("TestSession", ["*.txt"])
+        wd.front.set_session_include_list(u"TestSession", ["*.txt"])
         wd.update(log = DevNull())
         write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
         wd.checkin()
@@ -530,7 +530,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         tree = {'file.txt': 'f1'}
         wd = self.createWorkdir(self.repoUrl, tree)
         wd.checkin()
-        wd.front.set_session_ignore_list("TestSession", ["*.ignore"])
+        wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
         wd.update(log = DevNull())
         wd.get_changes()
         full_tree_filenames = set(read_tree(wd.root).keys())
@@ -607,7 +607,7 @@ class TestWorkdirWithServer(TestWorkdir):
                                   None, self.workdir)
         front = self.wd.get_front()
         assert front.isRemote
-        id = self.wd.get_front().mksession("TestSession")
+        id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
@@ -623,7 +623,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         self.addWorkdirFile("onlyintopdir.txt", "nothing")
         self.mkdir("mysubdir")
         self.addWorkdirFile("mysubdir/insubdir.txt", "nothing2")
-        id = wd.get_front().mksession("TestSession")
+        id = wd.get_front().mksession(u"TestSession")
         assert id == 1
         id = wd.checkin()
         assert id == 2
