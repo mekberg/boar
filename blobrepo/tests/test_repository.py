@@ -27,21 +27,22 @@ DATA3_MD5 = "cafa2ed1e085869b3bfe9e43b60e7a5a"
 
 TMPDIR=tempfile.gettempdir()
 
-SESSION_NAME = "RepoTestSession"
+SESSION_NAME = u"RepoTestSession"
 
 if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from blobrepo import repository
+from common import tounicode
 
 class TestBlobRepo(unittest.TestCase):
     def setUp(self):
-        self.repopath = tempfile.mktemp(dir=TMPDIR)
+        self.repopath = tounicode(tempfile.mktemp(dir=TMPDIR))
         repository.create_repository(self.repopath)
         self.repo = repository.Repo(self.repopath)
         self.sessioninfo1 = {"foo": "bar",
                              "name": SESSION_NAME}
-        self.fileinfo1 = {"filename": "testfilename.txt",
+        self.fileinfo1 = {"filename": u"testfilename.txt",
                           "md5sum": DATA1_MD5}
         self.fileinfo2 = {"filename": "testfilename2.txt",
                           "md5sum": DATA2_MD5}

@@ -89,6 +89,10 @@ def list_revisions(front, session_name):
             len(bloblist), "files,", "Log: %s" % (log_message)
 
 def list_files(front, session_name, revision):
+    try:
+        revision = int(revision)
+    except:
+        raise UserError("Illegal revision string: '%s'" % revision)
     session_info = front.get_session_info(revision)
     if session_info == None or session_info.get("name") != session_name:
         raise UserError("There is no such session/revision")
@@ -570,9 +574,10 @@ def cmd_export_md5(wd, args):
     wd.export_md5()
 
 def get_repo_from_env(repo_from_cmdline):
-    repopath = os.getenv("REPO_PATH")
+    repopath = tounicode(os.getenv("REPO_PATH"))
     if repo_from_cmdline:
         repopath = repo_from_cmdline
+    assert repopath == None or isinstance(repopath, unicode)
     if not repopath:
         raise UserError("You need to specify a repository to operate on. "+\
                             "Use the --repo option or set $REPO_PATH.")
@@ -677,6 +682,7 @@ if __name__ == "__main__":
     t1 = time.time()
     sys.stdout = StreamEncoder(sys.stdout)
     sys.stderr = StreamEncoder(sys.stderr)
+    sys.argv = map(tounicode, sys.argv)
     #cProfile.run('main()', "prof.txt")
     #import pstats
     #p = pstats.Stats('prof.txt')

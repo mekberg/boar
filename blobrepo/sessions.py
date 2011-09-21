@@ -78,7 +78,9 @@ def bloblist_fingerprint(bloblist):
 
 class SessionWriter:
     def __init__(self, repo, session_name, base_session = None, session_id = None):
-        assert session_name and isinstance(session_name, basestring)
+        assert session_name and isinstance(session_name, unicode)
+        assert base_session == None or isinstance(base_session, int)
+        assert session_id == None or isinstance(session_id, int)
         self.dead = False
         self.repo = repo
         self.session_name = session_name
@@ -130,6 +132,7 @@ class SessionWriter:
             f.write(fragment)
 
     def has_blob(self, csum):
+        assert is_md5sum(csum)
         fname = os.path.join(self.session_path, csum)
         return os.path.exists(fname)
 
@@ -154,6 +157,7 @@ class SessionWriter:
 
     def remove(self, filename):
         assert not self.dead
+        assert isinstance(filename, unicode)
         assert self.base_session
         assert self.base_bloblist_dict.has_key(filename)
         metadata = {'filename': filename,
@@ -281,8 +285,7 @@ class SessionWriter:
 class SessionReader:
     def __init__(self, repo, session_path):
         assert session_path, "Session path must be given"
-        assert type(session_path) in types.StringTypes, \
-            "Session path must be a string. Was: "+repr(session_path)
+        assert isinstance(session_path, unicode)
         self.path = session_path
         self.repo = repo
         assert os.path.exists(self.path), "No such session path:" + self.path

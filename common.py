@@ -380,7 +380,13 @@ class FileMutex:
             self.release()
 
 def tounicode(s):
-    """Decodes a string from the system default encoding to unicode."""
+    """Decodes a string from the system default encoding to
+    unicode. Unicode strings are returned unchanged. None argument
+    returns None result."""
+    if s == None:
+        return None
+    if isinstance(s, unicode):
+        return s
     s = s.decode(locale.getpreferredencoding())
     assert type(s) == unicode
     return s
