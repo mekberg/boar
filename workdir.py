@@ -479,10 +479,9 @@ def init_workdir(path):
     front = init_repo_from_meta(path)
     if not front:
         return None
-    metapath = find_meta(os.getcwd())
+    metapath = find_meta(tounicode(os.getcwd()))
     info = load_meta_info(metapath)
     root = os.path.split(metapath)[0]
-    root = root.decode()
     wd = Workdir(repoUrl=info['repo_path'], 
                  sessionName=info['session_name'], 
                  offset=info.get("offset", ""), 

@@ -186,7 +186,7 @@ def cmd_status(args):
     parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
                       help="Show information about unchanged files as well")
     (options, args) = parser.parse_args(args)
-    wd = workdir.init_workdir(os.getcwd())
+    wd = workdir.init_workdir(ucwd)
     if not wd:
         raise UserError("No workdir found here.")
     unchanged_files, new_files, modified_files, deleted_files, ignored_files \
@@ -221,7 +221,7 @@ def cmd_info(args):
     if len(args) != 0:
         raise UserError("Info command does not accept any arguments.")
 
-    wd = workdir.init_workdir(os.getcwd())
+    wd = workdir.init_workdir(ucwd)
     if wd:
         print "Using a work directory:"
         print "   Workdir root:", wd.root
@@ -340,7 +340,7 @@ def cmd_update(args):
     (options, args) = parser.parse_args(args)
     if len(args) != 0:
         raise UserError("Update does not accept any non-option arguments")
-    wd = workdir.init_workdir(os.getcwd())
+    wd = workdir.init_workdir(ucwd)
     wd.update(new_revision = options.revision, ignore_errors = options.ignore_errors)
 
 def cmd_ci(args):
@@ -352,7 +352,7 @@ def cmd_ci(args):
     (options, args) = parser.parse_args(args)
     if args:
         raise UserError("Unexpected arguments: "+str(args))
-    wd = workdir.init_workdir(os.getcwd())
+    wd = workdir.init_workdir(ucwd)
     log_message = None
     if options.message:
         log_message = tounicode(options.message)
@@ -368,7 +368,7 @@ def cmd_relocate(args):
     if len(args) > 1:
         raise UserError("Too many arguments")
     new_location, = args
-    wd = workdir.init_workdir(os.getcwd())
+    wd = workdir.init_workdir(ucwd)
     wd.repoUrl = new_location
     wd.write_metadata()
 """
@@ -662,7 +662,7 @@ def main():
     elif args[0] == "mksession":
         return cmd_mksession(args[1:])
     elif args[0] == "exportmd5":
-        wd = workdir.init_workdir(os.getcwd())
+        wd = workdir.init_workdir(ucwd)
         return cmd_export_md5(wd, args[1:])
     elif args[0] == "clone":
         return cmd_clone(args[1:])
@@ -678,11 +678,14 @@ def main():
 
 
 return_code = 0
+
 if __name__ == "__main__":
     t1 = time.time()
     sys.stdout = StreamEncoder(sys.stdout)
     sys.stderr = StreamEncoder(sys.stderr)
     sys.argv = map(tounicode, sys.argv)
+    global ucwd
+    ucwd = tounicode(os.getcwd())
     #cProfile.run('main()', "prof.txt")
     #import pstats
     #p = pstats.Stats('prof.txt')
