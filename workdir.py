@@ -26,7 +26,6 @@ from boar_common import *
 import client
 
 from base64 import b64decode, b64encode
-import settings
 import time
 import hashlib
 import stat
@@ -52,6 +51,7 @@ class FakeFile:
         pass
 
 VERSION_FILE = "version.txt"
+METADIR = ".meta"
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
@@ -67,7 +67,7 @@ class Workdir:
         self.offset = offset
         self.revision = revision
         self.root = root
-        self.metadir = os.path.join(self.root, settings.metadir)
+        self.metadir = os.path.join(self.root, METADIR)
         self.front = None
 
         self.__upgrade()
@@ -90,7 +90,7 @@ class Workdir:
             safe_delete_file(self.metadir + "/" + 'md5sumcache')
 
     def __reload_tree(self):
-        self.tree = get_tree(self.root, skip = [settings.metadir], absolute_paths = False)
+        self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False)
         self.tree_csums == None
 
     def __get_workdir_version(self):
@@ -108,7 +108,7 @@ class Workdir:
         metadir = self.metadir
         if not os.path.exists(metadir):
             os.mkdir(metadir)
-        statusfile = os.path.join(workdir_path, settings.metadir, "info")
+        statusfile = os.path.join(workdir_path, METADIR, "info")
         with open(statusfile, "wb") as f:
             json.dump({'repo_path': self.repoUrl,
                        'session_name': self.sessionName,
@@ -494,7 +494,7 @@ def init_workdir(path):
 
 
 def find_meta(path):
-    meta = os.path.join(path, settings.metadir)
+    meta = os.path.join(path, METADIR)
     if os.path.exists(meta):
         return meta
     head, tail = os.path.split(path)
