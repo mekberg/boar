@@ -117,7 +117,7 @@ REPO_PATH=$REPO $BOAR co MyTestSession/subdir test_tree || { echo "Couldn't chec
 md5sum -c <<EOF || { echo "Offset checkout failed"; exit 1; }
 2490f86515a5a58067c2a1ca3e239299  test_tree/fil1.txt
 EOF
-test `find test_tree -type f -a ! -ipath *.meta*` == "test_tree/fil1.txt" || { echo "More files than expected in checkout"; exit 1; }
+test `find test_tree -type f -a ! -ipath *.boar*` == "test_tree/fil1.txt" || { echo "More files than expected in checkout"; exit 1; }
 
 echo --- Test offset checkin
 echo "Some content" >test_tree/nysubfil.txt
