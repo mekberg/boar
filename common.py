@@ -60,6 +60,11 @@ def notice(s):
     sys.stderr.write(s)
     sys.stderr.write("\n")
 
+def read_file(path):
+    """Reads and returns the contents of the given filename."""
+    with open(path) as f:
+        return f.read()
+
 def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
     """Accepts a file object and yields the specified part of the file
     as a sequence of blocks with length <= blocksize."""
@@ -145,6 +150,17 @@ def create_file(destination, content, tmp_suffix = ".tmp"):
     suffix, and then moved to its destination. The suffix file may
     exist and will in that case be overwritten and lost."""
     assert not os.path.exists(destination)
+    tmpfile = destination + tmp_suffix
+    with open(tmpfile, "w") as f:
+        f.write(content)
+    move_file(tmpfile, destination)
+
+def replace_file(destination, content, tmp_suffix = ".tmp"):
+    """Write the given content to a possibly existing file at the
+    given path. The contents will first be written to a temporary file
+    in the destination directory, with the given suffix, and then
+    moved to its destination. The suffix file may exist and will in
+    that case be overwritten and lost."""
     tmpfile = destination + tmp_suffix
     with open(tmpfile, "w") as f:
         f.write(content)

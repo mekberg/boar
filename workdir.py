@@ -50,8 +50,8 @@ class FakeFile:
     def write(self, s):
         pass
 
-VERSION_FILE = "version.txt"
-METADIR = ".meta"
+VERSION_FILE = "wd_version.txt"
+METADIR = ".boar"
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
@@ -85,9 +85,19 @@ class Workdir:
         self.output = FakeFile()
 
     def __upgrade(self):
-        if os.path.exists(self.metadir + "/" + 'md5sumcache'):
-            notice("Upgrading file checksum cache - rescan necessary, may take some time.")
-            safe_delete_file(self.metadir + "/" + 'md5sumcache')
+        v0_metadir = os.path.join(self.root, ".meta")
+        if os.path.exists(v0_metadir):
+            os.rename(v0_metadir, self.metadir)
+        if not os.path.exists(self.metadir):
+            return
+        version = self.__get_workdir_version()
+        if version > 1:
+            raise UserError("This workdir is created by a future version of boar.")
+        if version == 0:
+            if os.path.exists(self.metadir + "/" + 'md5sumcache'):
+                notice("Upgrading file checksum cache - rescan necessary, may take some time.")
+                safe_delete_file(self.metadir + "/" + 'md5sumcache')
+            self.__set_workdir_version(1)
 
     def __reload_tree(self):
         self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False)
@@ -96,9 +106,13 @@ class Workdir:
     def __get_workdir_version(self):
         version_file = os.path.join(self.metadir, VERSION_FILE)
         if os.path.exists(version_file):
-            with open(version_file, "r") as f:
-                return int(f.read())
+            return int(read_file(version_file))
         return 0
+
+    def __set_workdir_version(self, new_version):
+        assert type(new_version) == int
+        version_file = os.path.join(self.metadir, VERSION_FILE)
+        replace_file(version_file, str(new_version))
 
     def setLogOutput(self, fout):
         self.output = fout
@@ -479,9 +493,6 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, sha256_checksum,
 def init_workdir(path):
     """ Tries to find a workdir root directory at the given path or
     above. Returns a workdir object if successful, or None if not. """
-    front = init_repo_from_meta(path)
-    if not front:
-        return None
     metapath = find_meta(tounicode(os.getcwd()))
     info = load_meta_info(metapath)
     root = os.path.split(metapath)[0]
@@ -497,6 +508,9 @@ def find_meta(path):
     meta = os.path.join(path, METADIR)
     if os.path.exists(meta):
         return meta
+    meta_v0 = os.path.join(path, ".meta")
+    if os.path.exists(meta_v0):
+        return meta_v0
     head, tail = os.path.split(path)
     if head == path:
         return None

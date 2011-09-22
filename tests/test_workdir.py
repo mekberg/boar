@@ -47,7 +47,7 @@ class DevNull:
     def write(self, s):
         pass
 
-boar_dirs = [".meta", ".boar_session"]
+boar_dirs = [".boar", ".boar_session"]
 
 def read_tree(path, skiplist = []):
     """Returns a mapping {filename: content, ...} for the given directory
@@ -535,8 +535,8 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.get_changes()
         full_tree_filenames = set(read_tree(wd.root).keys())
         expected_filenames = set([u'file.txt', 
-                                  u'.meta/info', 
-                                  u'.meta/bloblistcache2.bin'])
+                                  u'.boar/info', 
+                                  u'.boar/bloblistcache2.bin'])
 
         self.assertEquals(expected_filenames, full_tree_filenames)
 
@@ -640,7 +640,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         wd.checkout()
         tree = get_tree(wd.root, absolute_paths = False)
         #tree = wd.get_tree(absolute_paths = True)
-        self.assertEquals(set(tree), set(["insubdir.txt", '.meta/info']))
+        self.assertEquals(set(tree), set(["insubdir.txt", '.boar/info']))
 
 if __name__ == '__main__':
     unittest.main()
