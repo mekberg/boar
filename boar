@@ -35,7 +35,6 @@ else:
 from front import Front, RevisionFront, set_file_contents
 import workdir
 from common import *
-import settings
 
 BOAR_VERSION = "<UNDEFINED>"
 
