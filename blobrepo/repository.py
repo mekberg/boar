@@ -143,7 +143,6 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, QUEUE_DIR))
     os.mkdir(os.path.join(repopath, BLOB_DIR))
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
-    os.mkdir(os.path.join(repopath, RECIPES_DIR))
     os.mkdir(os.path.join(repopath, TMP_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_SHA256_DIR))
