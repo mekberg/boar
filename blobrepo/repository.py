@@ -45,8 +45,8 @@ TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
 DERIVED_SHA256_DIR = "derived/sha256"
 
-REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR)
-REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, RECIPES_DIR, TMP_DIR,\
+REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
+REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR, DERIVED_SHA256_DIR)
 
 recoverytext = """Repository format v1
@@ -194,6 +194,7 @@ class Repo:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
 
     def __upgrade_repo(self):
+        assert self.repo_mutex.locked
         version = self.__get_repo_version()
         if version > 1:
             raise UserError("Repo version %s can not be handled by this version of boar" % version)
@@ -201,28 +202,23 @@ class Repo:
             return
         notice("Old repo format detected. Upgrading...")
         assert version == 0
+        recipes_dir = os.path.join(self.repopath, RECIPES_DIR)
+        if os.path.exists(recipes_dir):
+            # recipes_dir is an experimental feature and should not contain
+            # any data in a v0 repo (if it exists at all)
+            os.rmdir(recipes_dir)
         version_file = os.path.join(self.repopath, VERSION_FILE)
-        assert self.repo_mutex.locked
         for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
             if dir_exists(self.repopath + "/" + directory):
                 warn("Repo upgrade confusion: a folder already existed while upgrading to v1: %s" % directory)
                 continue
             notice("Upgrading repo - creating '%s' dir" % directory)
             os.mkdir(self.repopath + "/" + directory)
-
-
-        try:
-            safe_delete_file(os.path.join(self.repopath, RECOVERYTEXT_FILE))
-        except OSError:
-            # Missing non-essential file should not be fatal
-            warn("Repo did not contain a recovery.txt")
-        create_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
-
+        replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
         if os.path.exists(version_file):
             warn("Version marker should not exist for repo format v0")
             safe_delete_file(version_file)
         create_file(version_file, "1")
-
         try:
             self.__quick_check()
         except:
