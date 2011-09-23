@@ -236,7 +236,7 @@ class Repo:
                              "The repo at %s does not look like a repository (missing %s)" % (self.repopath, directory))
         for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
             integrity_assert(not dir_exists(os.path.join(self.repopath, directory)),
-                             "Repo %s does not seem to match repository contents" % VERSION_FILE)
+                             "Repo is missing version.txt, but does not look like a v0 repo (has %s)" % directory)
         return 0
 
     def __str__(self):
