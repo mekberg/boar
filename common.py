@@ -153,7 +153,7 @@ def create_file(destination, content, tmp_suffix = ".tmp"):
     tmpfile = destination + tmp_suffix
     with open(tmpfile, "w") as f:
         f.write(content)
-    move_file(tmpfile, destination)
+    os.rename(tmpfile, destination)
 
 def replace_file(destination, content, tmp_suffix = ".tmp"):
     """Write the given content to a possibly existing file at the
@@ -164,7 +164,7 @@ def replace_file(destination, content, tmp_suffix = ".tmp"):
     tmpfile = destination + tmp_suffix
     with open(tmpfile, "w") as f:
         f.write(content)
-    move_file(tmpfile, destination)
+    os.rename(tmpfile, destination)
 
 def split_file(source, dest_dir, cut_positions, want_piece = None):
     """'Cuts' is a list of positions where to split the source
