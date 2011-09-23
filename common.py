@@ -160,10 +160,14 @@ def replace_file(destination, content, tmp_suffix = ".tmp"):
     given path. The contents will first be written to a temporary file
     in the destination directory, with the given suffix, and then
     moved to its destination. The suffix file may exist and will in
-    that case be overwritten and lost."""
+    that case be overwritten and lost. Note that this operation is not
+    atomic, the destination file may just be deleted if the operation
+    fails half-way."""
     tmpfile = destination + tmp_suffix
     with open(tmpfile, "w") as f:
         f.write(content)
+    if os.path.exists(destination):
+        os.remove(destination)
     os.rename(tmpfile, destination)
 
 def split_file(source, dest_dir, cut_positions, want_piece = None):
