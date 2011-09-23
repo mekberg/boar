@@ -140,7 +140,7 @@ def verify_repo(repo, verify_blobs = True):
 def cmd_locate(args):
     if len(args) == 0:
         args = ["--help"]
-    parser = OptionParser(usage="usage: boar locate <session name>")
+    parser = OptionParser(usage="usage: boar locate <session name> [[file/dir] [file/dir] ...]")
     (options, args) = parser.parse_args(args)
     if len(args) == 0:
         raise UserError("You must specify which session to look in.")
