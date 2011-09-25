@@ -252,7 +252,6 @@ class Workdir:
             # replaced with proper system-calls to read the file raw
             # from disk. But that's complicated.
             self.cached_md5sum(strip_path_offset(self.offset, f))
-
         try:
             front.create_session(session_name = self.sessionName, base_session = base_snapshot)
         except FileMutex.MutexLocked, e:
@@ -361,7 +360,6 @@ class Workdir:
         recent_change = abs(time.time() - stat.st_mtime) < 5.0
         if sums and not recent_change:
             return sums
-        #print "Re-generating checksums for", relative_path
         md5, sha256 = checksum_file(abspath, ("md5", "sha256"))
         self.sqlcache.set(relative_path, stat.st_mtime, md5, sha256)
         assert len(md5) == 32 and len(sha256) == 64
@@ -481,14 +479,13 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, sha256_checksum,
         # File does not exist in repo or previously in this new snapshot. Upload it.
         with open_raw(abspath) as f:
             m = hashlib.md5()
-            while True:
-                data = f.read(1048576) # 1048576 = 2^20
-                m.update(data)
-                front.add_blob_data(expected_md5sum, b64encode(data))
-                if data == "":
-                    assert m.hexdigest() == expected_md5sum, \
-                        "File changed during checkin process: " + path
-                    break
+            freader = file_reader(f, blocksize = 1048576) # 1048576 = 2^20
+            for block in freader:
+                m.update(block)
+                front.add_blob_data(expected_md5sum, b64encode(block))
+            front.add_blob_data(expected_md5sum, b64encode(""))
+            assert m.hexdigest() == expected_md5sum, \
+                "File changed during checkin process: " + path
     front.add(blobinfo)
 
 def init_workdir(path):
