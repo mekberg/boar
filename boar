@@ -708,4 +708,6 @@ if __name__ == "__main__":
  
     t2 = time.time()
     print "Finished in", round(t2-t1, 2), "seconds"
+    #import common
+    #print "Processed", common._file_reader_sum, "bytes"
     sys.exit(return_code)
