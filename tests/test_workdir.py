@@ -502,9 +502,9 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
         for n in range(0, 10):
             write_tree(wd.root, {'file.txt': 'content 1'}, False)
-            self.assertEqual(wd.cached_md5sum("file.txt"), "9297ab3fbd56b42f6566284119238125")
+            self.assertEqual(wd.cached_md5sum(u"file.txt"), "9297ab3fbd56b42f6566284119238125")
             write_tree(wd.root, {'file.txt': 'content 2'}, False)        
-            self.assertEqual(wd.cached_md5sum("file.txt"), "6685cd62b95f2c58818cb20e7292168b")
+            self.assertEqual(wd.cached_md5sum(u"file.txt"), "6685cd62b95f2c58818cb20e7292168b")
 
     def testIncludeModifications(self):
         """Expected behavior is that modifications of previously
