@@ -65,9 +65,12 @@ def read_file(path):
     with open(path) as f:
         return f.read()
 
+#
+_file_reader_sum = 0
 def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
     """Accepts a file object and yields the specified part of the file
     as a sequence of blocks with length <= blocksize."""
+    global _file_reader_sum
     f.seek(0, os.SEEK_END)
     real_end = f.tell()
     assert end == None or end <= real_end, "Can't checksum past end of file"
@@ -79,6 +82,7 @@ def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
         data = f.read(min(bytes_left, blocksize))
         assert data != "", "Unexpected failed read"
         bytes_left -= len(data)
+        _file_reader_sum += len(data)
         yield data
 
 def md5sum(data):
