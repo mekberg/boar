@@ -354,12 +354,11 @@ class Workdir:
         """Return a list consisting of the md5 and sha256 checksums of
         the given file as hex encoded strings."""
         assert not os.path.isabs(relative_path), "Path must be relative to the workdir. Was: "+relative_path
+        assert self.sqlcache
         abspath = self.wd_abspath(relative_path)
-        if not self.sqlcache:
-            return checksum_file(abspath, ("md5", "sha256"))
         stat = os.stat(abspath)
         sums = self.sqlcache.get(relative_path, stat.st_mtime)
-        recent_change = False #abs(time.time() - stat.st_mtime) < 5.0
+        recent_change = abs(time.time() - stat.st_mtime) < 5.0
         if sums and not recent_change:
             return sums
         #print "Re-generating checksums for", relative_path
