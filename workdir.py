@@ -78,6 +78,8 @@ class Workdir:
         self.sqlcache = None
         if os.path.exists(self.metadir):
             self.sqlcache = ChecksumCache(self.metadir + "/" + 'ccache.db')
+        else:
+            self.sqlcache = ChecksumCache(":memory:")
 
         assert self.revision == None or self.revision > 0
         self.tree_csums = None
@@ -593,8 +595,8 @@ class ChecksumCache:
         # Use a proxy to avoid circular reference to the repo,
         # allowing this object to be garbed at shutdown and triggering
         # the __del__ function.
-        assert os.path.isabs(dbpath)
-        assert os.path.exists(os.path.dirname(dbpath))
+        assert dbpath == ":memory:" or os.path.isabs(dbpath)
+        assert dbpath == ":memory:" or os.path.exists(os.path.dirname(dbpath))
         self.dbpath = dbpath
         self.conn = None
         self.__init_db()
