@@ -35,6 +35,7 @@ from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
 from boar_exceptions import UserError
 
+LATEST_REPO_FORMAT = 1
 VERSION_FILE = "version.txt"
 RECOVERYTEXT_FILE = "recovery.txt"
 QUEUE_DIR = "queue"
@@ -49,7 +50,7 @@ REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
 REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR, DERIVED_SHA256_DIR)
 
-recoverytext = """Repository format v1
+recoverytext = """Repository format v%s
 
 This is a versioned repository of files. It is designed to be easy to
 recover in case the original software is unavailable.
@@ -111,7 +112,7 @@ that indicate that files should be removed from the base
 snapshot. These are the entries containing a keyword "action" with the
 value "remove". If you simply want to extract as much data as
 possible, these special entries can be ignored.
-"""
+""" % LATEST_REPO_FORMAT
 
 class MisuseError(Exception):
     def __init__(self, msg):
@@ -139,7 +140,7 @@ def integrity_assert(test, errormsg = None):
 
 def create_repository(repopath):
     os.mkdir(repopath)
-    create_file(os.path.join(repopath, VERSION_FILE), "1")
+    create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
     os.mkdir(os.path.join(repopath, QUEUE_DIR))
     os.mkdir(os.path.join(repopath, BLOB_DIR))
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
@@ -187,7 +188,8 @@ class Repo:
         exception if an error is found."""
         repo_version = self.__get_repo_version()
         assert repo_version, "Repo format obsolete. Upgrade failed?"
-        integrity_assert(repo_version == 1, ("Repo version %s can not be handled by this version of boar" % repo_version))
+        integrity_assert(repo_version == LATEST_REPO_FORMAT,
+                         ("Repo version %s can not be handled by this version of boar" % repo_version))
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
         for directory in REPO_DIRS_V1:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
@@ -195,11 +197,22 @@ class Repo:
     def __upgrade_repo(self):
         assert self.repo_mutex.locked
         version = self.__get_repo_version()
-        if version > 1:
+        if version > LATEST_REPO_FORMAT:
             raise UserError("Repo version %s can not be handled by this version of boar" % version)
-        if version == 1:
+        if version == LATEST_REPO_FORMAT:
             return
         notice("Old repo format detected. Upgrading...")
+        self.__upgrade_repo_v0()
+        try:
+            self.__quick_check()
+        except:
+            warn("Post-upgrade quickcheck of repository failed!")
+            raise
+
+    def __upgrade_repo_v0(self):
+        version = self.__get_repo_version()
+        if version == 1:
+            return
         assert version == 0
         recipes_dir = os.path.join(self.repopath, RECIPES_DIR)
         if os.path.exists(recipes_dir):
@@ -218,11 +231,6 @@ class Repo:
             warn("Version marker should not exist for repo format v0")
             safe_delete_file(version_file)
         create_file(version_file, "1")
-        try:
-            self.__quick_check()
-        except:
-            warn("Post-upgrade quickcheck of repository failed!")
-            raise
 
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
