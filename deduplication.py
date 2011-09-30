@@ -18,6 +18,20 @@ from __future__ import with_statement
 
 from common import *
 
+class BlockChecksum:
+    def __init__(self, window_size):
+        self.buffer = ""
+        self.window_size = window_size
+        self.position = 0
+
+    def feed_string(self, s):
+        self.buffer += s
+        while len(self.buffer) >= self.window_size:
+            yield self.position, sum(map(ord, self.buffer[0:self.window_size]))
+            self.position += self.window_size
+            self.buffer = self.buffer[self.window_size:]
+            
+
 class RollingChecksum:
     def __init__(self, window_size):
         self.sum = 0
@@ -34,7 +48,7 @@ class RollingChecksum:
         self.buffer.append(b)
         self.sum += b
         if len(self.buffer) == self.window_size + 1:
-            self.sum -= self.buffer[-self.window_size]
+            self.sum -= self.buffer[0]
             self.position += 1
             self.buffer.pop(0)
             result = self.position, self.sum
@@ -49,7 +63,11 @@ class RollingChecksum:
 def self_test():
     rs = RollingChecksum(3)
     result = list(rs.feed_string([chr(x) for x in range(1,10)]))
-    assert result == [None, None, (0, 6), (1, 8), (2, 10), (3, 12), (4, 14), (5, 16), (6, 18)]
+    assert result == [None, None, (0, 6), (1, 9), (2, 12), (3, 15), (4, 18), (5, 21), (6, 24)]
+
+    bs = BlockChecksum(3)
+    result = list(bs.feed_string("".join([chr(x) for x in range(1,10)])))
+    assert result == [(0, 6), (3, 15), (6, 24)]
 
 self_test()
 
