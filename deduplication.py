@@ -16,6 +16,8 @@
 
 from __future__ import with_statement
 
+from common import *
+
 class RollingChecksum:
     def __init__(self, window_size):
         self.sum = 0
@@ -31,14 +33,18 @@ class RollingChecksum:
         assert type(b) == int and b <= 255 and b >= 0
         self.buffer.append(b)
         self.sum += b
-        if len(self.buffer) > self.window_size: 
+        if len(self.buffer) == self.window_size + 1:
             self.sum -= self.buffer[-self.window_size]
             self.position += 1
-            return self.position, self.sum
-        if len(self.buffer) < self.window_size: 
-            return None
-        if len(self.buffer) == self.window_size: 
-            return self.position, self.sum
+            self.buffer.pop(0)
+            result = self.position, self.sum
+        elif len(self.buffer) < self.window_size: 
+            result = None
+        elif len(self.buffer) == self.window_size: 
+            result = self.position, self.sum
+        else:
+            assert False, "Unexpected buffer size"
+        return result
 
 def self_test():
     rs = RollingChecksum(3)
@@ -46,3 +52,11 @@ def self_test():
     assert result == [None, None, (0, 6), (1, 8), (2, 10), (3, 12), (4, 14), (5, 16), (6, 18)]
 
 self_test()
+
+"""
+import sys
+rs = RollingChecksum(100)
+for block in file_reader(sys.stdin):
+    print len(block)
+    rs.feed_string(block)
+"""
