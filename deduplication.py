@@ -23,11 +23,14 @@ class BlockChecksum:
         self.buffer = ""
         self.window_size = window_size
         self.position = 0
+        self.blocks = []
 
     def feed_string(self, s):
         self.buffer += s
         while len(self.buffer) >= self.window_size:
-            yield self.position, sum(map(ord, self.buffer[0:self.window_size]))
+            block = self.buffer[0:self.window_size]
+            block_sha256 = sha256(block)
+            self.blocks.append((self.position, sum(map(ord, block)), block_sha256))
             self.position += self.window_size
             self.buffer = self.buffer[self.window_size:]
             
@@ -66,8 +69,10 @@ def self_test():
     assert result == [None, None, (0, 6), (1, 9), (2, 12), (3, 15), (4, 18), (5, 21), (6, 24)]
 
     bs = BlockChecksum(3)
-    result = list(bs.feed_string("".join([chr(x) for x in range(1,10)])))
-    assert result == [(0, 6), (3, 15), (6, 24)]
+    bs.feed_string("".join([chr(x) for x in range(1,10)]))
+    assert bs.blocks == [(0, 6, '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'), 
+                         (3, 15, '787c798e39a5bc1910355bae6d0cd87a36b2e10fd0202a83e3bb6b005da83472'), 
+                         (6, 24, '66a6757151f8ee55db127716c7e3dce0be8074b64e20eda542e5c1e46ca9c41e')]
 
 self_test()
 
