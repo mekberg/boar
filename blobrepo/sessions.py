@@ -28,6 +28,7 @@ import hashlib
 import types
 
 from common import *
+from deduplication import BlockChecksum
 
 """
 The SessionWriter and SessionReader are together with Repository the
@@ -90,6 +91,7 @@ class SessionWriter:
         self.metadatas = {}
         # Summers for new blobs. { blobname: summer, ... }
         self.blob_checksummers = {}
+        self.blob_blocks = {}
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
         assert os.path.exists(self.repo.repopath)
@@ -123,10 +125,12 @@ class SessionWriter:
         assert is_md5sum(blob_md5)
         assert not self.repo.has_blob(blob_md5), "blob already exists"
         if not self.blob_checksummers.has_key(blob_md5):
+            assert blob_md5 not in self.blob_blocks
             self.blob_checksummers[blob_md5] = hashlib.md5()
+            self.blob_blocks[blob_md5] = BlockChecksum(2**17)
         assert not self.dead
-        summer = self.blob_checksummers[blob_md5]
-        summer.update(fragment)
+        self.blob_checksummers[blob_md5].update(fragment)
+        self.blob_blocks[blob_md5].feed_string(fragment)
         fname = os.path.join(self.session_path, blob_md5)
         with open(fname, "ab") as f:
             f.write(fragment)
@@ -246,6 +250,12 @@ class SessionWriter:
         assert self.session_path != None
         for name, summer in self.blob_checksummers.items():
             assert name == summer.hexdigest(), "Corrupted blob found in new session. Commit aborted."
+        for name, blocksummer in self.blob_blocks.items():
+            seq = 0
+            for blockdata in blocksummer.blocks:
+                offset, rolling, sha256 = blockdata
+                self.repo.blocks.add_block(name, seq, offset, rolling, sha256)
+                seq += 1
         if sessioninfo == {}:
             sessioninfo['name'] = self.session_name
         assert self.session_name == sessioninfo['name'], \
