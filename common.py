@@ -90,6 +90,11 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
+def sha256(data):
+    m = hashlib.sha256()
+    m.update(data)
+    return m.hexdigest()
+
 def md5sum_fileobj(f, start = 0, end = None):
     """Accepts a file object and returns the md5sum."""
     return checksum_fileobj(f, ["md5"], start, end)[0]
