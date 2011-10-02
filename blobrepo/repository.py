@@ -35,7 +35,7 @@ from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
 from boar_exceptions import UserError
 
-LATEST_REPO_FORMAT = 1
+LATEST_REPO_FORMAT = 2
 VERSION_FILE = "version.txt"
 RECOVERYTEXT_FILE = "recovery.txt"
 QUEUE_DIR = "queue"
@@ -45,10 +45,11 @@ RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
 DERIVED_SHA256_DIR = "derived/sha256"
+DERIVED_BLOCKS_DIR = "derived/blocks"
 
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
-REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
-    DERIVED_DIR, DERIVED_SHA256_DIR)
+REPO_DIRS = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,
+             DERIVED_DIR, DERIVED_SHA256_DIR, DERIVED_BLOCKS_DIR)
 
 recoverytext = """Repository format v%s
 
@@ -147,6 +148,7 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, TMP_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_SHA256_DIR))
+    os.mkdir(os.path.join(repopath, DERIVED_BLOCKS_DIR))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
 
 def is_recipe_filename(filename):
@@ -174,6 +176,7 @@ class Repo:
             self.__upgrade_repo()
             self.__quick_check()
             self.sha256 = derived.blobs_sha256(self, self.repopath + "/derived/sha256")
+            self.blocks = derived.blobs_blocks(self, self.repopath + "/derived/blocks")
             self.process_queue()
         finally:
             self.repo_mutex.release()
@@ -191,7 +194,7 @@ class Repo:
         integrity_assert(repo_version == LATEST_REPO_FORMAT,
                          ("Repo version %s can not be handled by this version of boar" % repo_version))
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        for directory in REPO_DIRS_V1:
+        for directory in REPO_DIRS:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
 
     def __upgrade_repo(self):
@@ -203,6 +206,7 @@ class Repo:
             return
         notice("Old repo format detected. Upgrading...")
         self.__upgrade_repo_v0()
+        self.__upgrade_repo_v1()
         try:
             self.__quick_check()
         except:
@@ -231,6 +235,15 @@ class Repo:
             warn("Version marker should not exist for repo format v0")
             safe_delete_file(version_file)
         create_file(version_file, "1")
+
+    def __upgrade_repo_v1(self):
+        version = self.__get_repo_version()
+        if version == 2:
+            return
+        assert version == 1
+        version_file = os.path.join(self.repopath, VERSION_FILE)
+        os.mkdir(self.repopath + "/" + DERIVED_BLOCKS_DIR)
+        replace_file(version_file, "2")
 
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
@@ -519,7 +532,7 @@ class Repo:
                 continue
             blob_path = os.path.join(queued_item, filename)
             assert filename == md5sum_file(blob_path), "Invalid blob found in queue dir:" + blob_path
-    
+        
         # Check the existence of all required files
         # TODO: check the contents for validity
         meta_info = read_json(os.path.join(queued_item, "session.json"))
