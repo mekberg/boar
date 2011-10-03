@@ -166,10 +166,25 @@ class blobs_blocks:
             self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, seq int NOT NULL, offset long NOT NULL, rolling char(32), sha256 char(64) NOT NULL, row_md5 char(32))")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_offset ON blocks (blob, offset)")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_seq ON blocks (blob, seq)")
-            self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS rolling ON blocks (rolling)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS rolling ON blocks (rolling)")
             self.conn.commit()
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError(e)
+
+    def get_all_rolling(self):
+        c = self.conn.cursor()
+        c.execute("SELECT DISTINCT rolling FROM blocks")
+        rows = c.fetchall()
+        values = [int(row[0]) for row in rows]
+        return values
+
+    def has_block(self, rolling, sha256):
+        c = self.conn.cursor()
+        c.execute("SELECT 1 FROM blocks WHERE rolling = ? AND sha256 = ?", [rolling, sha256])
+        rows = c.fetchall()
+        if rows:
+            return True
+        return False
 
     def add_block(self, blob, seq, offset, rolling, sha256):
         assert is_md5sum(blob)
@@ -178,7 +193,6 @@ class blobs_blocks:
         assert type(seq) == int, repr(seq)
         md5_row = md5sum("%s-%s-%s-%s" % (blob, offset, rolling, sha256))
         try:
-            print blob, offset, rolling, sha256, md5_row
             self.conn.execute("INSERT INTO blocks (blob, seq, offset, rolling, sha256, row_md5) VALUES (?, ?, ?, ?, ?, ?)", (blob, seq, offset, rolling, sha256, md5_row))
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError("Exception while writing to the blocks cache: "+str(e))
