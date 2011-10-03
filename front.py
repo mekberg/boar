@@ -186,6 +186,12 @@ class Front:
         name = session_info.get("name", None)
         return name == session_name        
 
+    def get_all_rolling(self):
+        return self.repo.blocks.get_all_rolling()
+
+    def has_block(self, rolling, sha256):
+        return self.repo.blocks.has_block(rolling, sha256)
+
     def add_blob_data(self, blob_md5, b64data):
         """ Must be called after a create_session()  """
         self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))
@@ -353,6 +359,9 @@ class DryRunFront:
 
     def add_blob_data(self, blob_md5, b64data):
         pass
+
+    def get_all_rolling(self):
+        return []
 
     def add(self, metadata):
         pass

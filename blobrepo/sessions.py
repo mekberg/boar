@@ -127,7 +127,8 @@ class SessionWriter:
         if not self.blob_checksummers.has_key(blob_md5):
             assert blob_md5 not in self.blob_blocks
             self.blob_checksummers[blob_md5] = hashlib.md5()
-            self.blob_blocks[blob_md5] = BlockChecksum(2**17)
+            #self.blob_blocks[blob_md5] = BlockChecksum(2**17)
+            self.blob_blocks[blob_md5] = BlockChecksum(2**8)
         assert not self.dead
         self.blob_checksummers[blob_md5].update(fragment)
         self.blob_blocks[blob_md5].feed_string(fragment)

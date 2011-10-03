@@ -242,6 +242,8 @@ class Workdir:
         new snapshot will be created as a modification of the snapshot
         given in the 'base_snapshot' argument."""
 
+        print "All checksums:", front.get_all_rolling()
+
         for f in files:
             # A little hackish to store up the md5sums in one sweep
             # before starting to check them in. An attempt to reduce
