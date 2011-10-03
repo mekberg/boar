@@ -35,6 +35,7 @@ else:
 from front import Front, RevisionFront, set_file_contents
 import workdir
 from common import *
+import deduplication
 
 BOAR_VERSION = "<UNDEFINED>"
 
@@ -179,6 +180,32 @@ def cmd_locate(args):
     print "%s files exists in the given session, %s do not." % (found, len(missing))
     for f in missing:
         print "Missing:", f
+
+def cmd_scanblocks(args):
+    front = init_repo_from_env(cmdline_repo)
+    filename, = args
+    rs = deduplication.RollingChecksum(256)
+    all_rolling = set(front.get_all_rolling())
+    #print all_rolling
+    hits = []
+    with open(filename, "r") as f:
+        while True:
+            byte = f.read(1)
+            if byte == "":
+                break
+            rs.feed_byte(ord(byte))
+            rolling = rs.value()
+            if rolling == None:
+                continue            
+            if rolling in all_rolling:
+                sha = rs.sha256()
+                if front.has_block(rolling, sha):
+                    print "True hit at", rs.offset()
+                    hits.append((rs.offset(), rolling, sha))
+                else:
+                    print "False hit at", rs.offset()
+    print hits
+    print "scanblocks"
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
@@ -671,6 +698,8 @@ def main():
         return cmd_setprop(args[1:])
     elif args[0] == "getprop":
         return cmd_getprop(args[1:])
+    elif args[0] == "scanblocks":
+        return cmd_scanblocks(args[1:])
     else:
         print_help()
         return 1
@@ -685,10 +714,10 @@ if __name__ == "__main__":
     sys.argv = map(tounicode, sys.argv)
     global ucwd
     ucwd = tounicode(os.getcwd())
-    #cProfile.run('main()', "prof.txt")
-    #import pstats
-    #p = pstats.Stats('prof.txt')
-    #p.sort_stats('cum').print_stats(10)
+    # cProfile.run('main()', "prof.txt")
+    # import pstats
+    # p = pstats.Stats('prof.txt')
+    # p.sort_stats('cum').print_stats(30)
     try:
         return_code = main()
     except UserError as e:
