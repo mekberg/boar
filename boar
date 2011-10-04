@@ -181,18 +181,23 @@ def cmd_locate(args):
     for f in missing:
         print "Missing:", f
 
+
+
 def cmd_scanblocks(args):
+    WINDOW_SIZE = 2**12
     front = init_repo_from_env(cmdline_repo)
     filename, = args
-    rs = deduplication.RollingChecksum(256)
+    rs = deduplication.RollingChecksum(WINDOW_SIZE)
     all_rolling = set(front.get_all_rolling())
     #print all_rolling
     hits = []
     with open(filename, "r") as f:
+        size = 0
         while True:
             byte = f.read(1)
             if byte == "":
                 break
+            size += 1
             rs.feed_byte(ord(byte))
             rolling = rs.value()
             if rolling == None:
@@ -201,11 +206,28 @@ def cmd_scanblocks(args):
                 sha = rs.sha256()
                 if front.has_block(rolling, sha):
                     print "True hit at", rs.offset()
-                    hits.append((rs.offset(), rolling, sha))
+                    hits.append(rs.offset())
                 else:
                     print "False hit at", rs.offset()
-    print hits
-    print "scanblocks"
+
+    print "Thinking..."
+    hits = deduplication.remove_overlapping_blocks(hits, WINDOW_SIZE)
+    # Lets take a look at that list
+    redundant_bytes = 0
+    unique_bytes = 0
+    n = 0
+    while n < size:
+        if hits and hits[0] == n:
+            n += WINDOW_SIZE
+            hits.pop(0)
+            redundant_bytes += WINDOW_SIZE
+        else:
+            n += 1
+            unique_bytes += 1
+    print "Filesize:", size
+    print unique_bytes, "unique bytes"
+    print redundant_bytes, "redundant bytes"
+    print len(hits), "overlaps"
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
