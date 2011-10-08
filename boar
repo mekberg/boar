@@ -295,9 +295,19 @@ def cmd_ls(args):
         else:
             print subpath
 
+    def info_comp(x, y):
+        if x['filename'] > y['filename']:
+            return 1
+        if x['filename'] < y['filename']:
+            return -1
+        return 0
+
     subdirs = set()
     anything_printed = False
-    for info in front.get_session_bloblist(revision):
+    bloblist = front.get_session_bloblist(revision)
+    bloblist.sort(info_comp)
+
+    for info in bloblist:
         if is_child_path(path, info['filename']) or path == info['filename']:
             print_info(info, path, subdirs)
             anything_printed = True
