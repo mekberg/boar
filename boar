@@ -65,7 +65,7 @@ information. The full command reference is available online at
 http://code.google.com/p/boar/wiki/CommandReference
 """  % BOAR_VERSION
 
-def list_sessions(front, show_meta = False):
+def list_sessions(front, show_meta = False, verbose = False):
     sessions_count = {}
     for sid in front.get_session_ids():
         session_info = front.get_session_info(sid)
@@ -254,7 +254,56 @@ def cmd_list(args):
         list_files(front, args[0], args[1])
     else:
         raise UserError("Too many arguments")
-        
+
+
+def cmd_ls(args):
+    parser = OptionParser(usage="usage: boar ls <session name>[/path]")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="The revision to list (defaults to latest)")
+    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
+                      help="List more information about the files.")
+    (options, args) = parser.parse_args(args)
+    front = init_repo_from_env(cmdline_repo)
+    if len(args) == 0:
+        list_sessions(front, show_meta = False, verbose = options.verbose)
+        return
+    elif len(args) > 1:
+        raise UserError("Too many arguments")
+    else:
+        session_name, path = split_path_from_start(args[0])
+        path = path.rstrip("/")
+    if options.revision:
+        revision = options.revision
+    else:
+        revision = front.find_last_revision(session_name)
+    session_info = front.get_session_info(revision)
+    if session_info == None or session_info.get("name") != session_name:
+        raise UserError("There is no such session/revision")
+
+    def print_info(info, path, seen_dirs):
+        if path == info['filename']:
+            subpath = os.path.basename(path)
+        else:
+            subpath = strip_path_offset(path, info['filename'])
+        if "/" in subpath:
+            dirname, rest = split_path_from_start(subpath)
+            if dirname not in subdirs:
+                print dirname + "/"
+                subdirs.add(dirname)
+        elif options.verbose:
+            print subpath, str(info['size']/1024+1) + "kB"
+        else:
+            print subpath
+
+    subdirs = set()
+    anything_printed = False
+    for info in front.get_session_bloblist(revision):
+        if is_child_path(path, info['filename']) or path == info['filename']:
+            print_info(info, path, subdirs)
+            anything_printed = True
+    if not anything_printed:
+        raise UserError("No such file or directory found in session: "+path)        
+    
 def cmd_verify(args):
     parser = OptionParser(usage="usage: boar verify [options]")
     parser.add_option("-q", "--quick", dest = "quick", action="store_true",
@@ -639,6 +688,8 @@ def main():
         return cmd_import(args[1:])
     elif args[0] == "list":        
         return cmd_list(args[1:])
+    elif args[0] == "ls":        
+        return cmd_ls(args[1:])
     elif args[0] == "verify":
         return cmd_verify(args[1:])
     elif args[0] == "repair":
