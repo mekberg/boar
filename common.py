@@ -269,19 +269,6 @@ def is_child_path(parent, child):
     #print "is_child_path('%s', '%s') => %s" % (parent, child, result)
     return result
     
-def remove_first_dirname(p):
-    assert isinstance(p, unicode)
-    rel_path = get_relative_path(p)
-    firstslash = rel_path.find("/")
-    if firstslash == -1:
-        return None
-    rest = rel_path[firstslash+1:]
-    # Let's just trim any double slashes
-    rest = get_relative_path(rest)
-    return rest
-
-assert remove_first_dirname(u"tjosan/hejsan") == "hejsan"
-
 
 import os.path as posixpath
 from os.path import curdir, sep, pardir, join
