@@ -268,7 +268,28 @@ def is_child_path(parent, child):
     result = child.startswith(parent + "/")
     #print "is_child_path('%s', '%s') => %s" % (parent, child, result)
     return result
-    
+
+def split_path_from_start(path):
+    """Works like os.path.split(), but splits from the beginning of
+    the path instead. /var/tmp/junk returns ("var",
+    "tmp/junk"). Windows style paths will be converted and returned
+    unix-style."""
+    assert type(path) == unicode
+    path = convert_win_path_to_unix(path)
+    path = path.lstrip("/")
+    if "/" in path:
+        pieces = path.split("/")
+    else:
+        pieces = [path]
+    head, tail = pieces[0], u"/".join(pieces[1:])
+    assert type(head) == unicode
+    assert type(tail) == unicode
+    return head, tail
+
+assert split_path_from_start(u"junk") == ("junk", "")
+assert split_path_from_start(u"") == ("", "")
+assert split_path_from_start(u"/var/tmp/junk") == ("var", "tmp/junk")
+assert split_path_from_start(u"var\\tmp\\junk") == ("var", "tmp/junk")
 
 import os.path as posixpath
 from os.path import curdir, sep, pardir, join
