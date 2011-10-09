@@ -217,6 +217,39 @@ echo "Hello world2" >$SESSION/file2.txt || { echo "Couldn't create file2.txt"; e
 (cd $SESSION && $BOAR ci) || { echo "ci command failed"; exit 1; }
 rm -r $SESSION || { echo "Couldn't remove session dir"; exit 1; }
 
+echo --- Test ls command
+SESSION=LsSession
+mkdir test_tree || { echo "Couldn't create test_tree dir"; exit 1; }
+mkdir test_tree/subdir || { echo "Couldn't create test_tree/subdir dir"; exit 1; }
+echo "Hello world1" > test_tree/file1.txt || { echo "Couldn't create file"; exit 1; }
+echo "Hello world2" > test_tree/subdir/file2.txt || { echo "Couldn't create file"; exit 1; }
+echo "Hello world3" > test_tree/subdir/file3.txt || { echo "Couldn't create file"; exit 1; }
+REPO_PATH=$REPO $BOAR mksession $SESSION || { echo "Couldn't create session"; exit 1; }
+REPO_PATH=$REPO $BOAR import -v -w test_tree $SESSION || { echo "Couldn't import"; exit 1; }
+(REPO_PATH=$REPO $BOAR ls | grep $SESSION) || { echo "Didn't find current session in session list"; exit 1; }
+REPO_PATH=$REPO $BOAR ls $SESSION | grep -v Finished >lsoutput.txt || { echo "Couldn't ls session"; exit 1; }
+echo "--" >> lsoutput.txt
+REPO_PATH=$REPO $BOAR ls $SESSION/file1.txt | grep -v Finished >>lsoutput.txt || { echo "Couldn't ls session"; exit 1; }
+echo "--" >> lsoutput.txt
+REPO_PATH=$REPO $BOAR ls $SESSION/subdir | grep -v Finished >>lsoutput.txt || { echo "Couldn't ls session"; exit 1; }
+echo "--" >> lsoutput.txt
+REPO_PATH=$REPO $BOAR ls -v $SESSION/subdir | grep -v Finished >>lsoutput.txt || { echo "Couldn't ls session"; exit 1; }
+REPO_PATH=$REPO $BOAR ls $SESSION/nonexisting && { echo "ls of non-existing dir succeeded (should fail)"; exit 1; }
+diff lsoutput.txt - <<EOF || { echo "Differences in output found"; exit 1; }
+file1.txt
+subdir/
+--
+file1.txt
+--
+file2.txt
+file3.txt
+--
+file2.txt 1kB
+file3.txt 1kB
+EOF
+rm lsoutput.txt
+rm -r test_tree || { echo "Couldn't remove test_tree"; exit 1; }
+
 echo --- Test verify
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify repo"; exit 1; }
 
