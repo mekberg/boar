@@ -347,6 +347,8 @@ def get_tree(root, skip = [], absolute_paths = False):
     remove_rootpath = lambda fn: convert_win_path_to_unix(my_relpath(fn, root))
     if not absolute_paths:
         all_files = map(remove_rootpath, all_files)
+    else:
+        all_files = map(convert_win_path_to_unix, all_files)
     for f in all_files:
         assert not is_windows_path(f), "Was:" + f
         assert not ".." in f.split("/"), "Was:" + f
