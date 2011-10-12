@@ -159,7 +159,7 @@ def cmd_locate(args):
     found = 0
     for root in files_to_look_for:
         if os.path.isdir(root):
-            tree = get_tree(root)
+            tree = get_tree(root, absolute_paths = True)
             tree.sort()
         else:
             tree = [root]
