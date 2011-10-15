@@ -252,12 +252,11 @@ class Front:
         session. Returns None if there is no such session. """
         return self.repo.find_last_revision(session_name)
 
-    def verify_derived(self):
-        return self.repo.sha256.verify()
-
     def init_verify_blobs(self):
         assert self.blobs_to_verify == []
         self.blobs_to_verify = self.repo.get_blob_names()
+        for scanner in self.repo.scanners:
+            scanner.scan_init()
         return len(self.blobs_to_verify)
 
     def verify_some_blobs(self):
@@ -268,6 +267,9 @@ class Front:
             result = self.repo.verify_blob(blob_to_verify)
             assert result, "Blob failed verification:" + blob_to_verify
             succeeded.append(blob_to_verify)
+        if not self.blobs_to_verify:
+            for scanner in self.repo.scanners:
+                scanner.scan_finish()
         return succeeded
 
 

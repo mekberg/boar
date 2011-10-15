@@ -154,9 +154,6 @@ def is_recipe_filename(filename):
     return len(filename_parts) == 2 \
         and filename_parts[1] == "recipe" \
         and is_md5sum(filename_parts[0])
-            
-
-
 
 class Repo:
     def __init__(self, repopath):
@@ -177,6 +174,7 @@ class Repo:
             self.process_queue()
         finally:
             self.repo_mutex.release()
+        self.scanners = (self.sha256,)
 
     def close(self):
         self.sha256.close()
@@ -235,7 +233,7 @@ class Repo:
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
         if os.path.exists(version_file):
-            with open(version_file, "r") as f:
+            with safe_open(version_file, "rb") as f:
                 return int(f.read())
         # Repo is from before repo format numbering started.
         # Make sure it is a valid one and return v0
@@ -309,7 +307,7 @@ class Repo:
                 size = blobsize
             assert blobsize <= offset + size
             path = self.get_blob_path(sum)
-            fo = open(path, "rb")
+            fo = safe_open(path, "rb")
             fo.seek(offset)
             return FileDataSource(fo, size)
         recipe = self.get_recipe(sum)
@@ -321,7 +319,7 @@ class Repo:
         """ Returns None if there is no such blob """
         if self.has_raw_blob(sum):
             path = self.get_blob_path(sum)
-            with open(path, "rb") as f:
+            with safe_open(path, "rb") as f:
                 f.seek(offset)
                 data = f.read(size)
             return data
@@ -407,13 +405,24 @@ class Repo:
     def verify_blob(self, sum):
         recipe = self.get_recipe(sum)
         if recipe:
-            reader = create_blob_reader(recipe, self)
-            verified_ok = (sum == md5sum_file(reader))
-        elif self.has_raw_blob(sum):
-            path = self.get_blob_path(sum)
-            verified_ok = (sum == md5sum_file(path))
-        else:
+            assert False, "recipes not implemented"
+            #reader = create_blob_reader(recipe, self)
+            #verified_ok = (sum == md5sum_file(reader))
+        if not self.has_raw_blob(sum):
             raise ValueError("No such blob or recipe: " + sum)
+        path = self.get_blob_path(sum)
+        with safe_open(path, "rb") as f:
+            md5_summer = hashlib.md5()
+            self.sha256.scan_blob_init(sum)
+            for block in file_reader(f):
+                md5_summer.update(block)
+                self.sha256.scan_blob_fragment(sum, block)
+            md5 = md5_summer.hexdigest()
+            verified_ok = (sum == md5)
+            if verified_ok:
+                self.sha256.scan_blob_finish(sum)
+            else:
+                self.sha256.scan_blob_abort(sum)
         return verified_ok 
 
     def find_redundant_raw_blobs(self):
