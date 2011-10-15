@@ -313,7 +313,7 @@ class Workdir:
         bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
         if os.path.exists(bloblist_file):
             try:
-                return cPickle.load(open(bloblist_file, "rb"))
+                return cPickle.load(safe_open(bloblist_file, "rb"))
             except: 
                 warn("Exception while accessing bloblist cache - ignoring")
                 return None
@@ -515,7 +515,7 @@ def find_meta(path):
     return find_meta(head)
 
 def load_meta_info(metapath):
-    with open(os.path.join(metapath, "info"), "rb") as f:
+    with safe_open(os.path.join(metapath, "info"), "rb") as f:
         info = json.load(f)
     return info
 
