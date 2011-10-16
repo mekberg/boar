@@ -36,7 +36,7 @@ def write_json(filename, obj):
         json.dump(obj, f, indent = 4)
 
 def read_json(filename):
-    with open(filename, "rb") as f:
+    with safe_open(filename, "rb") as f:
         return json.load(f)
 
 """ This file contains code that is generally useful, without being
@@ -45,6 +45,12 @@ specific for any project """
 def is_md5sum(str):
     try:
         return re.match("^[a-f0-9]{32}$", str) != None    
+    except TypeError:
+        return False
+
+def is_sha256(str):
+    try:
+        return re.match("^[a-f0-9]{64}$", str) != None    
     except TypeError:
         return False
 
@@ -62,18 +68,17 @@ def notice(s):
 
 def read_file(path):
     """Reads and returns the contents of the given filename."""
-    with open(path) as f:
+    with safe_open(path) as f:
         return f.read()
 
-#
 _file_reader_sum = 0
 def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
-    """Accepts a file object and yields the specified part of the file
-    as a sequence of blocks with length <= blocksize."""
+    """Accepts a file object and yields the specified part of
+    the file as a sequence of blocks with length <= blocksize."""
     global _file_reader_sum
     f.seek(0, os.SEEK_END)
     real_end = f.tell()
-    assert end == None or end <= real_end, "Can't checksum past end of file"
+    assert end == None or end <= real_end, "Can't read past end of file"
     f.seek(start)
     if end == None:
         end = real_end
@@ -84,6 +89,11 @@ def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
         bytes_left -= len(data)
         _file_reader_sum += len(data)
         yield data
+
+def safe_open(path, flags = "rb"):
+    """Returns a read-only file handle for the given path."""
+    assert flags in ("rb", "r"), "only modes 'r' or 'rb' allowed"
+    return open(path, "rb")
 
 def md5sum(data):
     m = hashlib.md5()
@@ -121,7 +131,7 @@ def checksum_file(f, checksum_names, start = 0, end = None):
     in the 'checksum_names' argument."""
     assert f, "File must not be None"
     if isinstance(f, basestring):
-        with open(f, "rb") as fobj:
+        with safe_open(f, "rb") as fobj:
             return checksum_fileobj(fobj, checksum_names, start, end)
     return checksum_fileobj(f, checksum_names, start, end)
 
@@ -129,7 +139,7 @@ def copy_file(source, destination, start = 0, end = None, expected_md5sum = None
     assert os.path.exists(source), "Source doesn't exist"
     assert not os.path.exists(destination), "Destination already exist"
     m = hashlib.md5()
-    with open(source, "rb") as sobj:
+    with safe_open(source, "rb") as sobj:
         reader = file_reader(sobj, start, end)
         with open(destination, "wb") as dobj:
             for block in reader:

@@ -103,11 +103,6 @@ def verify_repo(repo, verify_blobs = True):
     exception."""
     front = Front(repo)
     print "Verifying repo", repo
-    print "Verifying derived"
-    if front.verify_derived():
-        print "Derived data is ok"
-    else:
-        raise repository.SoftCorruptionError()
     session_ids = front.get_session_ids()
     print "Verifying %s sessions" % (len(session_ids))
     ok_blobs = set()
@@ -334,11 +329,12 @@ def cmd_repair(args):
     if not options.force:
         try:
             front = init_repo_from_env(cmdline_repo)
-            clean = verify_repo(front.repo, verify_blobs = not options.quick)
+            print "Verifying repo before repair..."
+            clean = verify_repo(front.repo)
         except repository.SoftCorruptionError, e:
             print "Repairable error found:", e
         except Exception, e:
-            print "Possibly hard error found (repairing may not help):", e
+            print "Possible hard error found (repairing may not help):", e
     if clean:
         print "No errors found. Not repairing anything."
         return
@@ -498,7 +494,7 @@ def cmd_setprop(args):
     if options.file:
         session_name, property_name = args
         try:        
-            with open(options.file, "r") as f:
+            with safe_open(options.file, "r") as f:
                 new_value = f.read().decode("utf-8")
         except Exception, e:
             raise UserError("Problems reading file %s: %s" % (options.file, e))

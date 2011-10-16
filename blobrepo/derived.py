@@ -54,6 +54,7 @@ class blobs_sha256:
         self.__init_db()
         atexit.register(self.sync)
         self.rate_limiter = RateLimiter(30.0)
+        self.scan_in_progress = False
 
     def __init_db(self):
         if self.conn:
@@ -65,6 +66,16 @@ class blobs_sha256:
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError(e)
             #raise repository.SoftCorruptionError("Exception while accessing the sha256 cache: "+str(e))
+
+    def set_sha256(self, md5, sha256):
+        assert is_md5sum(md5)
+        assert is_sha256(sha256)
+        md5_row = md5sum(md5 + sha256)
+        try:
+            self.conn.execute("INSERT OR IGNORE INTO checksums (md5, sha256, row_md5) VALUES (?, ?, ?)", (md5, sha256, md5_row))
+        except sqlite3.DatabaseError, e:
+            raise repository.SoftCorruptionError("Exception while writing to the sha256 cache: "+str(e))
+            
 
     def __set_result(self, md5, sha256):
         md5_row = md5sum(md5 + sha256)
@@ -87,24 +98,6 @@ class blobs_sha256:
         if row_md5 != md5sum(md5 + sha256):
             raise repository.SoftCorruptionError("Integrity check failed on a row in sha256 cache")
         return sha256
-
-    def verify(self):
-        try:
-            c = self.conn.cursor()
-            c.execute("SELECT md5, sha256 FROM checksums")
-            rows = c.fetchall()
-        except Exception, e:
-            warn("Exception while verifying sha256 storage: "+str(e))
-            self.__reset()
-            return False
-        for row in rows:
-            md5, sha256 = row
-            fresh_sha256 = self.__generate_sha256(md5)
-            if fresh_sha256 != sha256:
-                warn("Stored sha256 does not match calculated value")
-                return False
-            notice("Stored sha256 for %s seems correct" % md5)
-        return True
 
     def __generate_sha256(self, blob):
         md5 = hashlib.md5()
@@ -142,3 +135,44 @@ class blobs_sha256:
             self.conn.close()
             self.conn = None
 
+    def scan_init(self):
+        self.scan_in_progress = True
+
+    def scan_blob_init(self, md5):
+        assert self.scan_in_progress
+        self.currently_scanned_blob = md5
+        self.currently_scanned_blob_md5 = hashlib.md5()
+        self.currently_scanned_blob_sha256 = hashlib.sha256()
+
+    def scan_blob_fragment(self, md5, block):
+        assert self.scan_in_progress
+        assert md5 == self.currently_scanned_blob
+        self.currently_scanned_blob_md5.update(block)
+        self.currently_scanned_blob_sha256.update(block)
+
+    def scan_blob_finish(self, md5):
+        assert self.scan_in_progress
+        assert md5 == self.currently_scanned_blob
+        assert md5 == self.currently_scanned_blob_md5.hexdigest()
+        sha256_generated = self.currently_scanned_blob_sha256.hexdigest()
+        sha256_from_db = self.__get_result(md5)
+        if sha256_from_db:
+            if sha256_generated != sha256_from_db:
+                raise repository.SoftCorruptionError("Cached sha256 does not match generated value")
+        else:
+            self.__set_result(md5, sha256_generated)
+        self.currently_scanned_blob = None
+        self.currently_scanned_blob_sha256 = None
+        self.currently_scanned_blob_md5 = None
+        
+
+    def scan_blob_abort(self, md5):
+        assert self.scan_in_progress
+        assert md5 == self.currently_scanned_blob
+        self.currently_scanned_blob = None
+        self.currently_scanned_blob_md5 = None
+        self.currently_scanned_blob_sha256 = None
+
+    def scan_finish(self):
+        assert self.scan_in_progress
+        pass
