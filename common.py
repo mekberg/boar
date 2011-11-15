@@ -390,7 +390,9 @@ class FileMutex:
         try:
             os.mkdir(self.mutex_file)
             self.locked = True
-        except OSError:
+        except OSError, e:
+            if e.errno != 17: # errno 17 = directory already exists
+                raise
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
 
     def lock_with_timeout(self, timeout):
@@ -400,7 +402,7 @@ class FileMutex:
             try:
                 self.lock()
                 break
-            except MutexLocked:                
+            except FileMutex.MutexLocked:                
                 if time.time() - t0 > timeout:
                     break
                 time.sleep(1)
