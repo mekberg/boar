@@ -160,7 +160,6 @@ def looks_like_repo(repo_path):
     for dirname in (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR):
         dirpath = os.path.join(repo_path, dirname)
         if not (os.path.exists(dirpath) and os.path.isdir(dirpath)):
-            print "Fail:", dirname
             return False
     return True
 
