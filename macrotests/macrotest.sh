@@ -93,6 +93,20 @@ echo --- Test exportmd5 command
 ( cd test_tree && md5sum -c md5sum.txt ) || { echo "Couldn't verify exported md5sum"; exit 1; }
 ( cd test_tree && rm md5sum.txt ) || { echo "Couldn't remove exported md5sum"; exit 1; }
 
+echo --- Test detection of non-repo
+rm -rf NOTAREPO
+mkdir NOTAREPO || exit 1
+$BOAR verify --repo=NOTAREPO && { echo "Non-repo was not detected"; exit 1; }
+mkdir NOTAREPO/tmp || exit 1
+$BOAR verify --repo=NOTAREPO && { echo "Non-repo was not detected"; exit 1; }
+mkdir NOTAREPO/blobs || exit 1
+$BOAR verify --repo=NOTAREPO && { echo "Non-repo was not detected"; exit 1; }
+mkdir NOTAREPO/sessions || exit 1
+$BOAR verify --repo=NOTAREPO && { echo "Non-repo was not detected"; exit 1; }
+$BOAR verify --repo=NOTAREPO 2>&1 | grep "does not contain a valid repository" || \
+    { echo "Non-repo gave unexpected error message"; exit 1; }
+rm -r NOTAREPO
+
 echo --- Test adding files to a base session
 rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
 tar -xvzf test_tree_addition.tar.gz || { echo "Couldn't create test tree for addition"; exit 1; }
