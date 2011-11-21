@@ -24,8 +24,9 @@ cat >$testdir/regression-boar-daily.11-Jul-2011/workdir/.meta/info <<EOF || exit
 }
 EOF
 
-REPO_PATH=$REPO $BOAR status >$testdir/status.txt || { echo "Couldn't execute status"; exit 1; }
+REPO_PATH=$REPO $BOAR status |tee $testdir/status.txt || { echo "Couldn't execute status (note: output redirected)"; exit 1; }
 if [ `grep -c . $testdir/status.txt` -ne 1 ]; then 
+    cat $testdir/status.txt
     echo "Did not expect status to show any changes"; exit 1; 
 fi
 md5sum -c ../r7.md5 || { echo "r7.md5 failed"; exit 1; }
@@ -68,6 +69,26 @@ echo "--- Test repository without recipes dir"
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 rmdir $REPO/recipes || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
+rm -r regression-boar-daily.11-Jul-2011 || exit 1
+
+echo "--- Test write protected repo"
+# Boar does not yet handle write-protected repos. Make sure that such
+# repos are detected and handled gracefully.
+tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+chmod -R a-w regression-boar-daily.11-Jul-2011 || exit 1
+REPO_PATH=$REPO $BOAR verify && { echo "Operation expected to fail due to write protect"; exit 1; }
+(REPO_PATH=$REPO $BOAR verify 2>&1 | grep "The repository seems to be read-only") || \
+    { echo "Operation didn't give expected error message"; exit 1; }
+chmod -R u+w regression-boar-daily.11-Jul-2011 || exit 1
+rm -r regression-boar-daily.11-Jul-2011 || exit 1
+
+echo "--- Test simple aborted repo upgrade"
+# Simulate a partially-upgraded v0 repo by removing the version.txt
+# after upgrade and make sure the repo upgrade is resumed successfully
+tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+REPO_PATH=$REPO $BOAR verify || { echo "Upgrade failed"; exit 1; }
+rm regression-boar-daily.11-Jul-2011/TESTREPO/version.txt || exit 1
+REPO_PATH=$REPO $BOAR verify || { echo "Upgrade resumption failed"; exit 1; }
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test repo cloning"
