@@ -26,9 +26,8 @@ import re
 import shutil
 import sessions
 import derived
-
-#TODO: use/modify the session reader so that we don't have to use json here
 import sys
+
 from common import *
 from boar_common import *
 from blobreader import create_blob_reader
@@ -155,6 +154,16 @@ def is_recipe_filename(filename):
         and filename_parts[1] == "recipe" \
         and is_md5sum(filename_parts[0])
 
+def looks_like_repo(repo_path):
+    """Superficial check to see if the given path contains anything
+    resembling a repo of any version."""
+    for dirname in (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR):
+        dirpath = os.path.join(repo_path, dirname)
+        if not (os.path.exists(dirpath) and os.path.isdir(dirpath)):
+            print "Fail:", dirname
+            return False
+    return True
+
 class Repo:
     def __init__(self, repopath):
         # The path must be absolute to avoid problems with clients
@@ -162,10 +171,16 @@ class Repo:
         assert isinstance(repopath, unicode)
         assert(os.path.isabs(repopath)), "The repo path must be absolute. "\
             +"Was: " + repopath
+        if not looks_like_repo(repopath):
+            raise UserError("The path %s does not exist or does not contain a valid repository" % repopath)
         self.repopath = repopath
         self.session_readers = {}
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
+
+        if not isWritable(os.path.join(repopath, TMP_DIR)):
+            raise UserError("The repository seems to be read-only. Boar can not work with read-only repositories.")
+
         self.repo_mutex.lock_with_timeout(60)
         try:
             self.__upgrade_repo()
@@ -199,7 +214,7 @@ class Repo:
             raise UserError("Repo version %s can not be handled by this version of boar" % version)
         if version == LATEST_REPO_FORMAT:
             return
-        notice("Old repo format detected. Upgrading...")
+        notice("Old repo format detected. Upgrading...")            
         self.__upgrade_repo_v0()
         try:
             self.__quick_check()
@@ -208,28 +223,39 @@ class Repo:
             raise
 
     def __upgrade_repo_v0(self):
+        """ This upgrade will perform the following actions:
+        * Create directory "derived"
+        * Create directory "derived/sha256"
+        * Update "recovery.txt"
+        * Create "version.txt"
+        """
         version = self.__get_repo_version()
         if version == 1:
             return
         assert version == 0
-        recipes_dir = os.path.join(self.repopath, RECIPES_DIR)
-        if os.path.exists(recipes_dir):
-            # recipes_dir is an experimental feature and should not contain
-            # any data in a v0 repo (if it exists at all)
-            os.rmdir(recipes_dir)
-        version_file = os.path.join(self.repopath, VERSION_FILE)
-        for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
-            if dir_exists(self.repopath + "/" + directory):
-                warn("Repo upgrade confusion: a folder already existed while upgrading to v1: %s" % directory)
-                continue
-            notice("Upgrading repo - creating '%s' dir" % directory)
-            os.mkdir(self.repopath + "/" + directory)
-        replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
-        if os.path.exists(version_file):
-            warn("Version marker should not exist for repo format v0")
-            safe_delete_file(version_file)
-        create_file(version_file, "1")
-
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        try:
+            recipes_dir = os.path.join(self.repopath, RECIPES_DIR)
+            if os.path.exists(recipes_dir):
+                # recipes_dir is an experimental feature and should not contain
+                # any data in a v0 repo (if it exists at all)
+                os.rmdir(recipes_dir)
+            version_file = os.path.join(self.repopath, VERSION_FILE)
+            for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
+                if dir_exists(self.repopath + "/" + directory):
+                    notice("Folder already existed while upgrading to v1: %s" % directory)
+                    continue
+                os.mkdir(self.repopath + "/" + directory)
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            if os.path.exists(version_file):
+                warn("Version marker should not exist for repo format v0")
+                safe_delete_file(version_file)
+            create_file(version_file, "1")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+        
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
         if os.path.exists(version_file):
@@ -240,9 +266,6 @@ class Repo:
         for directory in REPO_DIRS_V0:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), 
                              "The repo at %s does not look like a repository (missing %s)" % (self.repopath, directory))
-        for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
-            integrity_assert(not dir_exists(os.path.join(self.repopath, directory)),
-                             "Repo is missing version.txt, but does not look like a v0 repo (has %s)" % directory)
         return 0
 
     def __str__(self):
