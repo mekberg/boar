@@ -25,6 +25,8 @@ import locale
 import codecs
 import time
 
+from tempfile import TemporaryFile
+
 if sys.version_info >= (2, 6):
     import json
 else:
@@ -487,3 +489,16 @@ class RateLimiter:
             self.last_trig = now
             return True
         return False
+
+def isWritable(path):
+    """Performs a write test to check if it is possible to create new
+    files and directories under the given path. The given path must
+    exist and be a directory."""
+    assert os.path.exists(path)
+    assert os.path.isdir(path)
+    try:
+        with TemporaryFile(dir=path):
+            pass
+    except OSError, e:
+        return False
+    return True
