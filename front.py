@@ -233,9 +233,6 @@ class Front:
     def get_blob_size(self, sum):
         return self.repo.get_blob_size(sum)
 
-    def get_blob_sha256(self, sum):
-        return self.repo.get_blob_sha256(sum)
-
     def get_blob(self, sum, offset = 0, size = -1):
         datasource = self.repo.get_blob_reader(sum, offset, size)
         return datasource
