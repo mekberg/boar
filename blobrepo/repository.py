@@ -25,7 +25,6 @@ import os
 import re
 import shutil
 import sessions
-import derived
 import sys
 
 from common import *
@@ -184,14 +183,13 @@ class Repo:
         try:
             self.__upgrade_repo()
             self.__quick_check()
-            self.sha256 = derived.blobs_sha256(self, self.repopath + "/derived/sha256")
             self.process_queue()
         finally:
             self.repo_mutex.release()
-        self.scanners = (self.sha256,)
+        self.scanners = ()
 
     def close(self):
-        self.sha256.close()
+        pass
 
     def __quick_check(self):
         """This method must be called after any repository upgrade
@@ -319,9 +317,6 @@ class Repo:
             raise ValueError("No such blob or recipe exists: "+sum)
         return recipe['size']
 
-    def get_blob_sha256(self, sum):
-        return self.sha256.get_sha256(sum)
-
     def get_blob_reader(self, sum, offset = 0, size = -1):
         if self.has_raw_blob(sum):
             blobsize = self.get_blob_size(sum)
@@ -435,16 +430,10 @@ class Repo:
         path = self.get_blob_path(sum)
         with safe_open(path, "rb") as f:
             md5_summer = hashlib.md5()
-            self.sha256.scan_blob_init(sum)
             for block in file_reader(f):
                 md5_summer.update(block)
-                self.sha256.scan_blob_fragment(sum, block)
             md5 = md5_summer.hexdigest()
             verified_ok = (sum == md5)
-            if verified_ok:
-                self.sha256.scan_blob_finish(sum)
-            else:
-                self.sha256.scan_blob_abort(sum)
         return verified_ok 
 
     def find_redundant_raw_blobs(self):

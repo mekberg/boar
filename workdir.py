@@ -52,6 +52,7 @@ class FakeFile:
 
 VERSION_FILE = "wd_version.txt"
 METADIR = ".boar"
+CCACHE_FILE = "ccache.db"
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
@@ -77,7 +78,7 @@ class Workdir:
 
         self.sqlcache = None
         if os.path.exists(self.metadir):
-            self.sqlcache = ChecksumCache(self.metadir + "/" + 'ccache.db')
+            self.sqlcache = ChecksumCache(self.metadir + "/" + CCACHE_FILE)
         else:
             self.sqlcache = ChecksumCache(":memory:")
 
@@ -93,13 +94,15 @@ class Workdir:
         if not os.path.exists(self.metadir):
             return
         version = self.__get_workdir_version()
-        if version > 1:
+        if version > 2:
             raise UserError("This workdir is created by a future version of boar.")
-        if version == 0:
+        if version == 0 or version == 1:
+            notice("Upgrading file checksum cache - rescan necessary, next operation will take longer than usual.")
             if os.path.exists(self.metadir + "/" + 'md5sumcache'):
-                notice("Upgrading file checksum cache - rescan necessary, may take some time.")
                 safe_delete_file(self.metadir + "/" + 'md5sumcache')
-            self.__set_workdir_version(1)
+            if os.path.exists(self.metadir + "/" + CCACHE_FILE):
+                safe_delete_file(self.metadir + "/" + CCACHE_FILE)
+            self.__set_workdir_version(2)
 
     def __reload_tree(self):
         self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False)
@@ -257,24 +260,12 @@ class Workdir:
         except FileMutex.MutexLocked, e:
             raise UserError("The session '%s' is in use (lockfile %s)" % (self.sessionName, e.mutex_file))
 
-        # md5 -> sha256 for all files that has been checked into this new snapshot
-        seen_checksums = {}
-
         for sessionpath in files:
             wd_path = strip_path_offset(self.offset, sessionpath)
             abspath = self.abspath(sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
-            sha256_checksum = self.cached_sha256(wd_path)
-            if expected_md5sum in seen_checksums and seen_checksums[expected_md5sum] != sha256_checksum:
-                front.cancel_snapshot()
-                raise UserError("Local md5 checksum collision detected on %s. md5 collisions are not supported." % abspath)
-            if front.has_blob(expected_md5sum):
-                if sha256_checksum != front.get_blob_sha256(expected_md5sum):
-                    front.cancel_snapshot()
-                    raise UserError("Remote md5 checksum collision detected on %s. md5 collisions are not supported." % abspath)
-            seen_checksums[expected_md5sum] = sha256_checksum
             try:
-                check_in_file(front, abspath, sessionpath, expected_md5sum, sha256_checksum, seen_checksums, log = self.output)
+                check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
             except EnvironmentError, e:
                 if ignore_errors:
                     warn("Ignoring unreadable file: %s" % abspath)
@@ -349,9 +340,9 @@ class Workdir:
                 return info
         return None
 
-    def __get_cached_checksums(self, relative_path):
-        """Return a list consisting of the md5 and sha256 checksums of
-        the given file as hex encoded strings."""
+    def cached_md5sum(self, relative_path):
+        """Return the md5 checksum of the given file as hex encoded
+        string."""
         assert not os.path.isabs(relative_path), "Path must be relative to the workdir. Was: "+relative_path
         assert self.sqlcache
         abspath = self.wd_abspath(relative_path)
@@ -360,19 +351,10 @@ class Workdir:
         recent_change = abs(time.time() - stat.st_mtime) < 5.0
         if sums and not recent_change:
             return sums
-        md5, sha256 = checksum_file(abspath, ("md5", "sha256"))
-        self.sqlcache.set(relative_path, stat.st_mtime, md5, sha256)
-        assert len(md5) == 32 and len(sha256) == 64
-        return md5, sha256
-
-    def cached_md5sum(self, relative_path):
-        md5, sha256 = self.__get_cached_checksums(relative_path)
+        md5, = checksum_file(abspath, ("md5",))
+        self.sqlcache.set(relative_path, stat.st_mtime, md5)
         assert is_md5sum(md5)
         return md5
-
-    def cached_sha256(self, relative_path):
-        md5, sha256 = self.__get_cached_checksums(relative_path)
-        return sha256
 
     def wd_abspath(self, wd_path):
         """Transforms the given workdir path into a system absolute
@@ -461,7 +443,7 @@ def fnmatch_multi(patterns, filename):
             return True
     return False
 
-def check_in_file(front, abspath, sessionpath, expected_md5sum, sha256_checksum, seen_checksums, log = FakeFile()):
+def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()):
     """ Checks in the file found at the given "abspath" into the
     active "front" with the path in the session given as
     "sessionpath". The md5sum of the file has to be provided. The
@@ -604,18 +586,17 @@ class ChecksumCache:
             return
         try:
             self.conn = sqlite3.connect(self.dbpath, check_same_thread = False)
-            self.conn.execute("CREATE TABLE IF NOT EXISTS ccache (path text, mtime unsigned int, md5 char(32), sha256 char(64) NOT NULL, row_md5 char(32))")
+            self.conn.execute("CREATE TABLE IF NOT EXISTS ccache (path text, mtime unsigned int, md5 char(32), row_md5 char(32))")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ccache_index ON ccache (path, mtime)")
             self.conn.commit()
         except sqlite3.DatabaseError, e:
             raise
-            #raise repository.SoftCorruptionError("Exception while accessing the sha256 cache: "+str(e))
 
-    def set(self, path, mtime, md5, sha256):
+    def set(self, path, mtime, md5):
         assert type(path) == unicode
-        md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5 + "!" + sha256)
+        md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5)
         try:
-            self.conn.execute("REPLACE INTO ccache (path, mtime, md5, sha256, row_md5) VALUES (?, ?, ?, ?, ?)", (path, mtime, md5, sha256, md5_row))
+            self.conn.execute("REPLACE INTO ccache (path, mtime, md5, row_md5) VALUES (?, ?, ?, ?)", (path, mtime, md5, md5_row))
             if self.rate_limiter.ready():
                 self.sync()
         except sqlite3.DatabaseError, e:
@@ -625,18 +606,18 @@ class ChecksumCache:
         assert type(path) == unicode
         try:
             c = self.conn.cursor()
-            c.execute("SELECT md5, sha256, row_md5 FROM ccache WHERE path = ? AND mtime = ?", (path, mtime))
+            c.execute("SELECT md5, row_md5 FROM ccache WHERE path = ? AND mtime = ?", (path, mtime))
             rows = c.fetchall()
         except sqlite3.DatabaseError, e:
             raise
         if not rows:
             return None
         assert len(rows) == 1
-        md5, sha256, row_md5 = rows[0]
-        expected_md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5.encode("utf8") + "!" + sha256.encode("utf8"))
+        md5, row_md5 = rows[0]
+        expected_md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5.encode("utf8"))
         if row_md5 != expected_md5_row:
             raise
-        return md5, sha256
+        return md5
 
     def sync(self):
         if self.conn:

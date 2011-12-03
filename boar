@@ -22,7 +22,6 @@ import time
 import cProfile
 from optparse import OptionParser
 from blobrepo import repository
-from blobrepo import derived
 from blobrepo.sessions import bloblist_fingerprint
 from boar_exceptions import *
 import client
@@ -339,8 +338,6 @@ def cmd_repair(args):
         print "No errors found. Not repairing anything."
         return
     print "Repairing..."
-    sha256_dir = os.path.join(repo_url, repository.DERIVED_SHA256_DIR)
-    derived.reset_blobs_sha256(sha256_dir)
 
 def cmd_import(args):
     parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
