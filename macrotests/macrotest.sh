@@ -301,7 +301,8 @@ for issue in issue*.sh; do
     ./${issue} || { echo "Regression test $issue failed"; exit 1; }
 done
 
-./repo-regression.sh || { echo "Repo regression test failed"; exit 1; }
+./regression-v0.sh || { echo "Repo regression v0 test failed"; exit 1; }
+./regression-v1.sh || { echo "Repo regression v1 test failed"; exit 1; }
 ./sha256_corruption.sh || { echo "Sha256 corruption test failed"; exit 1; }
 
 rm -r $REPO test_tree
