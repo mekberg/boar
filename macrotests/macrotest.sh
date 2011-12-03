@@ -297,17 +297,6 @@ $BOARMOUNT $REPO BoarMount test_tree || { echo "Couldn't mount session"; exit 1;
 md5sum -c test_tree.md5 || { echo "Mounted session was corrupt"; fusermount -u test_tree; exit 1; }
 fusermount -u test_tree
 
-# echo --- Test recipe checkout
-# rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
-# tar -xzf reciperepo.tar.gz
-# REPO_PATH=`pwd`/reciperepo $BOAR verify || { echo "Recipe repo failed verify"; exit 1; }
-# REPO_PATH=`pwd`/reciperepo $BOAR co Alice test_tree || { echo "Couldn't check out tree"; exit 1; }
-# (cd test_tree && $BOAR status -v) || { echo "Status command failed"; exit 1; }
-# md5sum -c <<EOF || { echo "Recipe checkout failed"; exit 1; }
-# 9b97d0a697dc503fb4c53ea01bd23dc7  test_tree/alice.txt
-# EOF
-# rm -r reciperepo || { echo "Couldn't remove recipe repo"; exit 1; }
-
 for issue in issue*.sh; do
     ./${issue} || { echo "Regression test $issue failed"; exit 1; }
 done
