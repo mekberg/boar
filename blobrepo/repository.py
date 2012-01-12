@@ -33,7 +33,7 @@ from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
 from boar_exceptions import UserError
 
-LATEST_REPO_FORMAT = 1
+LATEST_REPO_FORMAT = 2
 VERSION_FILE = "version.txt"
 RECOVERYTEXT_FILE = "recovery.txt"
 QUEUE_DIR = "queue"
@@ -47,6 +47,8 @@ DERIVED_SHA256_DIR = "derived/sha256"
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
 REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR, DERIVED_SHA256_DIR)
+REPO_DIRS_V2 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR)
 
 recoverytext = """Repository format v%s
 
@@ -144,7 +146,6 @@ def create_repository(repopath):
     os.mkdir(os.path.join(repopath, SESSIONS_DIR))
     os.mkdir(os.path.join(repopath, TMP_DIR))
     os.mkdir(os.path.join(repopath, DERIVED_DIR))
-    os.mkdir(os.path.join(repopath, DERIVED_SHA256_DIR))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
 
 def is_recipe_filename(filename):
@@ -201,7 +202,7 @@ class Repo:
         integrity_assert(repo_version == LATEST_REPO_FORMAT,
                          ("Repo version %s can not be handled by this version of boar" % repo_version))
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        for directory in REPO_DIRS_V1:
+        for directory in REPO_DIRS_V2:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
 
     def __upgrade_repo(self):
@@ -211,8 +212,13 @@ class Repo:
             raise UserError("Repo version %s can not be handled by this version of boar" % version)
         if version == LATEST_REPO_FORMAT:
             return
-        notice("Old repo format detected. Upgrading...")            
-        self.__upgrade_repo_v0()
+        notice("Old repo format detected. Upgrading...")
+        if version == 0:
+            self.__upgrade_repo_v0()
+        elif version == 1:
+            self.__upgrade_repo_v1()
+        else:
+            assert False, "Internal error: upgrade procedure missing"
         try:
             self.__quick_check()
         except:
@@ -220,15 +226,14 @@ class Repo:
             raise
 
     def __upgrade_repo_v0(self):
-        """ This upgrade will perform the following actions:
+        """ This upgrade will upgrade the repository to the latest format by 
+        performing the following actions:
+        
         * Create directory "derived"
-        * Create directory "derived/sha256"
         * Update "recovery.txt"
         * Create "version.txt"
         """
         version = self.__get_repo_version()
-        if version == 1:
-            return
         assert version == 0
         if not isWritable(self.repopath):
             raise UserError("Cannot upgrade repository - write protected")
@@ -237,18 +242,45 @@ class Repo:
             if os.path.exists(recipes_dir):
                 # recipes_dir is an experimental feature and should not contain
                 # any data in a v0 repo (if it exists at all)
-                os.rmdir(recipes_dir)
-            version_file = os.path.join(self.repopath, VERSION_FILE)
-            for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
-                if dir_exists(self.repopath + "/" + directory):
-                    notice("Folder already existed while upgrading to v1: %s" % directory)
-                    continue
-                os.mkdir(self.repopath + "/" + directory)
+                try:
+                    os.rmdir(recipes_dir)
+                except:
+                    raise UserError("Problem removing obsolete 'recipes' dir. Make sure it is empty and try again.")
+            if not dir_exists(self.repopath + "/" + DERIVED_DIR):
+                os.mkdir(self.repopath + "/" + DERIVED_DIR)
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            version_file = os.path.join(self.repopath, VERSION_FILE)
             if os.path.exists(version_file):
                 warn("Version marker should not exist for repo format v0")
                 safe_delete_file(version_file)
-            create_file(version_file, "1")
+            create_file(version_file, "2")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+
+    def __upgrade_repo_v1(self):
+        """ This upgrade will perform the following actions:
+        * If it exists, delete file "derived/sha256/sha256cache"
+        * Rmdir directory "derived/sha256"
+        * Update "version.txt" to 2
+        """
+        version = self.__get_repo_version()
+        assert version == 1
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        try:
+            for directory in REPO_DIRS_V1:
+                integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                     "Repository says it is v1 format but is missing %s" % directory)
+            dbfile = os.path.join(self.repopath, DERIVED_SHA256_DIR, "sha256cache")
+            sha256_dir = os.path.join(self.repopath, DERIVED_SHA256_DIR)
+            if os.path.exists(dbfile):
+                # recipes_dir is an experimental feature and should not contain
+                # any data in a v0 repo (if it exists at all)
+                safe_delete_file(dbfile)
+            if os.path.exists(sha256_dir):
+                os.rmdir(sha256_dir)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "2")
         except OSError, e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
