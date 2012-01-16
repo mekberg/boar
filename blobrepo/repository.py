@@ -173,21 +173,30 @@ class Repo:
         if not looks_like_repo(repopath):
             raise UserError("The path %s does not exist or does not contain a valid repository" % repopath)
         self.repopath = repopath
+        if self.__get_repo_version() > LATEST_REPO_FORMAT:
+            raise UserError("Repo is from a future boar version. Upgrade your boar.")
         self.session_readers = {}
+        self.scanners = ()
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
 
+        self.readonly = False
         if not isWritable(os.path.join(repopath, TMP_DIR)):
-            raise UserError("The repository seems to be read-only. Boar can not work with read-only repositories.")
+            if self.get_queued_session_id() != None:
+                raise UserError("Repo is write protected with pending changes. Cannot continue.")
+            if self.__get_repo_version() != LATEST_REPO_FORMAT:
+                raise UserError("Repo is write protected and from an older version of boar. Cannot continue.")
+            notice("Repo is write protected - only read operations can be performed")
+            self.readonly = True
 
-        self.repo_mutex.lock_with_timeout(60)
-        try:
-            self.__upgrade_repo()
-            self.__quick_check()
-            self.process_queue()
-        finally:
-            self.repo_mutex.release()
-        self.scanners = ()
+        if not self.readonly:
+            self.repo_mutex.lock_with_timeout(60)
+            try:
+                self.__upgrade_repo()
+                self.__quick_check()
+                self.process_queue()
+            finally:
+                self.repo_mutex.release()
 
     def close(self):
         pass
@@ -206,6 +215,7 @@ class Repo:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
 
     def __upgrade_repo(self):
+        assert not self.readonly, "Repo is read only, cannot upgrade"
         assert self.repo_mutex.locked
         version = self.__get_repo_version()
         if version > LATEST_REPO_FORMAT:
@@ -233,6 +243,7 @@ class Repo:
         * Update "recovery.txt"
         * Create "version.txt"
         """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
         version = self.__get_repo_version()
         assert version == 0
         if not isWritable(self.repopath):
@@ -264,6 +275,7 @@ class Repo:
         * Rmdir directory "derived/sha256"
         * Update "version.txt" to 2
         """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
         version = self.__get_repo_version()
         assert version == 1
         if not isWritable(self.repopath):
@@ -407,6 +419,7 @@ class Repo:
         return self.session_readers[id]
 
     def create_session(self, session_name, base_session = None, session_id = None):
+        misuse_assert(not self.readonly, "Cannot create a session in a write protected repo")
         assert isinstance(session_name, unicode)
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
@@ -498,6 +511,7 @@ class Repo:
     def pullFrom(self, other_repo):
         """Updates this repository with changes from the other
         repo. The other repo must be a continuation of this repo."""
+        misuse_assert(not self.readonly, "Cannot pull changes into a write protected repo")
         print "Pulling updates from %s into %s" % (other_repo, self)
         # Check that other repo is a continuation of this one
         assert self.isContinuation(other_repo), \
@@ -536,6 +550,7 @@ class Repo:
     def consolidate_snapshot(self, session_path, forced_session_id = None):
         assert isinstance(session_path, unicode)
         assert forced_session_id == None or isinstance(forced_session_id, int)
+        assert not self.readonly, "Cannot consolidate because repo is read-only"
         self.repo_mutex.lock_with_timeout(60)
         try:
             return self.__consolidate_snapshot(session_path, forced_session_id)
@@ -546,6 +561,7 @@ class Repo:
         assert isinstance(session_path, unicode)
         assert self.repo_mutex.is_locked()
         assert not self.get_queued_session_id()
+        assert not self.readonly, "Cannot consolidate because repo is read-only"
         if forced_session_id: 
             session_id = forced_session_id
         else:
@@ -559,6 +575,7 @@ class Repo:
 
     def process_queue(self):
         assert self.repo_mutex.is_locked()
+        assert not self.readonly, "Repo is read only, cannot process queue"
         session_id = self.get_queued_session_id()
         if session_id == None:
             return
