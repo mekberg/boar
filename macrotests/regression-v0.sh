@@ -8,6 +8,7 @@ mkdir $testdir || exit 1
 cd $testdir || exit 1
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 REPO=$testdir/regression-boar-daily.11-Jul-2011/TESTREPO
+NOPENDINGREPO=$testdir/regression-boar-daily.11-Jul-2011/TESTREPO-nopending # identical, but no pending changes
 cd regression-boar-daily.11-Jul-2011/workdir
 
 # Relocate the workdir pointer to the repo.  Also, since the test data
@@ -53,7 +54,6 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 echo "--- Test future version detection"
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 echo "3" >$REPO/version.txt || exit 1
-ls $REPO
 REPO_PATH=$REPO $BOAR verify && { echo "Future version repo should fail"; exit 1; }
 (REPO_PATH=$REPO $BOAR verify 2>&1 | grep "Repo is from a future boar version.") || \
     { echo "Operation didn't give expected error message"; exit 1; }
@@ -74,7 +74,7 @@ rmdir $REPO/recipes || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
-echo "--- Test write protected repo with pending changes"
+echo "--- Test write protected repo WITH pending changes"
 # Boar does not yet handle write-protected repos with pending
 # changes. Make sure that such repos are detected and handled
 # gracefully.
@@ -87,15 +87,17 @@ REPO_PATH=$REPO $BOAR verify && { echo "Operation expected to fail due to write 
 chmod -R u+w $REPO || exit 1
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
-echo "--- Test write protected repo"
+echo "--- Test write protected repo WITHOUT pending changes"
 # Write protected repos should be accessible read-only
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
-# Dummy operation to process the unfinished commit 
-REPO_PATH=$REPO $BOAR ls || { echo "Couldn't ls repo"; exit 1; } 
-test -e $REPO/queue/7 && { echo "Tested repo must NOT contain an uncompleted commit"; exit 1; }
-chmod -R a-w $REPO || exit 1
-REPO_PATH=$REPO $BOAR verify || { echo "Verify operation should succeed on read-only repo."; exit 1; }
-chmod -R u+w $REPO || exit 1
+rm -r $REPO || exit # Just so that we'll notice if we mix things up with NOPENDINGREPO
+test -e $NOPENDINGREPO/queue/7 && { echo "Tested repo must NOT contain an uncompleted commit"; exit 1; }
+test -e $NOPENDINGREPO/version.txt && { echo "Tested repo must be version 0"; exit 1; }
+chmod -R a-w $NOPENDINGREPO || exit 1
+REPO_PATH=$NOPENDINGREPO $BOAR ls || { echo "ls operation should succeed on read-only repo."; exit 1; }
+REPO_PATH=$NOPENDINGREPO $BOAR verify || { echo "Verify operation should succeed on read-only repo."; exit 1; }
+REPO_PATH=$NOPENDINGREPO $BOAR setprop MySession ignore "*.tmp" && { echo "Setprop operation should fail on read-only repo."; exit 1; }
+chmod -R u+w $NOPENDINGREPO || exit 1
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test simple aborted repo upgrade"

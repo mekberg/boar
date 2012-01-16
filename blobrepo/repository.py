@@ -184,8 +184,9 @@ class Repo:
         if not isWritable(os.path.join(repopath, TMP_DIR)):
             if self.get_queued_session_id() != None:
                 raise UserError("Repo is write protected with pending changes. Cannot continue.")
-            if self.__get_repo_version() != LATEST_REPO_FORMAT:
-                raise UserError("Repo is write protected and from an older version of boar. Cannot continue.")
+            if self.__get_repo_version() not in (0, 1, 2):
+                # Intentional explicit counting so that we'll remember to check compatability with future versions
+                raise UserError("Repo is write protected and from an unsupported older version of boar. Cannot continue.")
             notice("Repo is write protected - only read operations can be performed")
             self.readonly = True
 
