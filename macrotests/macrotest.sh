@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 TESTDIR=~+/`dirname $0`
 cd $TESTDIR
 
@@ -25,6 +24,9 @@ BOARMOUNT="$TESTDIR/../boarmount"
 REPO="$TESTDIR/TESTREPO"
 CLONE="${REPO}_CLONE"
 
+echo "Starting"
+
+chmod -R a+w $CLONE 2>/dev/null
 rm -r $REPO test_tree $CLONE 2>/dev/null
 
 echo --- Test basic command line behaviour
@@ -35,7 +37,7 @@ $BOAR >/dev/null && { echo "No subcommand should cause an exit error code"; exit
 $BOAR nonexisting_cmd >/dev/null && { echo "Non-existing subcommand should cause an exit error code"; exit 1; }
 
 echo --- Test --help flag
-for subcmd in ci clone co diffrepo getprop info import list locate mkrepo mksession setprop status update verify; do
+for subcmd in ci clone co diffrepo getprop info import list locate ls mkrepo mksession setprop status update verify; do
     echo Testing $subcmd --help
     ( REPO_PATH="" $BOAR $subcmd --help | grep "Usage:" >/dev/null ) || \
 	{ echo "Subcommand '$subcmd' did not give a help message with --help flag"; exit 1; }
@@ -271,6 +273,17 @@ echo --- Test repo cloning
 $BOAR clone $REPO $CLONE || { echo "Couldn't clone repo"; exit 1; }
 $BOAR diffrepo $REPO $CLONE || { echo "Some differences where found in cloned repo"; exit 1; }
 rm -r $CLONE || { echo "Couldn't remove cloned repo"; exit 1; }
+
+echo --- Test read-only repo
+$BOAR clone $REPO $CLONE || { echo "Couldn't clone repo"; exit 1; }
+chmod -R a-w $CLONE || { echo "Couldn't make clone read-only"; exit 1; }
+REPO_PATH=$CLONE $BOAR ls || { echo "Couldn't list read-only repo"; exit 1; }
+REPO_PATH=$CLONE $BOAR co MyTestSession test_tree || { echo "Couldn't check out test tree from read-only repo"; exit 1; }
+echo "Hello everybody" > test_tree/read_only_hello.txt
+(cd test_tree && $BOAR ci) && { echo "Check-in to read-only repo succeeded unexpectedly"; exit 1; }
+chmod -R u+w $CLONE || { echo "Couldn't make clone writable"; exit 1; }
+rm -r $CLONE || { echo "Couldn't remove cloned repo"; exit 1; }
+rm -r test_tree || { echo "Couldn't remove test_tree"; exit 1; }
 
 echo --- Test repo cloning with duplicate files in a new session
 mkdir test_tree || { echo "Couldn't create test tree"; exit 1; }
