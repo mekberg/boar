@@ -52,8 +52,11 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test future version detection"
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
-echo "2" >$REPO/version.txt || exit 1
+echo "3" >$REPO/version.txt || exit 1
+ls $REPO
 REPO_PATH=$REPO $BOAR verify && { echo "Future version repo should fail"; exit 1; }
+(REPO_PATH=$REPO $BOAR verify 2>&1 | grep "Repo is from a future boar version.") || \
+    { echo "Operation didn't give expected error message"; exit 1; }
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test repository without recovery.txt"
@@ -71,15 +74,28 @@ rmdir $REPO/recipes || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
-echo "--- Test write protected repo"
-# Boar does not yet handle write-protected repos. Make sure that such
-# repos are detected and handled gracefully.
+echo "--- Test write protected repo with pending changes"
+# Boar does not yet handle write-protected repos with pending
+# changes. Make sure that such repos are detected and handled
+# gracefully.
 tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
-chmod -R a-w regression-boar-daily.11-Jul-2011 || exit 1
-REPO_PATH=$REPO $BOAR verify && { echo "Operation expected to fail due to write protect"; exit 1; }
-(REPO_PATH=$REPO $BOAR verify 2>&1 | grep "The repository seems to be read-only") || \
+test -e $REPO/queue/7 || { echo "Tested repo must contain an uncompleted commit"; exit 1; }
+chmod -R a-w $REPO || exit 1
+REPO_PATH=$REPO $BOAR verify && { echo "Operation expected to fail due to write protect and pending changes."; exit 1; }
+(REPO_PATH=$REPO $BOAR verify 2>&1 | grep "Repo is write protected with pending changes. Cannot continue.") || \
     { echo "Operation didn't give expected error message"; exit 1; }
-chmod -R u+w regression-boar-daily.11-Jul-2011 || exit 1
+chmod -R u+w $REPO || exit 1
+rm -r regression-boar-daily.11-Jul-2011 || exit 1
+
+echo "--- Test write protected repo"
+# Write protected repos should be accessible read-only
+tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+# Dummy operation to process the unfinished commit 
+REPO_PATH=$REPO $BOAR ls || { echo "Couldn't ls repo"; exit 1; } 
+test -e $REPO/queue/7 && { echo "Tested repo must NOT contain an uncompleted commit"; exit 1; }
+chmod -R a-w $REPO || exit 1
+REPO_PATH=$REPO $BOAR verify || { echo "Verify operation should succeed on read-only repo."; exit 1; }
+chmod -R u+w $REPO || exit 1
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test simple aborted repo upgrade"
