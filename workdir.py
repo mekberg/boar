@@ -155,6 +155,17 @@ class Workdir:
             target_path = os.path.join(self.root, target)
             fetch_blob(front, info['md5sum'], target_path, overwrite = False)
 
+    def update_revision(self, new_revision = None):
+        assert new_revision == None or isinstance(new_revision, int)
+        front = self.get_front()
+        if new_revision:
+            if not front.has_snapshot(self.sessionName, new_revision):
+                raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
+        else:
+            new_revision = front.find_last_revision(self.sessionName)
+        self.revision = new_revision
+        self.write_metadata()
+
     def update(self, new_revision = None, log = None, ignore_errors = False):
         assert self.revision, "Cannot update. Current revision is unknown: '%s'" % self.revision
         if not log:
