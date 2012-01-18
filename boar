@@ -389,11 +389,16 @@ def cmd_update(args):
                       help="The revision to update to (defaults to latest)")
     parser.add_option("-i", "--ignore-errors", action="store_true", dest = "ignore_errors", 
                       help="Do not abort the update if there are errors while writing.")
+    parser.add_option("-s", "--set-revision", action="store_true", dest = "set_revision", 
+                      help="Update the workdir revision but don't update the workdir contents.")
     (options, args) = parser.parse_args(args)
     if len(args) != 0:
         raise UserError("Update does not accept any non-option arguments")
     wd = workdir.init_workdir(ucwd)
-    wd.update(new_revision = options.revision, ignore_errors = options.ignore_errors)
+    if options.set_revision:
+        wd.update_revision(options.revision)
+    else:
+        wd.update(new_revision = options.revision, ignore_errors = options.ignore_errors)
 
 def cmd_ci(args):
     parser = OptionParser(usage="usage: boar ci [options]")
