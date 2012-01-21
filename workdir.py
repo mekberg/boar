@@ -317,7 +317,6 @@ class Workdir:
 
     def __load_cached_bloblist(self, revision):
         assert type(revision) == int and revision > 0
-        print "load_cached_bloblist(%s)" % revision
         bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
         if os.path.exists(bloblist_file):
             try:
