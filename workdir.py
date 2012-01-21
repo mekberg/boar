@@ -83,6 +83,7 @@ class Workdir:
             self.sqlcache = ChecksumCache(":memory:")
 
         assert self.revision == None or self.revision > 0
+        self.revision_fronts = {}
         self.tree_csums = None
         self.tree = None
         self.output = FakeFile()
@@ -306,12 +307,17 @@ class Workdir:
 
     def get_revision_front(self, revision):
         front = self.get_front()
-        return RevisionFront(front, revision, 
-                             self.__load_cached_bloblist, 
-                             self.__save_cached_bloblist)
+        if revision not in self.revision_fronts:
+             # Only save the latest used revision. A trivial MRU cache.
+            self.revision_fronts.clear()
+            self.revision_fronts[revision] = RevisionFront(front, revision, 
+                                                           self.__load_cached_bloblist, 
+                                                           self.__save_cached_bloblist)
+        return self.revision_fronts[revision]
 
     def __load_cached_bloblist(self, revision):
         assert type(revision) == int and revision > 0
+        print "load_cached_bloblist(%s)" % revision
         bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
         if os.path.exists(bloblist_file):
             try:
