@@ -51,6 +51,7 @@ class FakeFile:
         pass
 
 VERSION_FILE = "wd_version.txt"
+CURRENT_VERSION = 2
 METADIR = ".boar"
 CCACHE_FILE = "ccache.db"
 
@@ -149,6 +150,7 @@ class Workdir:
             self.revision = front.find_last_revision(self.sessionName)
         if write_meta:
             self.write_metadata()
+            self.__set_workdir_version(CURRENT_VERSION)
         for info in front.get_session_bloblist(self.revision):
             if not is_child_path(self.offset, info['filename']):
                 continue

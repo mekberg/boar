@@ -63,6 +63,13 @@ rm -r test_tree || { echo "Couldn't remove test tree after import"; exit 1; }
 REPO_PATH=$REPO $BOAR co MyTestSession test_tree || { echo "Couldn't check out tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after check-out"; exit 1; }
 
+echo --- Test that status command gives no notice or warning msg
+rm -r test_tree || { echo "Couldn't remove test tree"; exit 1; }
+REPO_PATH=$REPO $BOAR co MyTestSession test_tree || { echo "Couldn't check out tree"; exit 1; }
+(cd test_tree && REPO_PATH=$REPO $BOAR status 2>../errors.txt)
+grep . errors.txt && { cat errors.txt; echo "Status command caused an error message"; exit 1; }
+rm -r errors.txt || exit 1
+
 echo --- Test --repo flag
 $BOAR list && { echo "Did not get expected error when listing undefined repo --repo option"; exit 1; }
 $BOAR --repo $REPO list || { echo "Couldn't access repo by pre-cmd --repo option"; exit 1; }
