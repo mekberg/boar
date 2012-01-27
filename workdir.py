@@ -587,9 +587,6 @@ def bloblist_to_dict(bloblist):
     
 class ChecksumCache:
     def __init__(self, dbpath):
-        # Use a proxy to avoid circular reference to the repo,
-        # allowing this object to be garbed at shutdown and triggering
-        # the __del__ function.
         assert dbpath == ":memory:" or os.path.isabs(dbpath)
         assert dbpath == ":memory:" or os.path.exists(os.path.dirname(dbpath))
         self.dbpath = dbpath
