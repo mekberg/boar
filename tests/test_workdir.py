@@ -613,7 +613,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         wd.checkout()
         tree = get_tree(wd.root, absolute_paths = False)
         #tree = wd.get_tree(absolute_paths = True)
-        self.assertEquals(set(tree), set(["insubdir.txt", '.boar/info']))
+        self.assertEquals(set(tree), set(["insubdir.txt", '.boar/info', '.boar/wd_version.txt']))
 
 if __name__ == '__main__':
     unittest.main()
