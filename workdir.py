@@ -217,7 +217,6 @@ class Workdir:
         self.revision = new_revision
         self.tree = None
         self.write_metadata()
-        print >>log, "Workdir now at revision", self.revision
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
