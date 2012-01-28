@@ -175,16 +175,37 @@ def cmd_locate(args):
     for f in missing:
         print "Missing:", f
 
+class ScanProgressPrinter:
+    def __init__(self):
+        self.last_t = 0
+
+    def __call__(self, total_files, remaining_files, total_bytes, remaining_bytes):
+        now = time.time()
+        if now - self.last_t < 5.0 and remaining_bytes != 0:
+            return
+        if total_bytes == 0:
+            return
+        print "Remaining: %s files, %s bytes (%s%% complete)" % \
+            (remaining_files, remaining_bytes, round(100 * (1.0 - 1.0 * remaining_bytes / total_bytes), 1))
+        self.last_t = now
+
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
     parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
                       help="Show information about unchanged files as well")
+    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true",
+                      help="Do not print any progress information")
     (options, args) = parser.parse_args(args)
     wd = workdir.init_workdir(ucwd)
     if not wd:
         raise UserError("No workdir found here.")
+
+    progress_callback = None
+    if not options.quiet:
+        progress_callback = ScanProgressPrinter()
+
     unchanged_files, new_files, modified_files, deleted_files, ignored_files \
-        = wd.get_changes(wd.revision)
+        = wd.get_changes(wd.revision, progress_callback = progress_callback)
     filestats = {}
     def in_session(f):
         f_wd = strip_path_offset(wd.offset, f)
@@ -342,15 +363,15 @@ def cmd_repair(args):
 
 def cmd_import(args):
     parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
-    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
+    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true", default=False,
                       help="Show more details about what is happening.")
     parser.add_option("-m", "--message", dest = "message", metavar = "ARG",
                       help="An optional log message describing this import")
-    parser.add_option("-n", "--dry-run", dest = "dry_run", action="store_true",
+    parser.add_option("-n", "--dry-run", dest = "dry_run", action="store_true", default=False,
                       help="Don't actually do anything. Just show what will happen.")
-    parser.add_option("-w", "--create-workdir", dest = "create_workdir", action="store_true",
+    parser.add_option("-w", "--create-workdir", dest = "create_workdir", action="store_true", default=False,
                       help="Turn the imported directory into a workdir.")
-    parser.add_option("--ignore-errors", dest = "ignore_errors", action="store_true",
+    parser.add_option("--ignore-errors", dest = "ignore_errors", action="store_true", default=False,
                       help="Continue operation even if unreadable files are detected.")
     base_session = None
     (options, args) = parser.parse_args(args)
