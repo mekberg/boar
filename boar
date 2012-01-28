@@ -178,6 +178,7 @@ def cmd_locate(args):
 class ScanProgressPrinter:
     def __init__(self):
         self.last_t = 0
+        self.start_t = time.time()
 
     def __call__(self, total_files, remaining_files, total_bytes, remaining_bytes):
         now = time.time()
@@ -185,8 +186,12 @@ class ScanProgressPrinter:
             return
         if total_bytes == 0:
             return
-        print "Remaining: %s files, %s bytes (%s%% complete)" % \
-            (remaining_files, remaining_bytes, round(100 * (1.0 - 1.0 * remaining_bytes / total_bytes), 1))
+        elapsed_time = now - self.start_t
+        processed_bytes = total_bytes - remaining_bytes
+        print "Remaining: %s files, %s Mb (%s%% complete, %s Mb/s)" % \
+            (remaining_files, int(remaining_bytes/2**20), \
+             round(100 * (1.0 - 1.0 * remaining_bytes / total_bytes), 1), \
+             round((processed_bytes/2**20)/elapsed_time, 1))
         self.last_t = now
 
 def cmd_status(args):
