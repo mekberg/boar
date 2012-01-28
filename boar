@@ -186,6 +186,8 @@ class ScanProgressPrinter:
             return
         if total_bytes == 0:
             return
+        if not self.last_t:
+            print "Some files needs to be scanned..."
         elapsed_time = now - self.start_t
         processed_bytes = total_bytes - remaining_bytes
         print "Remaining: %s files, %s Mb (%s%% complete, %s Mb/s)" % \
