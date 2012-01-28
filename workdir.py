@@ -258,16 +258,11 @@ class Workdir:
         new snapshot will be created as a modification of the snapshot
         given in the 'base_snapshot' argument."""
 
-        for f in files:
-            # A little hackish to store up the md5sums in one sweep
-            # before starting to check them in. An attempt to reduce
-            # the chance that the file is in disk cache when we read
-            # it again for check-in later. (To avoid the problem that
-            # a corrupted disk read is cached and not detected) TODO:
-            # This is really a broken way to do it, and it should be
-            # replaced with proper system-calls to read the file raw
-            # from disk. But that's complicated.
-            self.cached_md5sum(strip_path_offset(self.offset, f))
+        # To increase the chance of detecting spurious reading errors,
+        # all the files should at this point have been scanned and had
+        # their checksums stored in the checksum cache. The
+        # self.get_changes() call will do that.
+
         try:
             front.create_session(session_name = self.sessionName, base_session = base_snapshot)
         except FileMutex.MutexLocked, e:
