@@ -24,7 +24,7 @@ cat >$testdir/regression-v1/workdir/.boar/info <<EOF || exit 1
 }
 EOF
 
-REPO_PATH=$REPO $BOAR status |tee $testdir/status.txt || { echo "Couldn't execute status (note: output redirected)"; exit 1; }
+REPO_PATH=$REPO $BOAR status -q |tee $testdir/status.txt || { echo "Couldn't execute status (note: output redirected)"; exit 1; }
 if [ `grep -c . $testdir/status.txt` -ne 1 ]; then 
     cat $testdir/status.txt
     echo "Did not expect status to show any changes"; exit 1; 

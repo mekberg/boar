@@ -415,6 +415,9 @@ class Workdir:
             remaining_files, total_bytes, remaining_bytes.
             """
 
+        assert revision == None or type(revision) == int
+        assert ignore_errors in (True, False)
+
         if progress_callback == None:
             def progress_callback(total_files, remaining_files, total_bytes, remaining_bytes):
                 #print "Remaining:", remaining_files, remaining_bytes
@@ -437,7 +440,7 @@ class Workdir:
             md5 = self.get_cached_md5sum(fn)
             if md5 == None:
                 files_to_checksum.append(fn)
-                files_to_checksum_sizes[fn] = os.path.getsize(fn)
+                files_to_checksum_sizes[fn] = os.path.getsize(self.wd_abspath(fn))
             else:
                 filelist[prefix + fn] = md5
 
@@ -445,6 +448,8 @@ class Workdir:
         total_bytes = sum(files_to_checksum_sizes.values())
         remaining_files = total_files
         remaining_bytes = total_bytes
+
+        progress_callback(total_files, remaining_files, total_bytes, remaining_bytes)
 
         for fn in files_to_checksum:
             f = prefix + fn
