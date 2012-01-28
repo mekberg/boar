@@ -357,9 +357,10 @@ class Workdir:
                 return info
         return None
 
-    def cached_md5sum(self, relative_path):
-        """Return the md5 checksum of the given file as hex encoded
-        string."""
+
+    def get_cached_md5sum(self, relative_path):
+        """Returns the cached md5 sum of the given file if it is
+        current, otherwise returns None."""
         assert not os.path.isabs(relative_path), "Path must be relative to the workdir. Was: "+relative_path
         assert self.sqlcache
         abspath = self.wd_abspath(relative_path)
@@ -368,8 +369,19 @@ class Workdir:
         recent_change = abs(time.time() - stat.st_mtime) < 5.0
         if sums and not recent_change:
             return sums
-        md5, = checksum_file(abspath, ("md5",))
-        self.sqlcache.set(relative_path, stat.st_mtime, md5)
+        return None
+        
+
+    def cached_md5sum(self, relative_path):
+        """Return the md5 checksum of the given file as hex encoded
+        string. If the checksum is not already cached, it is
+        calculated and stored."""
+        md5 = self.get_cached_md5sum(relative_path)
+        if md5 == None:
+            abspath = self.wd_abspath(relative_path)
+            stat = os.stat(abspath)
+            md5, = checksum_file(abspath, ("md5",))
+            self.sqlcache.set(relative_path, stat.st_mtime, md5)
         assert is_md5sum(md5)
         return md5
 
@@ -391,22 +403,51 @@ class Workdir:
         result = self.root + "/" + without_offset
         return result
 
-    def get_changes(self, revision = None, ignore_errors = False):
+    def get_changes(self, revision = None, ignore_errors = False, progress_callback = None):
         """ Compares the work dir with given revision, or the latest
             revision if no revision is given. Returns a tuple of five
             lists: unchanged files, new files, modified files, deleted
-            files, ignored files."""
+            files, ignored files.
+
+            If given, the progress_callback function will be called
+            periodically with progress information. The function will
+            be given the following arguments: total_files,
+            remaining_files, total_bytes, remaining_bytes.
+            """
+
+        if progress_callback == None:
+            def progress_callback(total_files, remaining_files, total_bytes, remaining_bytes):
+                #print "Remaining:", remaining_files, remaining_bytes
+                pass
+
         front = self.get_front()
+
         self.__reload_tree()
         existing_files_list = copy.copy(self.tree)
         prefix = ""
         if self.offset:
             prefix = self.offset + "/"
         filelist = {}
+
+        files_to_checksum = []
+        files_to_checksum_sizes = {}
+
+        total_bytes = 0
         for fn in existing_files_list:
+            md5 = self.get_cached_md5sum(fn)
+            if md5 == None:
+                files_to_checksum.append(fn)
+                files_to_checksum_sizes[fn] = os.path.getsize(fn)
+            else:
+                filelist[prefix + fn] = md5
+
+        total_files = len(files_to_checksum)
+        total_bytes = sum(files_to_checksum_sizes.values())
+        remaining_files = total_files
+        remaining_bytes = total_bytes
+
+        for fn in files_to_checksum:
             f = prefix + fn
-            assert not is_windows_path(f), "Was:" + f
-            assert not os.path.isabs(f)
             try:
                 filelist[f] = self.cached_md5sum(fn)
             except EnvironmentError, e:
@@ -414,7 +455,14 @@ class Workdir:
                     warn("Ignoring unreadable file: %s" % f)
                 else:
                     raise UserError("Unreadable file: %s" % f)
-        
+            remaining_files -= 1
+            remaining_bytes -= files_to_checksum_sizes[fn]
+            progress_callback(total_files, remaining_files, total_bytes, remaining_bytes)
+
+        for f in filelist.keys():
+            assert not is_windows_path(f), "Was:" + f
+            assert not os.path.isabs(f)
+
         if revision != None:
             bloblist = self.get_bloblist(revision)
         else:
