@@ -646,7 +646,7 @@ class ChecksumCache:
         self.conn = None
         self.__init_db()
         atexit.register(self.sync)
-        self.rate_limiter = RateLimiter(1.0)
+        self.rate_limiter = RateLimiter(hz = 1.0/60.0)
 
     def __init_db(self):
         if self.conn:
@@ -656,6 +656,9 @@ class ChecksumCache:
             self.conn.execute("CREATE TABLE IF NOT EXISTS ccache (path text, mtime unsigned int, md5 char(32), row_md5 char(32))")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ccache_index ON ccache (path, mtime)")
             self.conn.commit()
+            # Exclusive mode seems to make operations a lot faster
+            self.conn.execute("PRAGMA locking_mode = EXCLUSIVE")
+            self.conn.execute("BEGIN")
         except sqlite3.DatabaseError, e:
             raise
 
@@ -682,11 +685,12 @@ class ChecksumCache:
         assert len(rows) == 1
         md5, row_md5 = rows[0]
         expected_md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5.encode("utf8"))
-        if row_md5 != expected_md5_row:
-            raise
+        # TODO: use a nice exception for cache corruption
+        assert row_md5 == expected_md5_row, "Workdir cache corrupted"
         return md5
 
     def sync(self):
         if self.conn:
             self.conn.commit()
+            self.conn.execute("BEGIN")
 
