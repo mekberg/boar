@@ -479,8 +479,8 @@ class RateLimiter:
     may be a float. The first call to ready() will always return
     True, and then the timer starts ticking."""
 
-    def __init__(self, maxrate):
-        self.min_period = 1.0 / maxrate
+    def __init__(self, hz):
+        self.min_period = 1.0 / hz
         self.last_trig = 0.0
     
     def ready(self):
