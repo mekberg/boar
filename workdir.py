@@ -169,14 +169,14 @@ class Workdir:
         self.revision = new_revision
         self.write_metadata()
 
-    def update(self, new_revision = None, log = None, ignore_errors = False):
+    def update(self, new_revision = None, log = None, ignore_errors = False, progress_callback = None):
         assert self.revision, "Cannot update. Current revision is unknown: '%s'" % self.revision
         if not log:
             # Don't do this as a default argument, as sys.stdout may
             # have been redirected (see issue 18)
             log = StreamEncoder(sys.stdout)
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes(self.revision)
+            self.get_changes(self.revision, progress_callback = progress_callback)
         front = self.get_front()
         if new_revision:
             if not front.has_snapshot(self.sessionName, new_revision):
@@ -220,7 +220,7 @@ class Workdir:
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
-                    log_message = None, ignore_errors = False):
+                    log_message = None, ignore_errors = False, progress_callback = None):
         front = self.get_front()
         if dry_run:
             front = DryRunFront(front)
@@ -235,7 +235,7 @@ class Workdir:
             base_snapshot = front.find_last_revision(self.sessionName)
 
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes(self.revision, ignore_errors = ignore_errors)
+            self.get_changes(self.revision, ignore_errors = ignore_errors, progress_callback = progress_callback)
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
 
         if fail_on_modifications and modified_files:
@@ -539,6 +539,8 @@ def init_workdir(path):
     """ Tries to find a workdir root directory at the given path or
     above. Returns a workdir object if successful, or None if not. """
     metapath = find_meta(tounicode(os.getcwd()))
+    if not metapath:
+        return None
     info = load_meta_info(metapath)
     root = os.path.split(metapath)[0]
     wd = Workdir(repoUrl=info['repo_path'], 
@@ -562,6 +564,7 @@ def find_meta(path):
     return find_meta(head)
 
 def load_meta_info(metapath):
+    assert metapath
     with safe_open(os.path.join(metapath, "info"), "rb") as f:
         info = json.load(f)
     return info

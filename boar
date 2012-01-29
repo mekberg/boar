@@ -65,6 +65,8 @@ information. The full command reference is available online at
 http://code.google.com/p/boar/wiki/CommandReference
 """  % BOAR_VERSION
 
+not_a_workdir_msg = "This directory is not a boar workdir"
+
 def list_sessions(front, show_meta = False, verbose = False):
     sessions_count = {}
     for sid in front.get_session_ids():
@@ -176,36 +178,43 @@ def cmd_locate(args):
         print "Missing:", f
 
 class ScanProgressPrinter:
-    def __init__(self):
+    def __init__(self, start_message = "Scanning files for changes...", 
+                 finish_message = "Scanning complete"):
         self.last_t = 0
         self.start_t = time.time()
+        self.start_message = start_message
+        self.finish_message = finish_message
 
     def __call__(self, total_files, remaining_files, total_bytes, remaining_bytes):
-        now = time.time()
-        if now - self.last_t < 5.0 and remaining_bytes != 0:
-            return
         if total_bytes == 0:
+            # Nothing to do
             return
-        if not self.last_t:
-            print "Some files needs to be scanned..."
+        now = time.time()
+        if now - self.last_t < 5.0 and remaining_bytes > 0 and remaining_bytes != total_bytes:
+            # Rate limit printouts, unless first or last progress call, always print those.
+            return
+        if self.start_message and self.last_t == 0:
+            print self.start_message
         elapsed_time = now - self.start_t
         processed_bytes = total_bytes - remaining_bytes
         print "Remaining: %s files, %s Mb (%s%% complete, %s Mb/s)" % \
             (remaining_files, int(remaining_bytes/2**20), \
              round(100 * (1.0 - 1.0 * remaining_bytes / total_bytes), 1), \
              round((processed_bytes/2**20)/elapsed_time, 1))
+        if self.finish_message and remaining_files == 0 and remaining_bytes == 0:
+            print self.finish_message
         self.last_t = now
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
     parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
                       help="Show information about unchanged files as well")
-    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true",
+    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default=False,
                       help="Do not print any progress information")
     (options, args) = parser.parse_args(args)
     wd = workdir.init_workdir(ucwd)
     if not wd:
-        raise UserError("No workdir found here.")
+        raise UserError(not_a_workdir_msg)
 
     progress_callback = None
     if not options.quiet:
@@ -244,6 +253,9 @@ def cmd_info(args):
         raise UserError("Info command does not accept any arguments.")
 
     wd = workdir.init_workdir(ucwd)
+    if not wd:
+        raise UserError(not_a_workdir_msg)
+
     if wd:
         print "Using a work directory:"
         print "   Workdir root:", wd.root
@@ -419,14 +431,21 @@ def cmd_update(args):
                       help="Do not abort the update if there are errors while writing.")
     parser.add_option("-c", "--ignore-changes", action="store_true", dest = "ignore_changes", 
                       help="Update the workdir revision but do not update the workdir contents.")
+    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
+                      help="Do not print any progress information")
     (options, args) = parser.parse_args(args)
     if len(args) != 0:
         raise UserError("Update does not accept any non-option arguments")
     wd = workdir.init_workdir(ucwd)
+    progress_callback = None
+    if not options.quiet:
+        progress_callback = ScanProgressPrinter()
+    if not wd:
+        raise UserError(not_a_workdir_msg)
     if options.ignore_changes:
         wd.update_revision(options.revision)
     else:
-        wd.update(new_revision = options.revision, ignore_errors = options.ignore_errors)
+        wd.update(new_revision = options.revision, ignore_errors = options.ignore_errors, progress_callback = progress_callback)
     print "Workdir now at revision", wd.revision
 
 def cmd_ci(args):
@@ -435,14 +454,21 @@ def cmd_ci(args):
                       help="An optional log message describing this commit")
     parser.add_option("-a", "--add-only", dest = "addonly", action="store_true",
                       help="Only new files will be committed. Modified and deleted files will be ignored.")
+    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
+                      help="Do not print any progress information")
     (options, args) = parser.parse_args(args)
     if args:
         raise UserError("Unexpected arguments: "+str(args))
     wd = workdir.init_workdir(ucwd)
+    if not wd:
+        raise UserError(not_a_workdir_msg)
     log_message = None
     if options.message:
-        log_message = tounicode(options.message)
-    session_id = wd.checkin(add_only = options.addonly, log_message = log_message)
+        log_message = tounicode(options.message)    
+    progress_callback = None
+    if not options.quiet:
+        progress_callback = ScanProgressPrinter()
+    session_id = wd.checkin(add_only = options.addonly, log_message = log_message, progress_callback = progress_callback)
     print "Checked in session id", session_id
 
 """
