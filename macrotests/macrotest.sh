@@ -48,6 +48,13 @@ echo --- Test --version flag
 $BOAR --version mkrepo ErrRepo1 && { echo "--version accepted extra commands"; exit 1; }
 $BOAR mkrepo ErrRepo2 --version && { echo "--version accepted extra commands"; exit 1; }
 
+echo --- Test nice error message when executing workdir commands in a non-workdir
+mkdir nonrepo
+(cd nonrepo; $BOAR status 2>&1 | grep "This directory is not a boar workdir" ) || { echo "Non-workdir status caused unexpected error message"; exit 1; }
+(cd nonrepo; $BOAR ci 2>&1 | grep "This directory is not a boar workdir" ) || { echo "Non-workdir ci caused unexpected error message"; exit 1; }
+(cd nonrepo; $BOAR info 2>&1 | grep "This directory is not a boar workdir" ) || { echo "Non-workdir info caused unexpected error message"; exit 1; }
+(cd nonrepo; $BOAR update 2>&1 | grep "This directory is not a boar workdir" ) || { echo "Non-workdir update caused unexpected error message"; exit 1; }
+
 echo --- Test mkrepo, mksession and import
 tar -xvzf test_tree.tar.gz || { echo "Couldn't create test tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 before check-in"; exit 1; }
