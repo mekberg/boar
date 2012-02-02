@@ -439,6 +439,15 @@ def tounicode(s):
     assert type(s) == unicode
     return s
 
+def encoded_stdout():
+    """Returns the sys.stdout stream wrapped in a StreamEncoder. Makes
+    sure that there is no accidential nesting of StreamEncoder due to
+    globally replacing sys.stdout with a wrapped version."""
+    if isinstance(sys.stdout, StreamEncoder):
+        return sys.stdout
+    else:
+        return StreamEncoder(sys.stdout)
+
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all
     written strings according to the current preferred encoding, with
@@ -447,6 +456,7 @@ class StreamEncoder:
 
     def __init__(self, stream, errors = "backslashreplace"):
         assert errors in ("strict", "replace", "ignore", "backslashreplace")
+        assert not type(stream) == type(self), "Cannot nest StreamEncoders"
         self.errors = errors
         self.stream = stream
         self.codec_name = locale.getpreferredencoding()
@@ -472,6 +482,14 @@ class StreamEncoder:
 def dir_exists(path):
     return os.path.exists(path) and os.path.isdir(path)
 
+class FakeFile:
+    """ Behaves like a file object, but does not actually do anything."""
+
+    def write(self, s):
+        pass
+
+    def close(self):
+        pass
 
 class RateLimiter:
     """This class makes it easy to perform some action only when a

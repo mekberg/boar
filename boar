@@ -215,7 +215,8 @@ def cmd_status(args):
     wd = workdir.init_workdir(ucwd)
     if not wd:
         raise UserError(not_a_workdir_msg)
-
+    if args:
+        raise UserError("Too many arguments")
     progress_callback = None
     if not options.quiet:
         progress_callback = ScanProgressPrinter()
