@@ -46,10 +46,6 @@ if sys.version_info >= (2, 6):
 else:
     import simplejson as json
 
-class FakeFile:
-    def write(self, s):
-        pass
-
 VERSION_FILE = "wd_version.txt"
 CURRENT_VERSION = 2
 METADIR = ".boar"
@@ -87,7 +83,7 @@ class Workdir:
         self.revision_fronts = {}
         self.tree_csums = None
         self.tree = None
-        self.output = FakeFile()
+        self.output = encoded_stdout()
 
     def __upgrade(self):
         v0_metadir = os.path.join(self.root, ".meta")
@@ -156,6 +152,7 @@ class Workdir:
                 continue
             target = strip_path_offset(self.offset, info['filename'])
             target_path = os.path.join(self.root, target)
+            print >>self.output, target
             fetch_blob(front, info['md5sum'], target_path, overwrite = False)
 
     def update_revision(self, new_revision = None):
@@ -169,15 +166,13 @@ class Workdir:
         self.revision = new_revision
         self.write_metadata()
 
-    def update(self, new_revision = None, log = None, ignore_errors = False, progress_callback = None):
+    def update(self, new_revision = None, ignore_errors = False, progress_callback = None):
         assert self.revision, "Cannot update. Current revision is unknown: '%s'" % self.revision
-        if not log:
-            # Don't do this as a default argument, as sys.stdout may
-            # have been redirected (see issue 18)
-            log = StreamEncoder(sys.stdout)
+
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes(self.revision, progress_callback = progress_callback)
         front = self.get_front()
+        log = self.output
         if new_revision:
             if not front.has_snapshot(self.sessionName, new_revision):
                 raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
@@ -282,6 +277,7 @@ class Workdir:
                     raise UserError("Unreadable file: %s" % abspath)
 
         for f in deleted_files:
+            print >>self.output, "Deleting", f
             front.remove(f)
 
         session_info = {}
@@ -521,7 +517,7 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
     assert "\\" not in sessionpath, "Was: '%s'" % (path)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
-    log.write("Checking in %s => %s\n" % (abspath, sessionpath))
+    print >>log, "Sending", sessionpath
     if not front.has_blob(expected_md5sum) and not front.new_snapshot_has_blob(expected_md5sum):
         # File does not exist in repo or previously in this new snapshot. Upload it.
         with open_raw(abspath) as f:
