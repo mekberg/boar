@@ -807,6 +807,10 @@ if __name__ == "__main__":
     #p.sort_stats('cum').print_stats(10)
     try:
         return_code = main()
+    except KeyboardInterrupt:
+        print
+        print "ERROR: Operation cancelled by user"
+        return_code = 1
     except UserError as e:
         print "ERROR:", e.value
         return_code = 1
