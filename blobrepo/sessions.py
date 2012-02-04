@@ -318,19 +318,23 @@ class SessionReader:
             self.bloblist = read_json(path)
 
     def get_all_blob_infos(self):
-        self.__load_bloblist()
+        session_obj = self
+        all_session_objs = [self]
+        while True:
+            base_session_id = session_obj.properties.get("base_session", None)
+            if base_session_id == None:
+                break
+            session_obj = self.repo.get_session(base_session_id)
+            all_session_objs.append(session_obj)
+        bloblist = []
         seen = set()
-        for blobinfo in self.bloblist:
-            assert blobinfo['filename'] not in seen, \
-                "Internal error - duplicate file entry in a single session"
-            seen.add(blobinfo['filename'])
-            if blobinfo.get("action", None) == "remove":
-                continue
-            yield copy.copy(blobinfo)
-        base_session_id = self.properties.get("base_session", None)
-        if base_session_id:
-            base_session_reader = self.repo.get_session(base_session_id)
-            for info in base_session_reader.get_all_blob_infos():
-                if info['filename'] not in seen:
-                    # Later entries overrides earlier ones
-                    yield info
+        for session_obj in all_session_objs:
+            rawbloblist = session_obj.get_raw_bloblist()
+            for blobinfo in rawbloblist:
+                if blobinfo['filename'] in seen:
+                    continue
+                seen.add(blobinfo['filename'])
+                if blobinfo.get("action", None) == "remove":
+                    continue
+                bloblist.append(copy.copy(blobinfo))
+        return bloblist
