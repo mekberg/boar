@@ -35,7 +35,7 @@ for testcase in test_*.sh; do
     echo "--- Executing $testcase"
     TMPDIR=`mktemp --tmpdir=/tmp -d "boar-${testcase}.XXXXXX"`
     ( cd $TMPDIR && $BOARTESTHOME/${testcase} ) || { echo "*** Test case $testcase failed ($TMPDIR)"; exit 1; }
-    rm -r $TMPDIR
+    rm -r $TMPDIR || { echo "Couldn't clean up after test"; exit 1; }
 done
 
 echo --- Test mkrepo, mksession and import
