@@ -307,10 +307,6 @@ $BOARMOUNT $REPO BoarMount test_tree || { echo "Couldn't mount session"; exit 1;
 md5sum -c test_tree.md5 || { echo "Mounted session was corrupt"; fusermount -u test_tree; exit 1; }
 fusermount -u test_tree
 
-for issue in issue*.sh; do
-    ./${issue} || { echo "Regression test $issue failed"; exit 1; }
-done
-
 ./regression-v0.sh || { echo "Repo regression v0 test failed"; exit 1; }
 ./regression-v1.sh || { echo "Repo regression v1 test failed"; exit 1; }
 
