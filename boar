@@ -503,30 +503,34 @@ def cmd_mksession(args):
 def cmd_co(args): 
     parser = OptionParser(usage="usage: boar co [options] <session name>[/path/] [workdir name]")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
-                      help="The revision to check out (defaults to latest)")
+                      help="The revision to check out (default is latest)")
     (options, args) = parser.parse_args(args)
     if not args:
         raise UserError("You must specify a session name with an optional subpath (i.e 'MyPictures/summer2010')")    
     if len(args) > 2:
         raise UserError("Too many arguments")
-    session_name, throwaway, offset = tounicode(args.pop(0)).partition("/")
-    workdir_path = os.path.abspath(session_name)
+    co_spec = tounicode(args.pop(0))
+    session_name, throwaway, offset = co_spec.partition("/")
+    workdir_name = co_spec.rstrip("/").split("/").pop()
+    workdir_path = os.path.abspath(workdir_name)
     if args:
         workdir_path = tounicode(os.path.abspath(args.pop(0)))
     if os.path.exists(workdir_path):
         raise UserError("Workdir path '%s' already exists" % (workdir_path))
-    assert not args
-    # Args parsing complete
+    assert not args # Args parsing complete
 
     front = init_repo_from_env(cmdline_repo)
+
+    latest_sid = front.find_last_revision(session_name)
+    if not latest_sid:
+        raise UserError("No such session found: %s" % (session_name))
+
     if options.revision:
-        sid = front.find_last_revision(session_name, [options.revision])
-        if not sid:
-            raise UserError("No such revision or session found")
+        if options.revision not in front.get_session_ids(session_name):
+            raise UserError("There is no such revision of the given session")
+        sid = options.revision
     else:
-        sid = front.find_last_revision(session_name)
-        if not sid:
-            raise UserError("No such session found: %s" % (session_name))
+        sid = latest_sid
 
     print "Checking out to workdir", workdir_path
 
