@@ -56,11 +56,15 @@ def add_random_files(path, count, filesize_kb):
 def add_random_tree(path, total_dirs, total_files):
     existing_dirs = [path]
     for n in xrange(total_dirs):
+        print "Creating dirs", n, "\r",
+        sys.stdout.flush()
         parent = random.choice(existing_dirs)
         new_dir = find_unused_filename(parent, prefix = "dir_")
         os.mkdir(new_dir)
         existing_dirs.append(new_dir)
     for n in xrange(total_files):
+        print "Creating files", n, "\r",
+        sys.stdout.flush()
         parent = random.choice(existing_dirs)
         add_randomized_file(parent)
 
