@@ -532,7 +532,13 @@ class Repo:
         other_sessions = set(other_repo.get_all_sessions())
         sessions_to_copy = list(other_sessions - self_sessions)
         sessions_to_copy.sort()
+        count = 0
         for session_id in sessions_to_copy:
+            count += 1
+            # This cuts right through all ideas of layering. But
+            # progress info is nice.
+            # TODO: When a boar server is implemented, fix this.
+            print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_copy))
             reader = other_repo.get_session(session_id)
             base_session = reader.get_properties().get('base_session', None)
             writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
