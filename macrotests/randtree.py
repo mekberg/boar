@@ -20,7 +20,7 @@ import sys
 import os
 import time
 import random
-
+from mkrandfile import mkrandfile
 allowed_chars = u" abcdefghijklmnpqrstuvwxyzåäöABCDEFGHIJKLMNPQRSTUVWXYZÅÄÖ_0123456789"
 
 def get_random_filename(size = 5):
@@ -42,12 +42,9 @@ def add_randomized_file(path):
     filename = find_unused_filename(path)
     write_random_contents(filename, 1)
 
-def write_random_contents(filename, count, blocksize = 1024):
+def write_random_contents(filename, count):
     assert not os.path.exists(filename)
-    with open(filename, "w") as f:
-        with open("/dev/urandom", "r") as rand:
-            for x in range(0, count):
-                f.write(rand.read(blocksize))
+    mkrandfile(filename, count)
 
 def add_random_files(path, count, filesize_kb):
     for x in range(0, count):
@@ -69,11 +66,11 @@ def add_random_tree(path, total_dirs, total_files):
         add_randomized_file(parent)
 
 def main():
-    random.seed(0) # Make deterministic
     #dirname, count, size = sys.argv[1:]
     #add_random_files(dirname, int(count), int(size))
     dirname, dircount, filecount = sys.argv[1:]
     os.mkdir(dirname)
+    random.seed((dircount, filecount)) # Make deterministic
     add_random_tree(dirname, int(dircount), int(filecount))
 
 if __name__ == "__main__":
