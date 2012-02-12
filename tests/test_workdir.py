@@ -131,6 +131,7 @@ class TestFront(unittest.TestCase, WorkdirHelper):
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
         self.wd.setLogOutput(DevNull())
+        self.wd.use_progress_printer(False)
         self.front = self.wd.front
         id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
@@ -173,6 +174,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
         self.wd.setLogOutput(DevNull())
+        self.wd.use_progress_printer(False)
         id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
 
@@ -181,6 +183,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         write_tree(wdroot, tree)
         wd = workdir.Workdir(repoUrl, u"TestSession", offset, revision, wdroot)
         wd.setLogOutput(DevNull())
+        wd.use_progress_printer(False)
         self.assertTrue(wd.get_front().find_last_revision(u"TestSession"))
         return wd
 
@@ -582,6 +585,7 @@ class TestWorkdirWithServer(TestWorkdir):
         self.wd = workdir.Workdir(self.repoUrl, u"TestSession", u"", 
                                   None, self.workdir)
         self.wd.setLogOutput(DevNull())
+        self.wd.use_progress_printer(False)
         front = self.wd.get_front()
         assert front.isRemote
         id = self.wd.get_front().mksession(u"TestSession")
@@ -598,6 +602,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         os.mkdir(self.workdir)
         wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
         wd.setLogOutput(DevNull())
+        wd.use_progress_printer(False)
         self.addWorkdirFile("onlyintopdir.txt", "nothing")
         self.mkdir("mysubdir")
         self.addWorkdirFile("mysubdir/insubdir.txt", "nothing2")
@@ -616,6 +621,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         os.mkdir(self.workdir)
         wd = workdir.Workdir(self.repopath, u"TestSession", u"mysubdir", None, self.workdir)
         wd.setLogOutput(DevNull())
+        wd.use_progress_printer(False)
         wd.checkout()
         tree = get_tree(wd.root, absolute_paths = False)
         #tree = wd.get_tree(absolute_paths = True)
