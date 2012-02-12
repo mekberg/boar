@@ -521,10 +521,10 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
     checksum is compared to the file while it is read, to ensure it is
     consistent."""
     assert os.path.isabs(abspath), \
-        "abspath must be absolute. Was: '%s'" % (path)
+        "abspath must be absolute. Was: '%s'" % (abspath)
     assert ".." not in sessionpath.split("/"), \
            "'..' not allowed in paths or filenames. Was: " + sessionpath
-    assert "\\" not in sessionpath, "Was: '%s'" % (path)
+    assert "\\" not in sessionpath, "Was: '%s'" % (sessionpath)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
     print >>log, "Sending", sessionpath
@@ -538,7 +538,7 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
                 front.add_blob_data(expected_md5sum, b64encode(block))
             front.add_blob_data(expected_md5sum, b64encode(""))
             assert m.hexdigest() == expected_md5sum, \
-                "File changed during checkin process: " + path
+                "File changed during checkin process: " + abspath
     front.add(blobinfo)
 
 def init_workdir(path):
