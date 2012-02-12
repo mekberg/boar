@@ -206,6 +206,10 @@ class Front:
     def mksession(self, sessionName):
         if sessionName.startswith("__"):
             raise UserError("Session names must not begin with double underscores.")
+        if "/" in sessionName:
+            raise UserError("Session names must not contain slashes.")
+        if "\\" in sessionName:
+            raise UserError("Session names must not contain backslashes.")
         return self.__mksession(sessionName)
 
     def __mksession(self, sessionName):
