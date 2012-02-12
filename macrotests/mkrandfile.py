@@ -18,8 +18,7 @@
 import sys
 import os
 
-if __name__ == '__main__':
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common import tounicode, md5sum_file
 import hashlib
@@ -35,21 +34,23 @@ def main():
     seed = int(args.pop(0))
     filesize_kbytes = int(args.pop(0))
     filename = tounicode(args.pop(0))
-
     random.seed(seed)
+    md5 = mkrandfile(filename, filesize_kbytes)
+    print md5 + "  " + filename
 
-    assert not os.path.exists(filename)
-
+def mkrandfile(path, filesize_kbytes):
+    assert not os.path.exists(path)
     md5 = hashlib.md5()
-    f = open(filename, "wb")
+    f = open(path, "wb")
     for n in xrange(0, filesize_kbytes*128):
         byte_val = random.randint(0, 2**32-1)
         buf = struct.pack("Q", byte_val)
         f.write(buf)
         md5.update(buf)
     f.close()
-    assert md5sum_file(filename) == md5.hexdigest()
-    assert os.path.getsize(filename) == filesize_kbytes * 1024
-    print "%s  %s" % (md5.hexdigest(), filename)
+    assert md5sum_file(path) == md5.hexdigest()
+    assert os.path.getsize(path) == filesize_kbytes * 1024
+    return md5.hexdigest()
 
-main()
+if __name__ == "__main__":
+    main()
