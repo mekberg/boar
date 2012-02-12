@@ -336,11 +336,31 @@ def open_raw(filename):
     #     print "Failed using O_DIRECT", e
     #     return open(filename, "rb")
 
-def get_tree(root, skip = [], absolute_paths = False):
+class __DummyProgressPrinter:
+    """Dummy progress printer for use in get_tree"""
+    def update(self): pass
+    def finished(self): pass
+
+def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     """ Returns a simple list of all the files under the given root
     directory. Any files or directories given in the skip argument
-    will not be returned or scanned."""
+    will not be returned or scanned.
+
+    The progress printer, if given, must be an object with two methods
+    "update()" and "finished()", neither accepting any
+    parameters. Update will be called once for every file seen, and
+    then finished will be called.
+    """
     assert isinstance(root, unicode) # type affects os.path.walk callback args
+    
+    if not progress_printer:
+        progress_printer = __DummyProgressPrinter()
+
+    if not absolute_paths:
+        post_process = lambda fn: convert_win_path_to_unix(my_relpath(fn, root))
+    else:
+        post_process = convert_win_path_to_unix
+
     def visitor(out_list, dirname, names):
         for file_to_skip in skip:
             if file_to_skip in names:
@@ -349,25 +369,23 @@ def get_tree(root, skip = [], absolute_paths = False):
             assert type(name) == unicode, "All filenames should be unicode"
             try:
                 fullpath = os.path.join(dirname, name)
-            except:
+                if os.path.isdir(fullpath):
+                    continue
+            except OSError:
                 print "Failed on file:", dirname, name
                 raise
-            if not os.path.isdir(fullpath):
-                out_list.append(fullpath)
+
+            f = post_process(fullpath)
+            assert not is_windows_path(f), "Was:" + f
+            assert not ".." in f.split("/"), "Was:" + f
+            assert not "\\" in f, "Was:" + f
+            out_list.append(f)
+            progress_printer.update()
+
     all_files = []
     os.path.walk(root, visitor, all_files)
-    remove_rootpath = lambda fn: convert_win_path_to_unix(my_relpath(fn, root))
-    if not absolute_paths:
-        all_files = map(remove_rootpath, all_files)
-    else:
-        all_files = map(convert_win_path_to_unix, all_files)
-    for f in all_files:
-        assert not is_windows_path(f), "Was:" + f
-        assert not ".." in f.split("/"), "Was:" + f
-        assert not "\\" in f, "Was:" + f
+    progress_printer.finished()
     return all_files
-
-
 
 class FileMutex:
     class MutexLocked(Exception):
@@ -470,6 +488,9 @@ class StreamEncoder:
 
     def close(self):
         self.stream.close()
+
+    def flush(self):
+        self.stream.flush()
 
     def __enter__(self):
         """ Support for the 'with' statement """
