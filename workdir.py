@@ -67,7 +67,7 @@ class Workdir:
         self.root = root
         self.metadir = os.path.join(self.root, METADIR)
         self.front = None
-
+        self.use_progress_printer(True)
         self.__upgrade()
 
         if self.repoUrl:
@@ -103,7 +103,9 @@ class Workdir:
             self.__set_workdir_version(2)
 
     def __reload_tree(self):
-        self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False)
+        progress = self.ScanProgressPrinter()
+        self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False, \
+                                 progress_printer = progress)
         self.tree_csums == None
 
     def __get_workdir_version(self):
@@ -116,6 +118,16 @@ class Workdir:
         assert type(new_version) == int
         version_file = os.path.join(self.metadir, VERSION_FILE)
         replace_file(version_file, str(new_version))
+
+    def use_progress_printer(self, enabled):
+        if enabled:
+            self.ChecksumProgressPrinter = ChecksumProgressPrinter
+            self.ScanProgressPrinter = ScanProgressPrinter
+            self.SingleTaskProgressPrinter = SingleTaskProgressPrinter
+        else:
+            self.ChecksumProgressPrinter = DummyChecksumProgressPrinter
+            self.ScanProgressPrinter = DummyScanProgressPrinter
+            self.SingleTaskProgressPrinter = DummySingleTaskProgressPrinter
 
     def setLogOutput(self, fout):
         self.output = fout
@@ -166,11 +178,11 @@ class Workdir:
         self.revision = new_revision
         self.write_metadata()
 
-    def update(self, new_revision = None, ignore_errors = False, progress_callback = None):
+    def update(self, new_revision = None, ignore_errors = False):
         assert self.revision, "Cannot update. Current revision is unknown: '%s'" % self.revision
 
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes(self.revision, progress_callback = progress_callback)
+            self.get_changes(self.revision)
         front = self.get_front()
         log = self.output
         if new_revision:
@@ -215,7 +227,7 @@ class Workdir:
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
-                    log_message = None, ignore_errors = False, progress_callback = None):
+                    log_message = None, ignore_errors = False):
         front = self.get_front()
         if dry_run:
             front = DryRunFront(front)
@@ -230,7 +242,7 @@ class Workdir:
             base_snapshot = front.find_last_revision(self.sessionName)
 
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes(self.revision, ignore_errors = ignore_errors, progress_callback = progress_callback)
+            self.get_changes(self.revision, ignore_errors = ignore_errors)
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
 
         if fail_on_modifications and modified_files:
@@ -394,25 +406,15 @@ class Workdir:
         result = self.root + "/" + without_offset
         return result
 
-    def get_changes(self, revision = None, ignore_errors = False, progress_callback = None):
+    def get_changes(self, revision = None, ignore_errors = False):
         """ Compares the work dir with given revision, or the latest
             revision if no revision is given. Returns a tuple of five
             lists: unchanged files, new files, modified files, deleted
             files, ignored files.
-
-            If given, the progress_callback function will be called
-            periodically with progress information. The function will
-            be given the following arguments: total_files,
-            remaining_files, total_bytes, remaining_bytes.
             """
 
         assert revision == None or type(revision) == int
         assert ignore_errors in (True, False)
-
-        if progress_callback == None:
-            def progress_callback(total_files, remaining_files, total_bytes, remaining_bytes):
-                #print "Remaining:", remaining_files, remaining_bytes
-                pass
 
         front = self.get_front()
 
@@ -423,10 +425,10 @@ class Workdir:
             prefix = self.offset + "/"
         filelist = {}
 
+        scan_progress = self.ScanProgressPrinter("Verifying checksum cache:")
+
         files_to_checksum = []
         files_to_checksum_sizes = {}
-
-        total_bytes = 0
         for fn in existing_files_list:
             md5 = self.get_cached_md5sum(fn)
             if md5 == None:
@@ -434,13 +436,16 @@ class Workdir:
                 files_to_checksum_sizes[fn] = os.path.getsize(self.wd_abspath(fn))
             else:
                 filelist[prefix + fn] = md5
+            scan_progress.update()
+        scan_progress.finished()
 
         total_files = len(files_to_checksum)
         total_bytes = sum(files_to_checksum_sizes.values())
         remaining_files = total_files
         remaining_bytes = total_bytes
 
-        progress_callback(total_files, remaining_files, total_bytes, remaining_bytes)
+        progress = self.ChecksumProgressPrinter()        
+        progress.update(total_files, remaining_files, total_bytes, remaining_bytes)
 
         for fn in files_to_checksum:
             f = prefix + fn
@@ -453,12 +458,15 @@ class Workdir:
                     raise UserError("Unreadable file: %s" % f)
             remaining_files -= 1
             remaining_bytes -= files_to_checksum_sizes[fn]
-            progress_callback(total_files, remaining_files, total_bytes, remaining_bytes)
+            progress.update(total_files, remaining_files, total_bytes, remaining_bytes)
+
+        progress.finished()
 
         for f in filelist.keys():
             assert not is_windows_path(f), "Was:" + f
             assert not os.path.isabs(f)
 
+        progress = self.SingleTaskProgressPrinter("Loading session...")
         if revision != None:
             bloblist = self.get_bloblist(revision)
         else:
@@ -468,12 +476,13 @@ class Workdir:
                 if not self.revision:
                     raise UserError("No session found named '%s'" % (self.sessionName))
             bloblist = self.get_bloblist(self.revision)
+        progress.finished()
 
+        progress = self.SingleTaskProgressPrinter("Calculating changes...")
         bloblist_dict = {}
         for i in bloblist:
             if is_child_path(self.offset, i['filename']):
                 bloblist_dict[i['filename']] = i['md5sum']
-
         comp = TreeComparer(bloblist_dict, filelist)
         unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
 
@@ -496,6 +505,7 @@ class Workdir:
             assert not modified_files
             assert not deleted_files, deleted_files
         result = unchanged_files, new_files, modified_files, deleted_files, ignored_files
+        progress.finished()
         return result
 
 def fnmatch_multi(patterns, filename):
@@ -630,8 +640,80 @@ def bloblist_to_dict(bloblist):
     assert(len(d) == len(bloblist)), \
         "All filenames must be unique in the revision"
     return d
-    
-    
+
+class SingleTaskProgressPrinter:
+    def __init__(self, start_msg = "Doing stuff...", end_msg = "done"):
+        self.end_msg = end_msg
+        print start_msg,
+        sys.stdout.flush()
+
+    def finished(self):
+        print self.end_msg
+
+class DummySingleTaskProgressPrinter:
+    def __init__(self, start_msg = "", end_msg = ""): pass
+    def finished(self): pass
+
+class ScanProgressPrinter:
+    def __init__(self, msg = "Looking for files:"):
+        self.count = 0
+        self.last_t = 0
+        self.msg = msg
+
+    def __print(self):
+        print self.msg, self.count, "\r",
+
+    def update(self):
+        self.count += 1
+        now = time.time()
+        if now - self.last_t < 0.1:
+            return
+        self.__print()
+        sys.stdout.flush()
+        self.last_t = now
+
+    def finished(self):
+        self.__print()
+        print
+
+class DummyScanProgressPrinter:
+    def __init__(self, msg = ""): pass
+    def update(self): pass
+    def finished(self): pass
+
+
+class ChecksumProgressPrinter:
+    def __init__(self):
+        self.last_t = 0
+        self.start_t = time.time()
+        self.active = False
+
+    def update(self, total_files, remaining_files, total_bytes, remaining_bytes):
+        if total_bytes == 0:
+            # Nothing to do
+            return
+        self.active = True
+        now = time.time()
+        if now - self.last_t < 0.5 and remaining_bytes > 0 and remaining_bytes != total_bytes:
+            # Rate limit printouts, unless first or last progress call, always print those.
+            return
+        elapsed_time = now - self.start_t
+        processed_bytes = total_bytes - remaining_bytes
+        print "Scanning for changes: %s files and %s Mb remaining (%s%% complete, %s Mb/s)               \r" % \
+            (remaining_files, int(remaining_bytes/2**20), \
+             round(100 * (1.0 - 1.0 * remaining_bytes / total_bytes), 1), \
+             round((processed_bytes/2**20)/elapsed_time, 1)),
+        sys.stdout.flush()
+        self.last_t = now
+
+    def finished(self):
+        if self.active:
+            print
+
+class DummyChecksumProgressPrinter:
+    def update(self, total_files, remaining_files, total_bytes, remaining_bytes): pass
+    def finished(self): pass
+        
 class ChecksumCache:
     def __init__(self, dbpath):
         assert dbpath == ":memory:" or os.path.isabs(dbpath)
