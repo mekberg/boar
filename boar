@@ -20,7 +20,7 @@ import sys
 import os
 import time
 import cProfile
-from optparse import OptionParser
+from optparse import OptionParser, SUPPRESS_HELP
 from blobrepo import repository
 from blobrepo.sessions import bloblist_fingerprint
 from boar_exceptions import *
@@ -346,8 +346,8 @@ def cmd_repair(args):
 
 def cmd_import(args):
     parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
-    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true", default=False,
-                      help="Show more details about what is happening.")
+    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
+                      help=SUPPRESS_HELP)
     parser.add_option("-m", "--message", dest = "message", metavar = "ARG",
                       help="An optional log message describing this import")
     parser.add_option("-n", "--dry-run", dest = "dry_run", action="store_true", default=False,
@@ -374,16 +374,13 @@ def cmd_import(args):
         else:
             session_name = args[1]
     session_offset = tounicode(session_offset)
-    if options.verbose:
-        print "Session name:", session_name, "Session offset:", session_offset
     if not os.path.exists(path_to_ci):
         raise UserError("Path to check in does not exist: " + path_to_ci)
     front = init_repo_from_env(cmdline_repo)
     if not front.find_last_revision(session_name):
         raise UserError("No session with the name '%s' exists." % (session_name))
     wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
-    if options.verbose:
-        wd.setLogOutput(sys.stdout)
+    wd.setLogOutput(sys.stdout)
     wd.use_progress_printer(not options.quiet)
     log_message = None
     if options.message:
