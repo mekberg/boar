@@ -224,6 +224,7 @@ class Workdir:
         self.revision = new_revision
         self.tree = None
         self.write_metadata()
+        self.__set_workdir_version(CURRENT_VERSION)
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
@@ -256,6 +257,8 @@ class Workdir:
 
         if write_meta:
             self.write_metadata()
+            self.__set_workdir_version(CURRENT_VERSION)
+
         return self.revision
 
     def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors):
