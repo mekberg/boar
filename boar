@@ -693,7 +693,7 @@ def main():
         if len(args) != 1:
             raise UserError("The --version option can not be combined with other options")
         print "Boar, version %s" % BOAR_VERSION
-        print "Copyright (C) 2010-2011 Mats Ekberg."
+        print "Copyright (C) 2010-2012 Mats Ekberg."
         print "Licensed under the Apache License, Version 2.0"
         return 0
 
