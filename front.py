@@ -56,7 +56,9 @@ def add_file_simple(front, filename, contents):
     used, or an exception will be thrown."""
     content_checksum = md5sum(contents)
     if not front.has_blob(content_checksum) and not front.new_snapshot_has_blob(content_checksum):
+        front.init_new_blob(content_checksum, len(contents))
         front.add_blob_data(content_checksum, base64.b64encode(contents))
+        front.blob_finished(content_checksum)
     now = int(time())
     front.add({'filename': filename,
                'md5sum': content_checksum,
@@ -186,9 +188,15 @@ class Front:
         name = session_info.get("name", None)
         return name == session_name        
 
+    def init_new_blob(self, blob_md5, size):
+        self.new_session.init_new_blob(blob_md5, size)
+
     def add_blob_data(self, blob_md5, b64data):
         """ Must be called after a create_session()  """
         self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))
+
+    def blob_finished(self, blob_md5):
+        self.new_session.blob_finished(blob_md5)
 
     def add(self, metadata):
         """ Must be called after a create_session(). Adds a link to a existing
@@ -354,7 +362,13 @@ class DryRunFront:
     def create_session(self, session_name, base_session = None):
         pass
 
+    def init_new_blob(self, blob_md5, size):
+        pass
+
     def add_blob_data(self, blob_md5, b64data):
+        pass
+
+    def blob_finished(self, blob_md5):
         pass
 
     def add(self, metadata):

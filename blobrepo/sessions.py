@@ -89,7 +89,7 @@ class SessionWriter:
         self.session_path = None
         self.metadatas = {}
         # Summers for new blobs. { blobname: summer, ... }
-        self.blob_checksummers = {}
+        self.blob_writer = {}
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
         assert os.path.exists(self.repo.repopath)
@@ -117,19 +117,22 @@ class SessionWriter:
     def cancel(self):
         self.dead = True
         self.session_mutex.release()
+
+    def init_new_blob(self, blob_md5, blob_size):
+        assert is_md5sum(blob_md5)
+        assert not self.repo.has_blob(blob_md5), "blob already exists"
+        assert not self.dead
+        assert not self.blob_writer.keys(), "Another new blob is already in progress"
+        fname = os.path.join(self.session_path, blob_md5)
+        self.blob_writer[blob_md5] = StrictFileWriter(fname, blob_md5, blob_size)
         
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""
-        assert is_md5sum(blob_md5)
-        assert not self.repo.has_blob(blob_md5), "blob already exists"
-        if not self.blob_checksummers.has_key(blob_md5):
-            self.blob_checksummers[blob_md5] = hashlib.md5()
-        assert not self.dead
-        summer = self.blob_checksummers[blob_md5]
-        summer.update(fragment)
-        fname = os.path.join(self.session_path, blob_md5)
-        with open(fname, "ab") as f:
-            f.write(fragment)
+        self.blob_writer[blob_md5].write(fragment)
+
+    def blob_finished(self, blob_md5):
+        self.blob_writer[blob_md5].close()
+        del self.blob_writer[blob_md5]
 
     def has_blob(self, csum):
         assert is_md5sum(csum)
@@ -184,12 +187,14 @@ class SessionWriter:
                 size = session.repo.get_blob_size(blobname)
                 offset = 0
                 added_blobs.add(blobname)
+                self.init_new_blob(blobname, metadata['size'])
                 self.add_blob_data(blobname, "") # For zero length files
                 while offset < size:
                     data = session.repo.get_blob(blobname, offset, 1000000)
                     assert len(data) > 0
                     offset += len(data)
                     self.add_blob_data(blobname, data)
+                self.blob_finished(blobname)
         return self.commit(sessioninfo)
 
     # def split_file(source, dest_dir, cut_positions, want_piece = None):
@@ -244,8 +249,7 @@ class SessionWriter:
     def __commit(self, sessioninfo):
         assert not self.dead
         assert self.session_path != None
-        for name, summer in self.blob_checksummers.items():
-            assert name == summer.hexdigest(), "Corrupted blob found in new session. Commit aborted."
+        assert not self.blob_writer, "Commit while blob writer is active"
         if sessioninfo == {}:
             sessioninfo['name'] = self.session_name
         assert self.session_name == sessioninfo['name'], \
