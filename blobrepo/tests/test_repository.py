@@ -85,8 +85,10 @@ class TestBlobRepo(unittest.TestCase):
     def test_simple_blob(self):
         committed_info = copy(self.fileinfo1)
         writer = self.repo.create_session(SESSION_NAME)
+        writer.init_new_blob(DATA1_MD5, len(DATA1))
         writer.add_blob_data(DATA1_MD5, DATA1)
         writer.add(committed_info)
+        writer.blob_finished(DATA1_MD5)
         self.assertEqual(committed_info, self.fileinfo1)
         id = writer.commit()
         reader = self.repo.get_session(id)
@@ -95,12 +97,16 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_secondary_session(self):
         writer1 = self.repo.create_session(SESSION_NAME)
+        writer1.init_new_blob(DATA1_MD5, len(DATA1))
         writer1.add_blob_data(DATA1_MD5, DATA1)
         writer1.add(self.fileinfo1)
+        writer1.blob_finished(DATA1_MD5)
         id1 = writer1.commit()
         writer2 = self.repo.create_session(SESSION_NAME, base_session = id1)
+        writer2.init_new_blob(DATA2_MD5, len(DATA2))
         writer2.add_blob_data(DATA2_MD5, DATA2)
         writer2.add(self.fileinfo2)
+        writer2.blob_finished(DATA2_MD5)
         id2 = writer2.commit()
         reader = self.repo.get_session(id2)
         blobinfos = list(reader.get_all_blob_infos())
@@ -108,8 +114,10 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_remove(self):
         writer1 = self.repo.create_session(SESSION_NAME)
+        writer1.init_new_blob(DATA1_MD5, len(DATA1))
         writer1.add_blob_data(DATA1_MD5, DATA1)
         writer1.add(self.fileinfo1)
+        writer1.blob_finished(DATA1_MD5)
         id1 = writer1.commit()
         writer2 = self.repo.create_session(SESSION_NAME, base_session = id1)
         writer2.remove(self.fileinfo1['filename'])
@@ -129,8 +137,10 @@ class TestBlobRepo(unittest.TestCase):
         # "tjosan hejsan tjosan hejsan hejsan"
         # cafa2ed1e085869b3bfe9e43b60e7a5a
         writer = self.repo.create_session(SESSION_NAME)
+        writer.init_new_blob(DATA3_MD5, len(DATA3))
         writer.add_blob_data(DATA3_MD5, DATA3)
         writer.add(self.fileinfo3)
+        writer.blob_finished(DATA3_MD5)
         writer.commit()
         writer = self.repo.create_session(SESSION_NAME)
         writer.split_blob("cafa2ed1e085869b3bfe9e43b60e7a5a", [14,28])
