@@ -536,10 +536,12 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
         with open_raw(abspath) as f:
             m = hashlib.md5()
             freader = file_reader(f, blocksize = 1048576) # 1048576 = 2^20
+            front.init_new_blob(expected_md5sum, blobinfo["size"])
             for block in freader:
                 m.update(block)
                 front.add_blob_data(expected_md5sum, b64encode(block))
             front.add_blob_data(expected_md5sum, b64encode(""))
+            front.blob_finished(expected_md5sum)
             assert m.hexdigest() == expected_md5sum, \
                 "File changed during checkin process: " + abspath
     front.add(blobinfo)
@@ -627,8 +629,9 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
         # TODO: some kind of garbage bin instead of deletion
         os.remove(target_path)
     tmpfile_fd, tmpfile = tempfile.mkstemp(dir = target_dir)
+    os.close(tmpfile_fd)
     try:
-        with os.fdopen(tmpfile_fd, "wb") as f:
+        with StrictFileWriter(tmpfile, blobname, size, overwrite = True) as f:
             while datareader.bytes_left() > 0:
                 f.write(datareader.read(2**14))
         os.rename(tmpfile, target_path)
