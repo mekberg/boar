@@ -541,3 +541,56 @@ def isWritable(path):
     except OSError, e:
         return False
     return True
+
+class ConstraintViolation(Exception):
+    """This exception is thrown when there is a violation of a usage
+    contract."""
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+class StrictFileWriter:
+    """This class will work as a file object when created, but with
+    the additional functionality that it will not allow the file to
+    exceed the given size. Also, the file must not exist before, and
+    it must have the given md5 checksum when finished. If any of the
+    contraints are violated, an ConstraintViolation exception is
+    thrown.
+
+    A sparse file with the given size will be created, which will
+    reduce fragmentation on some platforms (NTFS). """
+    def __init__(self, filename, md5, size):
+        assert is_md5sum(md5)
+        assert type(size) == int
+        assert size >= 0
+        self.filename = filename
+        self.expected_md5 = md5
+        self.expected_size = size
+        if os.path.exists(filename):
+            raise ConstraintViolation("Violation of file contract (file already exists): "+str(filename))
+        self.f = open(self.filename, "wb")
+        self.f.seek(size)
+        self.f.truncate()
+        self.f.seek(0)
+        self.md5summer = hashlib.md5()
+        self.written_bytes = 0
+
+    def write(self, buf):
+        if self.written_bytes + len(buf) > self.expected_size:
+            raise ConstraintViolation("Violation of file contract (too big) detected: "+str(self.filename))
+        self.md5summer.update(buf)
+        if self.written_bytes + len(buf) == self.expected_size:
+            if self.md5summer.hexdigest() != self.expected_md5:
+                raise ConstraintViolation("Violation of file contract (checksum) detected: "+str(self.filename))
+        self.f.write(buf)
+        self.written_bytes += len(buf)
+    
+    def close(self):
+        if self.written_bytes != self.expected_size:
+            raise ConstraintViolation("Violation of file contract (too small) detected: "+str(self.filename))
+        self.f.close()
+        del self.f
+        
+    
+    
