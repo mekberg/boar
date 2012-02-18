@@ -38,7 +38,7 @@ def main():
     md5 = mkrandfile(filename, filesize_kbytes)
     print md5 + "  " + filename
 
-def mkrandfile(path, filesize_kbytes):
+def mkrandfile_deterministic(path, filesize_kbytes):
     assert not os.path.exists(path)
     md5 = hashlib.md5()
     f = open(path, "wb")
@@ -50,6 +50,23 @@ def mkrandfile(path, filesize_kbytes):
     f.close()
     assert md5sum_file(path) == md5.hexdigest()
     assert os.path.getsize(path) == filesize_kbytes * 1024
+    return md5.hexdigest()
+
+def mkrandfile_fast(path, filesize_kbytes):
+    assert not os.path.exists(path)
+    md5 = hashlib.md5()
+    fw = open(path, "wb")
+    fr = open("/dev/urandom", "rb")
+    remaining_kbytes = filesize_kbytes
+    while remaining_kbytes:
+        buf = fr.read(1024)
+        fw.write(buf)
+        md5.update(buf)
+        remaining_kbytes -= 1
+    fw.close()
+    fr.close()
+    #assert md5sum_file(path) == md5.hexdigest()
+    #assert os.path.getsize(path) == filesize_kbytes * 1024
     return md5.hexdigest()
 
 if __name__ == "__main__":
