@@ -356,6 +356,7 @@ class Repo:
     def get_blob_size(self, sum):
         blobpath = self.get_blob_path(sum)
         if os.path.exists(blobpath):
+            # Windows always returns a Long. Let's be consistent.
             return long(os.path.getsize(blobpath))
         recipe = self.get_recipe(sum)
         if not recipe:
