@@ -34,7 +34,24 @@ class TestStrictFileWriterBasics(unittest.TestCase):
         sfw = common.StrictFileWriter(self.filename, "d41d8cd98f00b204e9800998ecf8427e", 0)
         sfw.close()
         self.assertEquals("", open(self.filename).read())
-        
+
+    def testWithHappy(self):
+        with common.StrictFileWriter(self.filename, "6118fda28fbc20966ba8daafdf836683", len("avocado")) as sfw:
+            sfw.write("avocado")
+
+    def testWithTooShort(self):
+        def dotest():
+            with common.StrictFileWriter(self.filename, "6118fda28fbc20966ba8daafdf836683", len("avocado")) as sfw:
+                sfw.write("avocad")
+        self.assertRaises(common.ConstraintViolation, dotest)
+
+    def testWithTooShort2(self):
+        def dotest():
+            with common.StrictFileWriter(self.filename, "6118fda28fbc20966ba8daafdf836683", len("avocado")) as sfw:
+                pass
+        self.assertRaises(common.ConstraintViolation, dotest)
+
+
 class TestStrictFileWriterEnforcement(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix='testcommon_', dir=TMPDIR)
@@ -47,6 +64,14 @@ class TestStrictFileWriterEnforcement(unittest.TestCase):
         self.assertRaises(common.ConstraintViolation, common.StrictFileWriter, self.filename, \
                               "fe01d67a002dfa0f3ac084298142eccd", len("orange"))
         self.assertEquals("avocado", open(self.filename).read())
+
+    def testExistingOverwrite(self):
+        self.sfw.write("avocado")
+        self.sfw.close()
+        with common.StrictFileWriter(self.filename, "fe01d67a002dfa0f3ac084298142eccd", \
+                                         len("orange"), overwrite = True) as sfw2:
+            sfw2.write("orange")
+        self.assertEquals("orange", open(self.filename).read())
 
     def testOverrun(self):
         self.assertRaises(common.ConstraintViolation, self.sfw.write, "avocadoo")
