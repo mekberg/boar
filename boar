@@ -54,7 +54,6 @@ locate    Check if some non-versioned files are already present in a repository
 ls        Show the contents of a specific sub directory of a snapshot
 mkrepo    Create a new repository
 mksession Create a new session
-repair    Clear and regenerate caches in the repository.
 setprop   Set session properties, such as file ignore lists
 status    List any changes in the current work directory
 update    Update the current work directory from the repository
