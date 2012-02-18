@@ -562,7 +562,7 @@ class StrictFileWriter:
     reduce fragmentation on some platforms (NTFS). """
     def __init__(self, filename, md5, size, overwrite = False):
         assert is_md5sum(md5)
-        assert type(size) == int
+        assert type(size) == int or type(size) == long
         assert size >= 0
         self.filename = filename
         self.expected_md5 = md5
