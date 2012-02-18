@@ -560,18 +560,20 @@ class StrictFileWriter:
 
     A sparse file with the given size will be created, which will
     reduce fragmentation on some platforms (NTFS). """
-    def __init__(self, filename, md5, size):
+    def __init__(self, filename, md5, size, overwrite = False):
         assert is_md5sum(md5)
         assert type(size) == int
         assert size >= 0
         self.filename = filename
         self.expected_md5 = md5
         self.expected_size = size
-        if os.path.exists(filename):
+        if not overwrite and os.path.exists(filename):
             raise ConstraintViolation("Violation of file contract (file already exists): "+str(filename))
         self.f = open(self.filename, "wb")
+        self.f.seek(0)
+        self.f.truncate() # Erase any existing file content
         self.f.seek(size)
-        self.f.truncate()
+        self.f.truncate() # Create a sparse file to reduce file fragmentation on NTFS
         self.f.seek(0)
         self.md5summer = hashlib.md5()
         self.written_bytes = 0
@@ -589,8 +591,14 @@ class StrictFileWriter:
     def close(self):
         if self.written_bytes != self.expected_size:
             raise ConstraintViolation("Violation of file contract (too small) detected: "+str(self.filename))
-        self.f.close()
-        del self.f
+        if self.f:
+            self.f.close()
+            self.f = None
         
+    def __enter__(self):
+        return self
     
-    
+    def __exit__(self, type, value, traceback):
+        self.close()
+
+ 
