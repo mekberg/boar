@@ -693,6 +693,7 @@ class ChecksumProgressPrinter:
         self.last_t = 0
         self.start_t = time.time()
         self.active = False
+        self.last_string = ""
 
     def update(self, total_files, remaining_files, total_bytes, remaining_bytes):
         if total_bytes == 0:
@@ -703,12 +704,14 @@ class ChecksumProgressPrinter:
         if now - self.last_t < 0.5 and remaining_bytes > 0 and remaining_bytes != total_bytes:
             # Rate limit printouts, unless first or last progress call, always print those.
             return
-        elapsed_time = now - self.start_t
+        elapsed_time = now - self.start_t + 1.0
         processed_bytes = total_bytes - remaining_bytes
-        print "Scanning for changes: %s files and %s Mb remaining (%s%% complete, %s Mb/s)               \r" % \
+        print (" " * len(self.last_string)) + "\r",
+        self.last_string = "Scanning: %s files and %s Mb remaining (%s%% complete, %s Mb/s)" % \
             (remaining_files, int(remaining_bytes/2**20), \
              round(100 * (1.0 - 1.0 * remaining_bytes / total_bytes), 1), \
-             round((processed_bytes/2**20)/elapsed_time, 1)),
+             round((processed_bytes/2**20)/elapsed_time, 1))
+        print self.last_string + "\r",
         sys.stdout.flush()
         self.last_t = now
 
