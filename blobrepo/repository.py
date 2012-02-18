@@ -356,11 +356,11 @@ class Repo:
     def get_blob_size(self, sum):
         blobpath = self.get_blob_path(sum)
         if os.path.exists(blobpath):
-            return os.path.getsize(blobpath)
+            return long(os.path.getsize(blobpath))
         recipe = self.get_recipe(sum)
         if not recipe:
             raise ValueError("No such blob or recipe exists: "+sum)
-        return recipe['size']
+        return long(recipe['size'])
 
     def get_blob_reader(self, sum, offset = 0, size = -1):
         if self.has_raw_blob(sum):
