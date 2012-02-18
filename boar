@@ -1,0 +1,797 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# Copyright 2010 Mats Ekberg
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import with_statement
+import sys
+import os
+import time
+import cProfile
+from optparse import OptionParser, SUPPRESS_HELP
+from blobrepo import repository
+from blobrepo.sessions import bloblist_fingerprint
+from boar_exceptions import *
+import client
+
+if sys.version_info >= (2, 6):
+    import json
+else:
+    import simplejson as json
+
+from front import Front, RevisionFront, set_file_contents
+import workdir
+from common import *
+
+BOAR_VERSION = "<UNDEFINED>"
+
+def print_help():
+    print """Boar version %s
+Usage: boar <command> 
+
+Commands:
+ci        Commit changes in a work directory
+clone     Create or update a clone of a repository
+co        Check out files from the repository
+diffrepo  Check if two repositories are identical
+getprop   Get session properties, such as file ignore lists
+info      Show some information about the current workdir
+import    Import the contents of a folder into your repository
+list      Show the contents of a repository or snapshot
+locate    Check if some non-versioned files are already present in a repository
+ls        Show the contents of a specific sub directory of a snapshot
+mkrepo    Create a new repository
+mksession Create a new session
+setprop   Set session properties, such as file ignore lists
+status    List any changes in the current work directory
+update    Update the current work directory from the repository
+verify    Verify the integrity of the repository
+
+For most commands, you can type "boar <command> --help" to get more
+information. The full command reference is available online at
+http://code.google.com/p/boar/wiki/CommandReference
+"""  % BOAR_VERSION
+
+not_a_workdir_msg = "This directory is not a boar workdir"
+
+def list_sessions(front, show_meta = False, verbose = False):
+    sessions_count = {}
+    for sid in front.get_session_ids():
+        session_info = front.get_session_info(sid)
+        name = session_info.get("name", "<no name>")
+        if not show_meta and name.startswith("__"):
+            continue
+        sessions_count[name] = sessions_count.get(name, 0) + 1
+    for name in sessions_count:
+        print name, "(" + str(sessions_count[name]) + " revs)"
+
+def list_revisions(front, session_name):
+    sids = front.get_session_ids(session_name)
+    if not sids:
+        raise UserError("There is no such session: %s" % session_name)
+    for sid in sids:
+        session_info = front.get_session_info(sid)
+        log_message = session_info.get("log_message", "<not specified>")
+        bloblist = front.get_session_bloblist(sid)
+        print "Revision id", str(sid), "(" + session_info['date'] + "),", \
+            len(bloblist), "files,", "Log: %s" % (log_message)
+
+def list_files(front, session_name, revision):
+    try:
+        revision = int(revision)
+    except:
+        raise UserError("Illegal revision string: '%s'" % revision)
+    session_info = front.get_session_info(revision)
+    if session_info == None or session_info.get("name") != session_name:
+        raise UserError("There is no such session/revision")
+    for info in front.get_session_bloblist(revision):
+        print info['filename'], str(info['size']/1024+1) + "k"
+
+def verify_repo(repo, verify_blobs = True):
+    """Returns True if the repo was clean. Otherwise throws an
+    exception."""
+    front = Front(repo)
+    print "Verifying repo", repo
+    session_ids = front.get_session_ids()
+    print "Verifying %s sessions" % (len(session_ids))
+    ok_blobs = set()
+    for i in range(0, len(session_ids)):
+        id = session_ids[i]
+        bloblist = front.get_session_bloblist(id)
+        calc_fingerprint = bloblist_fingerprint(bloblist)
+        assert calc_fingerprint == front.get_session_fingerprint(id), \
+            "Fingerprint didn't match for session "+str(id)
+        for bi in bloblist:
+            assert bi['md5sum'] in ok_blobs or \
+                front.has_blob(bi['md5sum']), "Session %s is missing blob %s" \
+                % (session_ids[i], bi['md5sum'])
+            ok_blobs.add(bi['md5sum'])
+        print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
+    if not verify_blobs:
+        print "Skipping blob verification"
+        return True
+    print "Collecting a list of all blobs..."
+    count = front.init_verify_blobs()
+    print "Verifying %s blobs..." % (count)
+    done = 0
+    while done < count:
+        done += len(front.verify_some_blobs())
+        print done, "of "+str(count)+" blobs verified, "+ \
+            str(round(1.0*done/count * 100,1)) + "% done."
+    return True
+
+
+def cmd_locate(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar locate <session name> [[file/dir] [file/dir] ...]")
+    (options, args) = parser.parse_args(args)
+    if len(args) == 0:
+        raise UserError("You must specify which session to look in.")
+    sessionName = args[0]
+    files_to_look_for = args[1:]
+    if not files_to_look_for:
+        files_to_look_for = ["."]
+    files_to_look_for = [tounicode(os.path.abspath(fn)) for fn in files_to_look_for] 
+    front = init_repo_from_env(cmdline_repo)    
+    revision = front.find_last_revision(sessionName)
+    if not revision:
+        raise UserError("No such session: %s" % sessionName)
+    revision_front = RevisionFront(front, revision)
+
+    missing = []
+    found = 0
+    for root in files_to_look_for:
+        if os.path.isdir(root):
+            tree = get_tree(root, absolute_paths = True)
+            tree.sort()
+        else:
+            tree = [root]
+        for f in tree:
+            csum = md5sum_file(f)
+            session_filenames = list(revision_front.get_filesnames(csum))
+            session_dirs = [os.path.dirname(fn) for fn in session_filenames]
+            if not session_filenames:
+                print "Missing:", f
+                missing.append(f)
+                continue
+            if session_filenames:
+                print "OK:", f
+                found += 1
+                for p in session_filenames:
+                    print "   " + p
+    print "%s files exists in the given session, %s do not." % (found, len(missing))
+    for f in missing:
+        print "Missing:", f
+
+def cmd_status(args):
+    parser = OptionParser(usage="usage: boar status [options]")
+    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
+                      help="Show information about unchanged files")
+    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default=False,
+                      help="Do not print any progress information")
+    (options, args) = parser.parse_args(args)
+    wd = workdir.init_workdir(ucwd)
+    if not wd:
+        raise UserError(not_a_workdir_msg)
+    if args:
+        raise UserError("Too many arguments")
+    wd.use_progress_printer(not options.quiet)
+    unchanged_files, new_files, modified_files, deleted_files, ignored_files \
+        = wd.get_changes(wd.revision)
+    filestats = {}
+
+    for f in new_files:
+        filestats[f] = "A"
+    for f in modified_files:
+        filestats[f] = "M"
+    for f in deleted_files:
+        filestats[f] = "D"
+    if options.verbose:
+        for f in unchanged_files:
+            filestats[f] = " "
+        for f in ignored_files:
+            filestats[f] = "i"
+    filenames = filestats.keys()
+    filenames.sort()
+    for f in filenames:
+        print filestats[f], f
+
+def cmd_info(args):
+    parser = OptionParser(usage="usage: boar info")
+    (options, args) = parser.parse_args(args)
+    if len(args) != 0:
+        raise UserError("Info command does not accept any arguments.")
+
+    wd = workdir.init_workdir(ucwd)
+    if not wd:
+        raise UserError(not_a_workdir_msg)
+
+    if wd:
+        print "Using a work directory:"
+        print "   Workdir root:", wd.root
+        print "   Repository:", wd.repoUrl
+        print "   Session:", wd.sessionName, "/", wd.offset
+        print "   Revision:", wd.revision
+        
+    #env_front = init_repo_from_env()
+
+def cmd_mkrepo(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar mkrepo <new repo path>")
+    (options, args) = parser.parse_args(args)
+    repository.create_repository(args[0])
+
+
+def cmd_list(args):
+    parser = OptionParser(usage="usage: boar list [session name [snapshot id]]")
+    parser.add_option("-m", "--show-meta", dest = "show_meta", action="store_true",
+                      help="Show meta sessions (stores session properties, normally hidden)")
+    (options, args) = parser.parse_args(args)
+    if len(args) > 2:
+        raise UserError("Too many arguments")
+    front = init_repo_from_env(cmdline_repo)
+    if len(args) == 0:
+        list_sessions(front, options.show_meta)
+    elif len(args) == 1:
+        list_revisions(front, args[0])
+    elif len(args) == 2:
+        list_files(front, args[0], args[1])
+    else:
+        raise UserError("Too many arguments")
+
+
+def cmd_ls(args):
+    parser = OptionParser(usage="usage: boar ls <session name>[/path]")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="The revision to list (defaults to latest)")
+    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
+                      help="List more information about the files.")
+    (options, args) = parser.parse_args(args)
+    front = init_repo_from_env(cmdline_repo)
+    if len(args) == 0:
+        list_sessions(front, show_meta = False, verbose = options.verbose)
+        return
+    elif len(args) > 1:
+        raise UserError("Too many arguments")
+    else:
+        session_name, path = split_path_from_start(args[0])
+        path = path.rstrip("/")
+    if options.revision:
+        revision = options.revision
+    else:
+        revision = front.find_last_revision(session_name)
+    session_info = front.get_session_info(revision)
+    if session_info == None or session_info.get("name") != session_name:
+        raise UserError("There is no such session/revision")
+
+    def print_info(info, path, seen_dirs):
+        if path == info['filename']:
+            subpath = os.path.basename(path)
+        else:
+            subpath = strip_path_offset(path, info['filename'])
+        if "/" in subpath:
+            dirname, rest = split_path_from_start(subpath)
+            if dirname not in subdirs:
+                print dirname + "/"
+                subdirs.add(dirname)
+        elif options.verbose:
+            print subpath, str(info['size']/1024+1) + "kB"
+        else:
+            print subpath
+
+    def info_comp(x, y):
+        if x['filename'] > y['filename']:
+            return 1
+        if x['filename'] < y['filename']:
+            return -1
+        return 0
+
+    subdirs = set()
+    anything_printed = False
+    bloblist = front.get_session_bloblist(revision)
+    bloblist.sort(info_comp)
+
+    for info in bloblist:
+        if is_child_path(path, info['filename']) or path == info['filename']:
+            print_info(info, path, subdirs)
+            anything_printed = True
+    if not anything_printed:
+        raise UserError("No such file or directory found in session: "+path)        
+    
+def cmd_verify(args):
+    parser = OptionParser(usage="usage: boar verify [options]")
+    parser.add_option("-q", "--quick", dest = "quick", action="store_true",
+                      help="Only check that the repository looks reasonably ok (skip blob checksumming)")
+    (options, args) = parser.parse_args(args)
+    front = init_repo_from_env(cmdline_repo)
+    verify_repo(front.repo, verify_blobs = not options.quick)
+
+def cmd_repair(args):
+    parser = OptionParser(usage="usage: boar repair [options]")
+    parser.add_option("-f", "--force", dest = "force", action="store_true",
+                      help="Do not scan for errors before repairing")
+    (options, args) = parser.parse_args(args)
+    clean = False
+    repo_url = get_repo_from_env(cmdline_repo)
+    if repo_url.startswith("boar://"):
+        raise UserError("Repairing can only be executed with a local boar repository")
+    if not options.force:
+        try:
+            front = init_repo_from_env(cmdline_repo)
+            print "Verifying repo before repair..."
+            clean = verify_repo(front.repo)
+        except repository.SoftCorruptionError, e:
+            print "Repairable error found:", e
+        except Exception, e:
+            print "Possible hard error found (repairing may not help):", e
+    if clean:
+        print "No errors found. Not repairing anything."
+        return
+    print "Repairing..."
+
+def cmd_import(args):
+    parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
+    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
+                      help=SUPPRESS_HELP)
+    parser.add_option("-m", "--message", dest = "message", metavar = "ARG",
+                      help="An optional log message describing this import")
+    parser.add_option("-n", "--dry-run", dest = "dry_run", action="store_true", default=False,
+                      help="Don't actually do anything. Just show what will happen.")
+    parser.add_option("-w", "--create-workdir", dest = "create_workdir", action="store_true", default=False,
+                      help="Turn the imported directory into a workdir.")
+    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
+                      help="Do not print any progress information")
+    parser.add_option("--ignore-errors", dest = "ignore_errors", action="store_true", default=False,
+                      help="Continue operation even if unreadable files are detected.")
+    base_session = None
+    if len(args) == 0:
+        args = ["--help"]
+    (options, args) = parser.parse_args(args)
+    if len(args) != 2:
+        raise UserError("Wrong number of arguments")
+    path_to_ci = tounicode(os.path.abspath(args[0]))
+    session_name = os.path.basename(args[0]) #TODO: what happens when giving only one arg?
+    session_offset = ""
+    if len(args) > 1:
+        if "/" in args[1]:
+            # TODO: this won't work so well with windows paths
+            session_name, session_offset = args[1].split("/", 1)
+        else:
+            session_name = args[1]
+    session_offset = tounicode(session_offset)
+    if not os.path.exists(path_to_ci):
+        raise UserError("Path to check in does not exist: " + path_to_ci)
+    front = init_repo_from_env(cmdline_repo)
+    if not front.find_last_revision(session_name):
+        raise UserError("No session with the name '%s' exists." % (session_name))
+    wd = workdir.Workdir(front.get_repo_path(), session_name, session_offset, None, path_to_ci)
+    wd.setLogOutput(sys.stdout)
+    wd.use_progress_printer(not options.quiet)
+    log_message = None
+    if options.message:
+        log_message = tounicode(options.message)
+    session_id = wd.checkin(write_meta = options.create_workdir, 
+                            fail_on_modifications = True, add_only = True, dry_run = options.dry_run,
+                            log_message = log_message, ignore_errors = options.ignore_errors)
+    print "Checked in session id", session_id
+
+def cmd_update(args):
+    parser = OptionParser(usage="usage: boar update [options]")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="The revision to update to (defaults to latest)")
+    parser.add_option("-i", "--ignore-errors", action="store_true", dest = "ignore_errors", 
+                      help="Do not abort the update if there are errors while writing.")
+    parser.add_option("-c", "--ignore-changes", action="store_true", dest = "ignore_changes", 
+                      help="Update the workdir revision but do not update the workdir contents.")
+    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
+                      help="Do not print any progress information")
+    (options, args) = parser.parse_args(args)
+    if len(args) != 0:
+        raise UserError("Update does not accept any non-option arguments")
+    wd = workdir.init_workdir(ucwd)
+    if not wd:
+        raise UserError(not_a_workdir_msg)
+    if options.ignore_changes:
+        wd.update_revision(options.revision)
+    else:
+        wd.update(new_revision = options.revision, ignore_errors = options.ignore_errors)
+    print "Workdir now at revision", wd.revision
+
+def cmd_ci(args):
+    parser = OptionParser(usage="usage: boar ci [options]")
+    parser.add_option("-m", "--message", dest = "message", metavar = "ARG",
+                      help="An optional log message describing this commit")
+    parser.add_option("-a", "--add-only", dest = "addonly", action="store_true",
+                      help="Only new files will be committed. Modified and deleted files will be ignored.")
+    parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
+                      help="Do not print any progress information")
+    (options, args) = parser.parse_args(args)
+    if args:
+        raise UserError("Unexpected arguments: "+str(args))
+    wd = workdir.init_workdir(ucwd)
+    if not wd:
+        raise UserError(not_a_workdir_msg)
+    wd.use_progress_printer(not options.quiet)
+    log_message = None
+    if options.message:
+        log_message = tounicode(options.message)    
+    session_id = wd.checkin(add_only = options.addonly, log_message = log_message)
+    print "Checked in session id", session_id
+
+"""
+def cmd_relocate(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar relocate <new repo location>")
+    (options, args) = parser.parse_args(args)
+    if len(args) > 1:
+        raise UserError("Too many arguments")
+    new_location, = args
+    wd = workdir.init_workdir(ucwd)
+    wd.repoUrl = new_location
+    wd.write_metadata()
+"""
+
+def cmd_mksession(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar mksession <new session name>")
+    (options, args) = parser.parse_args(args)
+    if len(args) != 1:
+        raise UserError("mksession requires a single valid session name as argument")
+    session_name, = args
+    front = init_repo_from_env(cmdline_repo)
+    if front.find_last_revision(session_name) != None:
+        raise UserError("There already exists a session named '%s'" % (session_name))
+    front.mksession(session_name)
+    print "New session '%s' was created successfully" % (session_name)
+
+def cmd_co(args): 
+    parser = OptionParser(usage="usage: boar co [options] <session name>[/path/] [workdir name]")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="The revision to check out (default is latest)")
+    (options, args) = parser.parse_args(args)
+    if not args:
+        raise UserError("You must specify a session name with an optional subpath (i.e 'MyPictures/summer2010')")    
+    if len(args) > 2:
+        raise UserError("Too many arguments")
+    co_spec = tounicode(args.pop(0))
+    session_name, throwaway, offset = co_spec.partition("/")
+    workdir_name = co_spec.rstrip("/").split("/").pop()
+    workdir_path = os.path.abspath(workdir_name)
+    if args:
+        workdir_path = tounicode(os.path.abspath(args.pop(0)))
+    if os.path.exists(workdir_path):
+        raise UserError("Workdir path '%s' already exists" % (workdir_path))
+    assert not args # Args parsing complete
+
+    front = init_repo_from_env(cmdline_repo)
+
+    latest_sid = front.find_last_revision(session_name)
+    if not latest_sid:
+        raise UserError("No such session found: %s" % (session_name))
+
+    if options.revision:
+        if options.revision not in front.get_session_ids(session_name):
+            raise UserError("There is no such revision of the given session")
+        sid = options.revision
+    else:
+        sid = latest_sid
+
+    print "Checking out to workdir", workdir_path
+
+    os.mkdir(workdir_path)
+    wd = workdir.Workdir(front.get_repo_path(), session_name, offset, sid, workdir_path)
+    wd.checkout()
+
+def cmd_setprop(args):
+    parser = OptionParser(usage="usage: boar setprop [options] <session name> <property> [new value]")
+    parser.add_option("-f", "--file", action="store", dest = "file", 
+                      help="Read the new property value from the given file")
+    (options, args) = parser.parse_args(args)
+    if len(args) < 2:
+        raise UserError("You must specify a session and a property name")
+    if len(args) > 3:
+        raise UserError("Too many arguments")
+    if not options.file and len(args) != 3:
+        raise UserError("Not enough arguments")
+    if options.file and len(args) > 2:
+        raise UserError("You can not specify both a source file and a new value")
+
+    front = init_repo_from_env(cmdline_repo)
+
+    if options.file:
+        session_name, property_name = args
+        try:        
+            with safe_open(options.file, "r") as f:
+                new_value = f.read().decode("utf-8")
+        except Exception, e:
+            raise UserError("Problems reading file %s: %s" % (options.file, e))
+    else:
+        session_name, property_name, new_value = args
+
+    if property_name == "ignore":
+        valid_lines = [line for line in new_value.splitlines() if line]
+        front.set_session_ignore_list(session_name, valid_lines)
+    elif property_name == "include":
+        valid_lines = [line for line in new_value.splitlines() if line]
+        front.set_session_include_list(session_name, valid_lines)
+    else:
+        raise UserError("Property name must be one of the following: ignore, include")
+
+def cmd_getprop(args):
+    parser = OptionParser(usage="usage: boar getprop [options] <session name> <property>")
+    parser.add_option("-f", "--file", action="store", dest = "file", 
+                      help="Write the property value to the given file instead of printing it")
+    (options, args) = parser.parse_args(args)
+    if len(args) < 2:
+        raise UserError("You must specify a session and a property name")
+    if len(args) > 2:
+        raise UserError("Too many arguments")
+
+    session_name, property_name = args
+    front = init_repo_from_env(cmdline_repo)
+
+    property_value = u""
+    if property_name == "ignore":
+        ignore_list = front.get_session_ignore_list(session_name)
+        for item in ignore_list:
+            property_value += item + os.linesep
+    else:
+        raise UserError("Property name must be one of the following: ignore")
+
+    if options.file:
+        try:        
+            with open(options.file, "w") as f:
+                f.write(property_value)
+        except Exception, e:
+            raise UserError("Problems writing file %s: %s" % (options.file, e))
+    else:
+        print property_value
+
+
+def cmd_find(front, args):
+    cs, sessionName = args
+    sessionId = front.find_last_revision(sessionName)
+    for bi in front.get_session_bloblist(sessionId):
+        if bi['md5sum'] == cs:
+            print bi['filename']
+
+def __clone_once(repo1, repo2):
+    if repo1.isIdentical(repo2):
+        print "Repositories are already identical"
+        return
+    print "Quick verifying source repo"
+    verify_repo(repo1, verify_blobs = False)
+    print "Quick verifying destination repo"
+    verify_repo(repo2, verify_blobs = False)
+    repo2.pullFrom(repo1)
+    print "Performing full verify on cloned repo"
+    verify_repo(repo2, verify_blobs = True)
+    print "Repos are in sync."
+
+def __clone_replicate(repo1, repo2):
+    print "Entering continous replication mode."
+    print "Will replicate all incoming changes on %s to %s" % (repo1, repo2)
+    while True:
+        if repo1.isIdentical(repo2):
+            time.sleep(60)
+            continue
+        print "Incoming changes found. Cloning..."
+        verify_repo(repo1, verify_blobs = False)
+        print "Quick verifying destination repo"
+        verify_repo(repo2, verify_blobs = False)
+        repo2.pullFrom(repo1)
+        print "Performing full verify on cloned repo"
+        verify_repo(repo2, verify_blobs = True)
+        print "Repos are in sync. Waiting for incoming changes..."
+
+def cmd_clone(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar clone <source repo> <destination repo>")
+    parser.add_option("-r", "--replicate", dest = "replicate", action="store_true",
+                      help="Continously replicate any changes from the master to the clone (does not return)")
+    (options, args) = parser.parse_args(args)
+    if len(args) != 2:
+        raise UserError("You must specify one source repository and one destination repository.")
+    repopath1, repopath2 = args
+    if repopath1.startswith("boar://") or repopath2.startswith("boar://"):
+        raise UserError("Cloning requires local repositories")
+    repopath1 = os.path.abspath(repopath1)
+    repopath2 = os.path.abspath(repopath2)
+    repo1 = repository.Repo(repopath1)
+    if not os.path.exists(repopath2):
+        repository.create_repository(repopath2)
+    repo2 = repository.Repo(repopath2)
+    if options.replicate:
+        __clone_replicate(repo1, repo2)
+    else:
+        __clone_once(repo1, repo2)
+
+
+def cmd_diffrepo(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar diffrepo <repo 1> <repo 2>")
+    (options, args) = parser.parse_args(args)
+    if len(args) != 2:
+        raise UserError("You must specify exactly two existing repositories.")
+    repopath1, repopath2 = args
+    if repopath1.startswith("boar://") or repopath2.startswith("boar://"):
+        raise UserError("Cloning requires local repositories")
+    repopath1 = os.path.abspath(repopath1)
+    repopath2 = os.path.abspath(repopath2)
+    repo1 = repository.Repo(repopath1)
+    repo2 = repository.Repo(repopath2)
+    if repo1.isIdentical(repo2):
+        assert repo2.isIdentical(repo1)
+        print "Repositories are identical"
+        return_code = 0
+    else:
+        print "Repositories differ"
+        return_code = 1
+    return return_code
+
+def cmd_export_md5(wd, args):
+    wd.export_md5()
+
+def get_repo_from_env(repo_from_cmdline):
+    repopath = tounicode(os.getenv("REPO_PATH"))
+    if repo_from_cmdline:
+        repopath = repo_from_cmdline
+    assert repopath == None or isinstance(repopath, unicode)
+    if not repopath:
+        raise UserError("You need to specify a repository to operate on. "+\
+                            "Use the --repo option or set $REPO_PATH.")
+    if not repopath.startswith("boar://"):
+        repopath = os.path.abspath(repopath)
+        if not os.path.exists(repopath):
+            raise UserError("Provided repository path does not exist: "+repopath)
+    return repopath
+
+def init_repo_from_env(repo_from_cmdline):
+    repopath = get_repo_from_env(repo_from_cmdline)
+    if repopath.startswith("boar://"):
+        front = client.connect(repopath)
+    else:
+        front = Front(repository.Repo(repopath))
+    assert front
+    return front
+
+def main():
+    if len(sys.argv) <= 1:
+        print_help()
+        return 1
+
+    args = sys.argv[1:]
+    global cmdline_repo
+    cmdline_repo = None
+
+    # --EXEC is only intended for whitebox testing code that needs
+    # invasive access. It should never be used in normal usage.
+    if args[0] == "--EXEC":
+        execfile(args[1])
+        args = args[2:]
+
+    if "--version" in args:
+        if len(args) != 1:
+            raise UserError("The --version option can not be combined with other options")
+        print "Boar, version %s" % BOAR_VERSION
+        print "Copyright (C) 2010-2012 Mats Ekberg."
+        print "Licensed under the Apache License, Version 2.0"
+        return 0
+
+    for i in range(0, len(args)):
+        # This is ridiculous, but I just can't get OptParse to just
+        # look for --repo without exploding on other "unknown options".
+        # TODO: make less silly
+        if args[i] == "--repo":
+            args.pop(i)
+            try:
+                cmdline_repo = args.pop(i) 
+                break
+            except:
+                raise UserError("You must specify a valid repository after --repo")
+        if args[i].startswith("--repo="):
+            _, cmdline_repo = args.pop(i).split("=")
+            break
+
+    if args[0] == "mkrepo":
+        return cmd_mkrepo(args[1:])
+    elif args[0] == "import":
+        return cmd_import(args[1:])
+    elif args[0] == "list":        
+        return cmd_list(args[1:])
+    elif args[0] == "ls":        
+        return cmd_ls(args[1:])
+    elif args[0] == "verify":
+        return cmd_verify(args[1:])
+    elif args[0] == "repair":
+        return cmd_repair(args[1:])
+    elif args[0] == "co":
+        return cmd_co(args[1:])
+    elif args[0] == "status":
+        return cmd_status(args[1:])
+    elif args[0] == "info":
+        return cmd_info(args[1:])
+    elif args[0] == "ci":
+        return cmd_ci(args[1:])
+    elif args[0] == "update":
+        return cmd_update(args[1:])
+    elif args[0] == "find":
+        front = init_repo_from_env(cmdline_repo)
+        return cmd_find(front, args[1:])
+    elif args[0] == "locate":
+        return cmd_locate(args[1:])
+    elif args[0] == "mksession":
+        return cmd_mksession(args[1:])
+    elif args[0] == "exportmd5":
+        wd = workdir.init_workdir(ucwd)
+        return cmd_export_md5(wd, args[1:])
+    elif args[0] == "clone":
+        return cmd_clone(args[1:])
+    elif args[0] == "diffrepo":
+        return cmd_diffrepo(args[1:])
+    elif args[0] == "setprop":
+        return cmd_setprop(args[1:])
+    elif args[0] == "getprop":
+        return cmd_getprop(args[1:])
+    else:
+        print_help()
+        return 1
+
+
+return_code = 0
+
+if __name__ == "__main__":
+    t1 = time.time()
+    sys.stdout = StreamEncoder(sys.stdout)
+    sys.stderr = StreamEncoder(sys.stderr)
+    sys.argv = map(tounicode, sys.argv)
+    global ucwd
+    ucwd = tounicode(os.getcwd())
+    #cProfile.run('main()', "prof.txt")
+    #import pstats
+    #p = pstats.Stats('prof.txt')
+    #p.sort_stats('cum').print_stats(10)
+    try:
+        return_code = main()
+    except KeyboardInterrupt:
+        print
+        print "ERROR: Operation cancelled by user"
+        return_code = 1
+    except UserError as e:
+        print "ERROR:", e.value
+        return_code = 1
+    except repository.MisuseError as e:
+        print "REPO USAGE ERROR:", e
+        return_code = 1
+    except repository.CorruptionError as e:
+        print "REPO CORRUPTION:", e
+        return_code = 13
+    except repository.SoftCorruptionError as e:
+        print "SOFT REPO CORRUPTION:", e
+        print "No need to panic. This means that there are problems in some non-vital cache files in the repository."
+        print "Execute a 'repair' command on the repository to fix this problem."
+        return_code = 7
+ 
+    t2 = time.time()
+    print "Finished in", round(t2-t1, 2), "seconds"
+    #import common
+    #print "Processed", common._file_reader_sum, "bytes"
+    sys.exit(return_code)
