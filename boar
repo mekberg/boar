@@ -618,6 +618,8 @@ def cmd_clone(args):
     if not os.path.exists(repopath2):
         repository.create_repository(repopath2)
     repo2 = repository.Repo(repopath2)
+    if not repo2.isContinuation(repo1):
+        raise UserError("The source repo is not a continuation of the destination repo. Cannot clone.")
     if options.replicate:
         __clone_replicate(repo1, repo2)
     else:
