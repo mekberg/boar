@@ -162,10 +162,14 @@ class Workdir:
         for info in front.get_session_bloblist(self.revision):
             if not is_child_path(self.offset, info['filename']):
                 continue
-            target = strip_path_offset(self.offset, info['filename'])
-            target_path = os.path.join(self.root, target)
-            print >>self.output, target
-            fetch_blob(front, info['md5sum'], target_path, overwrite = False)
+            self.fetch_file(info['filename'], info['md5sum'], overwrite = False)
+
+    def fetch_file(self, session_path, md5, overwrite = False):
+        assert is_child_path(self.offset, session_path)
+        target = strip_path_offset(self.offset, session_path)
+        target_path = os.path.join(self.root, target)
+        print >>self.output, target
+        fetch_blob(self.get_front(), md5, target_path, overwrite = overwrite)        
 
     def update_revision(self, new_revision = None):
         assert new_revision == None or isinstance(new_revision, int)
