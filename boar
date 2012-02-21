@@ -105,17 +105,17 @@ def verify_repo(repo, verify_blobs = True):
     front = Front(repo)
     print "Verifying repo", repo
     session_ids = front.get_session_ids()
-    print "Verifying %s sessions" % (len(session_ids))
+    print "Verifying %s snapshots" % (len(session_ids))
     ok_blobs = set()
     for i in range(0, len(session_ids)):
         id = session_ids[i]
         bloblist = front.get_session_bloblist(id)
         calc_fingerprint = bloblist_fingerprint(bloblist)
         assert calc_fingerprint == front.get_session_fingerprint(id), \
-            "Fingerprint didn't match for session "+str(id)
+            "Fingerprint didn't match for snapshot "+str(id)
         for bi in bloblist:
             assert bi['md5sum'] in ok_blobs or \
-                front.has_blob(bi['md5sum']), "Session %s is missing blob %s" \
+                front.has_blob(bi['md5sum']), "Snapshot %s is missing blob %s" \
                 % (session_ids[i], bi['md5sum'])
             ok_blobs.add(bi['md5sum'])
         print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
@@ -571,6 +571,14 @@ def cmd_find(front, args):
         if bi['md5sum'] == cs:
             print bi['filename']
 
+def cmd_lostfiles(args):
+    wd = workdir.init_workdir(ucwd)
+    if not wd:
+        raise UserError(not_a_workdir_msg)    
+    for bi in wd.get_bloblist(wd.revision):
+        if not wd.exists_in_workdir(bi['md5sum']):
+            print "Missing:", bi['filename'], bi['md5sum']
+
 def __clone_once(repo1, repo2):
     if repo1.isIdentical(repo2):
         print "Repositories are already identical"
@@ -740,6 +748,8 @@ def main():
         return cmd_find(front, args[1:])
     elif args[0] == "locate":
         return cmd_locate(args[1:])
+    elif args[0] == "lostfiles":
+        return cmd_lostfiles(args[1:])
     elif args[0] == "mksession":
         return cmd_mksession(args[1:])
     elif args[0] == "exportmd5":
