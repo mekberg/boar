@@ -572,12 +572,15 @@ def cmd_find(front, args):
             print bi['filename']
 
 def cmd_lostfiles(args):
+    restore_missing = "-u" in args
     wd = workdir.init_workdir(ucwd)
     if not wd:
         raise UserError(not_a_workdir_msg)    
     for bi in wd.get_bloblist(wd.revision):
         if not wd.exists_in_workdir(bi['md5sum']):
             print "Missing:", bi['filename'], bi['md5sum']
+            if restore_missing:
+                wd.fetch_file(bi['filename'], bi['md5sum'], overwrite = False)
 
 def __clone_once(repo1, repo2):
     if repo1.isIdentical(repo2):
