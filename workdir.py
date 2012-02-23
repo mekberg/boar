@@ -299,14 +299,7 @@ class Workdir:
             print >>self.output, "Deleting", f
             front.remove(f)
 
-        session_info = {}
-        session_info["name"] = self.sessionName
-        session_info["timestamp"] = int(time.time())
-        session_info["date"] = time.ctime()
-        if log_message != None:
-            assert type(log_message) == unicode, "Log message must be in unicode"
-            session_info["log_message"] = log_message
-        self.revision = front.commit(session_info)
+        self.revision = front.commit(self.sessionName, log_message)
         return self.revision
 
 
