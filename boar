@@ -85,8 +85,12 @@ def list_revisions(front, session_name):
         session_info = front.get_session_info(sid)
         log_message = session_info.get("log_message", "<not specified>")
         bloblist = front.get_session_bloblist(sid)
+        if front.get_base_id(sid):
+            is_base = "(delta)"
+        else:
+            is_base = "(standalone)"
         print "Revision id", str(sid), "(" + session_info['date'] + "),", \
-            len(bloblist), "files,", "Log: %s" % (log_message)
+            len(bloblist), "files,", is_base, "Log: %s" % (log_message)
 
 def list_files(front, session_name, revision):
     try:
@@ -460,6 +464,18 @@ def cmd_mksession(args):
     front.mksession(session_name)
     print "New session '%s' was created successfully" % (session_name)
 
+def cmd_mkstandalone(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar mkstandalone <session name>")
+    (options, args) = parser.parse_args(args)
+    if len(args) != 1:
+        raise UserError("mkstandalone requires a single existing session name as argument")
+    session_name, = args
+    front = init_repo_from_env(cmdline_repo)
+    sid = front.create_base_snapshot(session_name)
+    print "New standalone snapshot %s created for session %s" % (sid, session_name)
+
 def cmd_co(args): 
     parser = OptionParser(usage="usage: boar co [options] <session name>[/path/] [workdir name]")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
@@ -755,6 +771,8 @@ def main():
         return cmd_lostfiles(args[1:])
     elif args[0] == "mksession":
         return cmd_mksession(args[1:])
+    elif args[0] == "mkstandalone":
+        return cmd_mkstandalone(args[1:])
     elif args[0] == "exportmd5":
         wd = workdir.init_workdir(ucwd)
         return cmd_export_md5(wd, args[1:])
