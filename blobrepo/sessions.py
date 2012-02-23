@@ -294,7 +294,7 @@ class SessionReader:
         self.repo = repo
         assert os.path.exists(self.path), "No such session path:" + self.path
 
-        self.bloblist = None
+        self.raw_bloblist = None
         self.verified = False
 
         path = os.path.join(self.path, "session.json")
@@ -312,14 +312,17 @@ class SessionReader:
     def get_fingerprint(self):
         return self.properties['fingerprint']
 
-    def get_raw_bloblist(self):
-        self.__load_bloblist()
-        return self.bloblist
+    def get_base_id(self):
+        return self.properties.get('base_session', None)
 
-    def __load_bloblist(self):
-        if self.bloblist == None:
+    def get_raw_bloblist(self):
+        self.__load_raw_bloblist()
+        return self.raw_bloblist
+
+    def __load_raw_bloblist(self):
+        if self.raw_bloblist == None:
             path = os.path.join(self.path, "bloblist.json")
-            self.bloblist = read_json(path)
+            self.raw_bloblist = read_json(path)
 
     def get_all_blob_infos(self):
         session_obj = self
@@ -340,5 +343,7 @@ class SessionReader:
                 seen.add(blobinfo['filename'])
                 if blobinfo.get("action", None) == "remove":
                     continue
-                bloblist.append(copy.copy(blobinfo))
+                bloblist.append(dict(blobinfo))
         return bloblist
+
+
