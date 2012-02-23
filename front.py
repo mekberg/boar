@@ -74,8 +74,7 @@ def set_file_contents(front, session_name, filename, contents):
     rev = front.find_last_revision(session_name)
     front.create_session(session_name, base_session = rev)
     add_file_simple(front, filename, contents)
-    front.commit({'name': session_name, 
-                  'date': ctime()})
+    front.commit(session_name)
 
 valid_session_props = set(["ignore", "include"])
 
@@ -150,6 +149,11 @@ class Front:
         properties = session_reader.get_properties()
         return properties['client_data']
 
+    def get_base_id(self, id):
+        session_reader = self.repo.get_session(id)        
+        baseid = session_reader.get_base_id()
+        return baseid
+
     def get_session_fingerprint(self, id):
         session_reader = self.repo.get_session(id)        
         properties = session_reader.get_properties()
@@ -166,18 +170,36 @@ class Front:
         return bloblist
 
     def create_session(self, session_name, base_session = None):
-        """Creates a new snapshot for the given session."""
+        """Creates a new snapshot for the given session. Commit() must
+        be called when the construction of the new snapshot is
+        completed()."""
         assert isinstance(session_name, basestring), session_name
         assert not self.new_session, "There already exists an active new snapshot"
         self.new_session = self.repo.create_session(session_name = session_name, \
                                                         base_session = base_session)
 
+    def create_base_snapshot(self, session_name):
+        assert not self.new_session
+        sid = self.find_last_revision(session_name)
+        old_fingerprint = self.get_session_fingerprint(sid)
+        bloblist = self.get_session_bloblist(sid)
+        sessioninfo = self.get_session_info(sid)
+        self.create_session(session_name)
+        for blobinfo in bloblist:
+            self.add(blobinfo)
+        new_sid = self.commit(session_name, log_message = u"Standalone snapshot")
+        new_fingerprint = self.get_session_fingerprint(new_sid)
+        assert old_fingerprint == new_fingerprint
+        return new_sid
+
     def cancel_snapshot(self):
         if not self.new_session:
             warn("Tried to cancel non-active new snapshot")
             return
-        self.new_session.cancel()
-        self.new_session = None
+        try:
+            self.new_session.cancel()
+        finally:
+            self.new_session = None
 
     def has_snapshot(self, session_name, snapshot_id):
         """ Returns True if there exists a session with the given
@@ -206,41 +228,56 @@ class Front:
         self.new_session.add(metadata)
 
     def remove(self, filename):
-        """ Remove the given file in the workdir from the current
-        session. Requires that the current session has a base
-        session""" 
+        """Mark the given file as deleted in the snapshot currently
+        under construction.""" 
+        assert self.new_session
         self.new_session.remove(filename)
 
-    def mksession(self, sessionName):
-        if sessionName.startswith("__"):
-            raise UserError("Session names must not begin with double underscores.")
-        if "/" in sessionName:
-            raise UserError("Session names must not contain slashes.")
-        if "\\" in sessionName:
-            raise UserError("Session names must not contain backslashes.")
-        return self.__mksession(sessionName)
-
-    def __mksession(self, sessionName):
-        if self.find_last_revision(sessionName) != None:
+    def __mksession(self, session_name):
+        """Create a new session. For internal use. Allows names that
+        starts with "__", but throws UserError for invalid names or if
+        the session already exists. """
+        if self.find_last_revision(session_name) != None:
             raise Exception("There already exists a session named '%s'" % (session_name))
-        self.create_session(session_name = sessionName)
-        session_info = { "name": sessionName,
-                         "timestamp": int(time()),
-                         "date": ctime() }
-        return self.commit(session_info)
+        if "/" in session_name:
+            raise UserError("Session names must not contain slashes.")
+        if "\\" in session_name:
+            raise UserError("Session names must not contain backslashes.")
+        if self.find_last_revision(session_name) != None:
+            raise UserError("There already exists a session named '%s'" % (session_name))
+        self.create_session(session_name = session_name)
+        return self.__commit(session_name)
 
+    def mksession(self, session_name):
+        """Create a new session. Throws a UserError for invalid
+        session names and if the session already exists."""
+        if session_name.startswith("__"):
+            raise UserError("Session names must not begin with double underscores.")
+        return self.__mksession(session_name)
 
-    def commit(self, sessioninfo):
+    def __commit(self, session_name, log_message = None):
+        """Commit a snapshot. For internal use. The session does not
+        need to exist beforehand."""
         assert self.new_session, "There is no active snapshot to commit"
-        assert "name" in sessioninfo
-        id = self.new_session.commit(sessioninfo)
-        self.new_session = None
-        return id
+        session_info = {}
+        session_info["name"] = session_name
+        session_info["timestamp"] = int(time())
+        session_info["date"] = ctime()
+        if log_message:
+            session_info["log_message"] = log_message
+        try:
+            return self.new_session.commit(session_info)
+        finally:
+            self.new_session = None
 
-## Disabled until I can figure out how to make transparent 
-##calls with binary data in jasonrpc
-#    def get_blob(self, sum):
-#        return self.repo.get_blob(sum)
+    def commit(self, session_name, log_message = None):
+        """Commit a snapshot started with create_snapshot(). The session must
+        exist beforehand. Accepts an optional log message."""
+        if log_message != None:
+            assert type(log_message) == unicode, "Log message must be in unicode"
+        if self.find_last_revision(session_name) == None:
+            raise UserError("Session '%s' does not seem to exist in the repo." % (session_name))
+        return self.__commit(session_name, log_message)
 
     def get_blob_size(self, sum):
         return self.repo.get_blob_size(sum)
@@ -377,7 +414,7 @@ class DryRunFront:
     def remove(self, filename):
         pass
 
-    def commit(self, sessioninfo = {}):
+    def commit(self, name, log_message = None):
         return 0
 
     def get_blob_size(self, sum):
@@ -395,7 +432,7 @@ class DryRunFront:
     def find_last_revision(self, session_name):
         return self.realfront.find_last_revision(session_name)
 
-    def mksession(self, sessionName):
+    def mksession(self, session_name):
         pass
 
 for attrib in Front.__dict__:
