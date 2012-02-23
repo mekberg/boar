@@ -409,6 +409,7 @@ def cmd_update(args):
     wd = workdir.init_workdir(ucwd)
     if not wd:
         raise UserError(not_a_workdir_msg)
+    wd.use_progress_printer(not options.quiet)
     if options.ignore_changes:
         wd.update_revision(options.revision)
     else:
