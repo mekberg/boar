@@ -477,6 +477,18 @@ def cmd_mkstandalone(args):
     sid = front.create_base_snapshot(session_name)
     print "New standalone snapshot %s created for session %s" % (sid, session_name)
 
+def cmd_truncate(args):
+    if len(args) == 0:
+        args = ["--help"]
+    parser = OptionParser(usage="usage: boar truncate <session name>")
+    (options, args) = parser.parse_args(args)
+    if len(args) != 1:
+        raise UserError("mkstandalone requires a single existing session name as argument")
+    session_name, = args
+    front = init_repo_from_env(cmdline_repo)
+    sid = front.truncate(session_name)
+    print "Session %s has been truncated to revision %s" % (session_name, sid)    
+
 def cmd_co(args): 
     parser = OptionParser(usage="usage: boar co [options] <session name>[/path/] [workdir name]")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
@@ -774,6 +786,8 @@ def main():
         return cmd_mksession(args[1:])
     elif args[0] == "mkstandalone":
         return cmd_mkstandalone(args[1:])
+    elif args[0] == "truncate":
+        return cmd_truncate(args[1:])
     elif args[0] == "exportmd5":
         wd = workdir.init_workdir(ucwd)
         return cmd_export_md5(wd, args[1:])
