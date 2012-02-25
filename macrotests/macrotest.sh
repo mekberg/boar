@@ -38,8 +38,9 @@ for testcase in $testcases; do
     ( cd $TMPDIR && bash $BOARTESTHOME/${testcase} >$OUTPUT 2>&1 ) ||
 	{
 	    echo
+	    cat $OUTPUT
 	    echo "*** Test case $testcase failed ($TMPDIR)"
-	    echo "To see log: cat $OUTPUT"
+	    echo "*** Output in $OUTPUT"
 	    exit 1
         }
     rm -r $TMPDIR || { echo "Couldn't clean up after test"; exit 1; }
