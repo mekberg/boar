@@ -16,7 +16,7 @@
 
 
 from __future__ import with_statement
-import sys, os, unittest, tempfile
+import sys, os, unittest, tempfile, shutil
 
 TMPDIR=tempfile.gettempdir()
 
@@ -62,6 +62,7 @@ class Test(unittest.TestCase):
         self.assertRaises(AssertionError, boar_common.safe_delete_file, path)
         self.assertTrue(os.path.exists(path))
 
+        shutil.rmtree(tmpdir, ignore_errors = True)
 
         
 
