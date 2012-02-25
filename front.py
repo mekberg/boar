@@ -195,7 +195,8 @@ class Front:
 
     def truncate(self, session_name):
         assert not self.new_session
-        assert self.repo.allows_permanent_erase()
+        if not self.repo.allows_permanent_erase():
+            raise UserError("This repository does not allow destructive changes.")
         new_base = self.create_base_snapshot(session_name)
         sids_to_remove = self.get_session_ids(session_name)
         sids_to_remove.remove(new_base)
