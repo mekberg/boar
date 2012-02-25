@@ -37,7 +37,7 @@ from common import tounicode
 
 class TestBlobRepo(unittest.TestCase):
     def setUp(self):
-        self.repopath = tounicode(tempfile.mktemp(dir=TMPDIR))
+        self.repopath = tounicode(tempfile.mktemp(prefix="boar_test_repository_", dir=TMPDIR))
         repository.create_repository(self.repopath)
         self.repo = repository.Repo(self.repopath)
         self.sessioninfo1 = {"foo": "bar",
@@ -50,8 +50,7 @@ class TestBlobRepo(unittest.TestCase):
                           "md5sum": DATA3_MD5}
 
     def tearDown(self):
-        #shutil.rmtree(self.repopath, ignore_errors = True)
-        pass
+        shutil.rmtree(self.repopath, ignore_errors = True)
 
     def assertListsEqualAsSets(self, lst1, lst2):
         self.assertEqual(len(lst1), len(lst2))
