@@ -1,12 +1,8 @@
 # Test for regression issues with repo and workdir format from
 # boar-daily.11-Jul-2011 (repository format version v0).
 
-TESTHOME=~+/`dirname $0`
-BOAR=$TESTHOME/../boar
-testdir="/tmp/repo-regression$$"
-mkdir $testdir || exit 1
-cd $testdir || exit 1
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+testdir="`pwd`"
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 REPO=$testdir/regression-boar-daily.11-Jul-2011/TESTREPO
 NOPENDINGREPO=$testdir/regression-boar-daily.11-Jul-2011/TESTREPO-nopending # identical, but no pending changes
 cd regression-boar-daily.11-Jul-2011/workdir
@@ -46,13 +42,13 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test explicit version 0 repository"
 # version 0 repos does not normally have a version.txt
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 echo "0" >$REPO/version.txt || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test future version detection"
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 echo "3" >$REPO/version.txt || exit 1
 REPO_PATH=$REPO $BOAR verify && { echo "Future version repo should fail"; exit 1; }
 (REPO_PATH=$REPO $BOAR verify 2>&1 | grep "Repo is from a future boar version.") || \
@@ -61,7 +57,7 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test repository without recovery.txt"
 # version 0 repos does normally have a recovery.txt
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 rm $REPO/recovery.txt || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
 test -e $REPO/recovery.txt || { echo "recovery.txt wasn't recreated"; exit 1; }
@@ -69,7 +65,7 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test repository without recipes dir"
 # version 0 repos may or may not have a recipes dir
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 rmdir $REPO/recipes || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
@@ -78,7 +74,7 @@ echo "--- Test write protected repo WITH pending changes"
 # Boar does not yet handle write-protected repos with pending
 # changes. Make sure that such repos are detected and handled
 # gracefully.
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 test -e $REPO/queue/7 || { echo "Tested repo must contain an uncompleted commit"; exit 1; }
 chmod -R a-w $REPO || exit 1
 REPO_PATH=$REPO $BOAR verify && { echo "Operation expected to fail due to write protect and pending changes."; exit 1; }
@@ -89,7 +85,7 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test write protected repo WITHOUT pending changes"
 # Write protected repos should be accessible read-only
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 rm -r $REPO || exit # Just so that we'll notice if we mix things up with NOPENDINGREPO
 test -e $NOPENDINGREPO/queue/7 && { echo "Tested repo must NOT contain an uncompleted commit"; exit 1; }
 test -e $NOPENDINGREPO/version.txt && { echo "Tested repo must be version 0"; exit 1; }
@@ -103,14 +99,14 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 echo "--- Test simple aborted repo upgrade"
 # Simulate a partially-upgraded v0 repo by removing the version.txt
 # after upgrade and make sure the repo upgrade is resumed successfully
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Upgrade failed"; exit 1; }
 rm regression-boar-daily.11-Jul-2011/TESTREPO/version.txt || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Upgrade resumption failed"; exit 1; }
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test repo cloning"
-tar xzf $TESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 $BOAR clone $REPO clone || { echo "Couldn't clone"; exit 1; }
 
-rm -r $testdir
+
