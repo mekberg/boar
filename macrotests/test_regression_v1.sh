@@ -1,12 +1,8 @@
 # Test for regression issues with repo and workdir format from
 # repository format version v1.
 
-TESTHOME=~+/`dirname $0`
-BOAR=$TESTHOME/../boar
-testdir="/tmp/repo-regression$$"
-mkdir $testdir || exit 1
-cd $testdir || exit 1
-tar xzf $TESTHOME/regression-v1.tar.gz || exit 1
+testdir="`pwd`"
+tar xzf $BOARTESTHOME/regression-v1.tar.gz || exit 1
 REPO=$testdir/regression-v1/TESTREPO
 cd regression-v1/workdir
 
@@ -44,7 +40,7 @@ cd $testdir || exit 1
 rm -r regression-v1 || exit 1
 
 echo "--- Test future version detection"
-tar xzf $TESTHOME/regression-v1.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-v1.tar.gz || exit 1
 echo "3" >$REPO/version.txt || exit 1
 REPO_PATH=$REPO $BOAR verify && { echo "Future version repo should fail"; exit 1; }
 (REPO_PATH=$REPO $BOAR verify 2>&1 | grep "Repo is from a future boar version.") || \
@@ -55,7 +51,7 @@ echo "--- Test write protected repo"
 # Boar does not yet handle write-protected repos with pending
 # changes. Make sure that such repos are detected and handled
 # gracefully.
-tar xzf $TESTHOME/regression-v1.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-v1.tar.gz || exit 1
 test -e $REPO/queue/7 || { echo "Tested repo must contain an uncompleted commit"; exit 1; }
 chmod -R a-w $REPO || exit 1
 REPO_PATH=$REPO $BOAR verify && { echo "Operation expected to fail due to write protect and pending changes."; exit 1; }
@@ -65,7 +61,6 @@ chmod -R u+w $REPO || exit 1
 rm -r regression-v1 || exit 1
 
 echo "--- Test repo cloning"
-tar xzf $TESTHOME/regression-v1.tar.gz || exit 1
+tar xzf $BOARTESTHOME/regression-v1.tar.gz || exit 1
 $BOAR clone $REPO clone || { echo "Couldn't clone"; exit 1; }
 
-rm -r $testdir
