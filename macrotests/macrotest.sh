@@ -23,6 +23,8 @@ export BOAR="$TESTDIR/../boar"
 export BOARMOUNT="$TESTDIR/../boarmount"
 export BOARTESTHOME=`pwd`
 
+export PATH="$BOARTESTHOME:$PATH"
+
 testcases=test_*.sh
 
 if [ "$1" != "" ]; then
