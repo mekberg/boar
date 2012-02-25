@@ -17,16 +17,10 @@
 TESTDIR=~+/`dirname $0`
 cd $TESTDIR
 
-#export PATH="$PATH:$TESTDIR/../"
-unset REPO_PATH
+unset REPO_PATH # Don't harm any innocent repos
+
 export BOAR="$TESTDIR/../boar"
 export BOARMOUNT="$TESTDIR/../boarmount"
-
-echo "Starting"
-
-chmod -R a+w $CLONE 2>/dev/null
-rm -r $REPO test_tree $CLONE 2>/dev/null
-
 export BOARTESTHOME=`pwd`
 
 testcases=test_*.sh
@@ -36,10 +30,19 @@ if [ "$1" != "" ]; then
 fi
 
 for testcase in $testcases; do
-    echo "--- Executing $testcase"
+    echo -n "Executing $testcase..."
     TMPDIR=`mktemp --tmpdir=/tmp -d "boar-${testcase}.XXXXXX"`
-    ( cd $TMPDIR && bash $BOARTESTHOME/${testcase} ) || { echo "*** Test case $testcase failed ($TMPDIR)"; exit 1; }
+    OUTPUT="${TMPDIR}.log"
+    ( cd $TMPDIR && bash $BOARTESTHOME/${testcase} >$OUTPUT 2>&1 ) ||
+	{
+	    echo
+	    echo "*** Test case $testcase failed ($TMPDIR)"
+	    echo "To see log: cat $OUTPUT"
+	    exit 1
+        }
     rm -r $TMPDIR || { echo "Couldn't clean up after test"; exit 1; }
+    rm $OUTPUT || { echo "Couldn't clean up after test"; exit 1; }
+    echo " OK"
 done
 
 echo "All tests completed ok"
