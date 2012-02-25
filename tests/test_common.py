@@ -16,7 +16,7 @@
 
 
 from __future__ import with_statement
-import sys, os, unittest, tempfile
+import sys, os, unittest, tempfile, shutil
 
 TMPDIR=tempfile.gettempdir()
 
@@ -29,6 +29,9 @@ class TestStrictFileWriterBasics(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix='testcommon_', dir=TMPDIR)
         self.filename = os.path.join(self.tmpdir, "test.txt")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors = True)
 
     def testEmptyFile(self):
         sfw = common.StrictFileWriter(self.filename, "d41d8cd98f00b204e9800998ecf8427e", 0)
@@ -57,6 +60,9 @@ class TestStrictFileWriterEnforcement(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp(prefix='testcommon_', dir=TMPDIR)
         self.filename = os.path.join(self.tmpdir, "avocado.txt")
         self.sfw = common.StrictFileWriter(self.filename, "6118fda28fbc20966ba8daafdf836683", len("avocado"))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors = True)
 
     def testExisting(self):
         self.sfw.write("avocado")
