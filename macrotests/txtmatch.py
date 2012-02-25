@@ -39,7 +39,11 @@ def match_line(pattern, text, magic_string):
 
 def txtmatch(pattern_lines, text_lines, magic_string = None):
     if len(pattern_lines) != len(text_lines):
-        print "Different lengths."
+        print "*** Different lengths."
+        for line in pattern_lines:
+            print "expected:", line
+        for line in text_lines:
+            print "actual  :", line
         return False
     for i in range(0, len(pattern_lines)):
         text = text_lines[i]
