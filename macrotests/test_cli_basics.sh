@@ -1,5 +1,6 @@
 echo --- Test basic command line behaviour
 
+$BOAR && { echo "Missing command should give an error code"; exit 1; }
 ($BOAR | grep "Commands:" >/dev/null ) || { echo "Missing subcommand did not yield help"; exit 1; }
 ($BOAR --help | grep "Commands:" >/dev/null ) || { echo "No subcommand did not yield help"; exit 1; }
 $BOAR >/dev/null && { echo "No subcommand should cause an exit error code"; exit 1; }
@@ -13,6 +14,7 @@ for subcmd in ci clone co diffrepo getprop info import list locate ls mkrepo mks
 done
 
 echo --- Test --version flag
+$BOAR --version || { echo "--version should not cause an error code"; exit 1; }
 ($BOAR --version | grep "Copyright" >/dev/null ) || { echo "--version did not give expected output"; exit 1; }
 $BOAR --version mkrepo ErrRepo1 && { echo "--version accepted extra commands"; exit 1; }
 $BOAR mkrepo ErrRepo2 --version && { echo "--version accepted extra commands"; exit 1; }
@@ -23,3 +25,8 @@ mkdir nonrepo
 (cd nonrepo; $BOAR ci 2>&1 | grep "This directory is not a boar workdir" ) || { echo "Non-workdir ci caused unexpected error message"; exit 1; }
 (cd nonrepo; $BOAR info 2>&1 | grep "This directory is not a boar workdir" ) || { echo "Non-workdir info caused unexpected error message"; exit 1; }
 (cd nonrepo; $BOAR update 2>&1 | grep "This directory is not a boar workdir" ) || { echo "Non-workdir update caused unexpected error message"; exit 1; }
+
+echo --- Test that asserts disabling is disabled
+python -O $BOAR --version && exit 1
+
+true
