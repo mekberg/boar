@@ -59,6 +59,8 @@ def main():
     parser.add_option("-c", "--magic", action="store", dest = "magic", type="string", default="!",
                       help="The initial string that indicates that this line is a regular expression. Default is '!'")
     (options, args) = parser.parse_args(args)
+    if len(args) == 1:
+        args.append("-")
     pattern_file, text_file = args
     assert not (pattern_file == "-" and text_file == "-"), "Only one input can be stdin"
     pattern_lines = read_file(pattern_file)
