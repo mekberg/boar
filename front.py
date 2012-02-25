@@ -190,7 +190,18 @@ class Front:
         new_sid = self.commit(session_name, log_message = u"Standalone snapshot")
         new_fingerprint = self.get_session_fingerprint(new_sid)
         assert old_fingerprint == new_fingerprint
+        assert self.repo.get_session(new_sid).get_base_id() == None
         return new_sid
+
+    def truncate(self, session_name):
+        assert not self.new_session
+        assert self.repo.allows_permanent_erase()
+        new_base = self.create_base_snapshot(session_name)
+        sids_to_remove = self.get_session_ids(session_name)
+        sids_to_remove.remove(new_base)
+        assert new_base not in sids_to_remove
+        self.repo.erase_snapshots(sids_to_remove)
+        return new_base
 
     def cancel_snapshot(self):
         if not self.new_session:

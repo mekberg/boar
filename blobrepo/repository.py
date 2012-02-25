@@ -215,6 +215,9 @@ class Repo:
         for directory in REPO_DIRS_V2:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
 
+    def allows_permanent_erase(self):
+        return os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
+
     def __upgrade_repo(self):
         assert not self.readonly, "Repo is read only, cannot upgrade"
         assert self.repo_mutex.locked
@@ -580,6 +583,17 @@ class Repo:
         shutil.move(session_path, queue_dir)
         self.process_queue()
         return session_id
+
+    def erase_snapshots(self, snapshot_ids):
+        if not self.allows_permanent_erase:
+            raise Exception("Not allowed for this repo")
+        snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
+        eraseid = "_".join(map(str,snapshot_ids))
+        trashdir = os.path.join(self.repopath, TMP_DIR, "erase_" + eraseid)
+        print trashdir
+        os.mkdir(trashdir)
+        for rev in snapshot_ids:
+            shutil.move(self.get_session_path(rev), trashdir)
 
     def process_queue(self):
         assert self.repo_mutex.is_locked()
