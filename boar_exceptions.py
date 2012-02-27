@@ -28,3 +28,18 @@ class SessionNotFoundError(UserError):
     access a non-existing session."""
     pass
 
+class MisuseError(Exception):
+    def __init__(self, msg):
+        Exception.__init__(self, msg)
+
+class CorruptionError(Exception):
+    """A serious integrity problem of the repository that cannot be
+    repaired automatically, if at all."""
+    def __init__(self, msg):
+        Exception.__init__(self, msg)
+
+class SoftCorruptionError(Exception):
+    """A harmless integrity problem of the repository requiring
+    rebuilding of derived information."""
+    def __init__(self, msg):
+        Exception.__init__(self, msg)
