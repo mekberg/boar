@@ -31,7 +31,7 @@ from common import *
 from boar_common import *
 from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
-from boar_exceptions import UserError
+from boar_exceptions import *
 
 LATEST_REPO_FORMAT = 2
 VERSION_FILE = "version.txt"
@@ -114,21 +114,7 @@ value "remove". If you simply want to extract as much data as
 possible, these special entries can be ignored.
 """ % LATEST_REPO_FORMAT
 
-class MisuseError(Exception):
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
-
-class CorruptionError(Exception):
-    """A serious integrity problem of the repository that cannot be
-    repaired automatically, if at all."""
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
-
-class SoftCorruptionError(Exception):
-    """A harmless integrity problem of the repository requiring
-    rebuilding of derived information."""
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
+verify_assert()
 
 def misuse_assert(test, errormsg = None):
     if not test:
@@ -590,7 +576,6 @@ class Repo:
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
         eraseid = "_".join(map(str,snapshot_ids))
         trashdir = os.path.join(self.repopath, TMP_DIR, "erase_" + eraseid)
-        print trashdir
         os.mkdir(trashdir)
         for rev in snapshot_ids:
             shutil.move(self.get_session_path(rev), trashdir)
