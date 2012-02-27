@@ -23,6 +23,8 @@ import sys
 import copy
 
 import repository
+from boar_exceptions import *
+
 import shutil
 import hashlib
 import types
@@ -293,12 +295,11 @@ class SessionReader:
         self.path = session_path
         self.repo = repo
         assert os.path.exists(self.path), "No such session path:" + self.path
-
         self.raw_bloblist = None
-        self.verified = False
-
         path = os.path.join(self.path, "session.json")
         self.properties = read_json(path)
+        self.fingerprint_file = os.path.join(self.path, self.get_fingerprint() + ".fingerprint")
+        self.quick_verify()
 
     def get_properties(self):
         """Returns a copy of the session properties."""
@@ -319,12 +320,39 @@ class SessionReader:
         self.__load_raw_bloblist()
         return self.raw_bloblist
 
+    def quick_verify(self):
+        if not os.path.exists(self.path):
+            raise CorruptionError("Session data not found: "+str(self.path))
+        files = os.listdir(self.path)
+        if not (self.get_fingerprint() + ".fingerprint") in files:
+            raise CorruptionError("Session dir missing fingerprint file: "+str(self.path))
+        fingerprint_files = [f for f in files if f.endswith(".fingerprint")]
+        if len(fingerprint_files) != 1:
+            raise CorruptionError("Session dir containing multiple fingerprint files: "+str(self.path))
+        for md5, filename in read_md5sum(os.path.join(self.path, "session.md5")):
+            if md5sum_file(os.path.join(self.path, filename)) != md5:
+                raise CorruptionError("A session file does not match expected checksum: "+str(self.path))
+
+    def quick_quick_verify(self):
+        if not os.path.exists(self.fingerprint_file):
+            # Just a basic check so that we notice lost data quickly
+            # (for instance, a boar server where some snapshots are
+            # deleted by accident)
+            raise CorruptionError("Session data not found: "+str(self.path))
+
     def __load_raw_bloblist(self):
+        self.quick_verify()
         if self.raw_bloblist == None:
             path = os.path.join(self.path, "bloblist.json")
             self.raw_bloblist = read_json(path)
 
     def get_all_blob_infos(self):
+        # Diffucult to optimize this one. Caching the full blob list
+        # is not necessarily faster. Caching the raw bloblists and
+        # reconstructing the full bloblist as needed, seems to be the
+        # way to go until we can cache the bloblist in binary form
+        # somewhere.
+        self.quick_quick_verify()
         session_obj = self
         all_session_objs = [self]
         while True:
