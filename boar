@@ -115,12 +115,11 @@ def verify_repo(repo, verify_blobs = True):
         id = session_ids[i]
         bloblist = front.get_session_bloblist(id)
         calc_fingerprint = bloblist_fingerprint(bloblist)
-        assert calc_fingerprint == front.get_session_fingerprint(id), \
-            "Fingerprint didn't match for snapshot "+str(id)
+        if calc_fingerprint != front.get_session_fingerprint(id):
+            raise CorruptionError("Fingerprint didn't match for snapshot %s" % id)
         for bi in bloblist:
-            assert bi['md5sum'] in ok_blobs or \
-                front.has_blob(bi['md5sum']), "Snapshot %s is missing blob %s" \
-                % (session_ids[i], bi['md5sum'])
+            if not (bi['md5sum'] in ok_blobs or front.has_blob(bi['md5sum'])):
+                raise CorruptionError("Snapshot %s is missing blob %s" % (session_ids[i], bi['md5sum']))
             ok_blobs.add(bi['md5sum'])
         print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
     if not verify_blobs:
