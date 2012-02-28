@@ -293,6 +293,7 @@ class SessionReader:
         assert session_path, "Session path must be given"
         assert isinstance(session_path, unicode)
         self.path = session_path
+        self.dirname = os.path.basename(self.path)
         self.repo = repo
         assert os.path.exists(self.path), "No such session path:" + self.path
         self.raw_bloblist = None
@@ -322,16 +323,18 @@ class SessionReader:
 
     def quick_verify(self):
         if not os.path.exists(self.path):
-            raise CorruptionError("Session data not found: "+str(self.path))
+            raise CorruptionError("Session %s data not found" % self.dirname)
         files = os.listdir(self.path)
-        if not (self.get_fingerprint() + ".fingerprint") in files:
-            raise CorruptionError("Session dir missing fingerprint file: "+str(self.path))
         fingerprint_files = [f for f in files if f.endswith(".fingerprint")]
-        if len(fingerprint_files) != 1:
-            raise CorruptionError("Session dir containing multiple fingerprint files: "+str(self.path))
+        if len(fingerprint_files) > 1:
+            raise CorruptionError("Session %s contains multiple fingerprint files" % self.dirname)
+        if len(fingerprint_files) < 1:
+            raise CorruptionError("Session %s is missing the fingerprint file" % self.dirname)
+        if not (self.get_fingerprint() + ".fingerprint") in files:
+            raise CorruptionError("Session %s has an invalid fingerprint file" % self.dirname)
         for md5, filename in read_md5sum(os.path.join(self.path, "session.md5")):
             if md5sum_file(os.path.join(self.path, filename)) != md5:
-                raise CorruptionError("A session file does not match expected checksum: "+str(self.path))
+                raise CorruptionError("Internal file %s for snapshot %s does not match expected checksum" % (filename, self.dirname))
 
     def quick_quick_verify(self):
         if not os.path.exists(self.fingerprint_file):
@@ -344,7 +347,10 @@ class SessionReader:
         self.quick_verify()
         if self.raw_bloblist == None:
             path = os.path.join(self.path, "bloblist.json")
-            self.raw_bloblist = read_json(path)
+            try:
+                self.raw_bloblist = read_json(path)
+            except ValueError: # JSON decoding error
+                raise CorruptionError("Bloblist for snapshot %s is mangled" % self.dirname)
 
     def get_all_blob_infos(self):
         # Diffucult to optimize this one. Caching the full blob list
@@ -359,7 +365,11 @@ class SessionReader:
             base_session_id = session_obj.properties.get("base_session", None)
             if base_session_id == None:
                 break
-            session_obj = self.repo.get_session(base_session_id)
+            try:
+                session_obj = self.repo.get_session(base_session_id)
+            except MisuseError:
+                # Missing session here means repo corruption
+                raise CorruptionError("Required base snapshot %s is missing" % base_session_id)
             all_session_objs.append(session_obj)
         bloblist = []
         seen = set()

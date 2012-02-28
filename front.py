@@ -322,8 +322,8 @@ class Front:
         count = min(100, len(self.blobs_to_verify))
         for i in range(0, count):
             blob_to_verify = self.blobs_to_verify.pop()
-            result = self.repo.verify_blob(blob_to_verify)
-            assert result, "Blob failed verification:" + blob_to_verify
+            if not self.repo.verify_blob(blob_to_verify):
+                raise CorruptionError("Blob corrupted: " + blob_to_verify)
             succeeded.append(blob_to_verify)
         if not self.blobs_to_verify:
             for scanner in self.repo.scanners:
