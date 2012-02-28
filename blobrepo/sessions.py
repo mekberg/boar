@@ -298,7 +298,10 @@ class SessionReader:
         assert os.path.exists(self.path), "No such session path:" + self.path
         self.raw_bloblist = None
         path = os.path.join(self.path, "session.json")
-        self.properties = read_json(path)
+        try:
+            self.properties = read_json(path)
+        except ValueError:
+            raise CorruptionError("Session data for snapshot %s is mangled" % self.dirname)
         self.fingerprint_file = os.path.join(self.path, self.get_fingerprint() + ".fingerprint")
         self.quick_verify()
 
