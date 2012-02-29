@@ -31,13 +31,13 @@ $BOAR --repo=TESTREPO truncate TestSession >disallowed_msg.txt 2>&1 && {
 txtmatch.py expected_disallowed_msg.txt disallowed_msg.txt || { 
     echo "Protected repo gave unexpected error message"; exit 1; }
 
-cp -a TESTREPO TESTREPO_truncated || exit 1
+cp -an TESTREPO TESTREPO_truncated || exit 1
 touch TESTREPO_truncated/ENABLE_PERMANENT_ERASE || exit 1
 
 
 echo --- Verify that all snapshots exist before truncation
 for snapshot in 1 2 3 4 5 6; do
-    # Make sure that all sessions exist before
+    # Make sure that all expected snapshots exist before truncation
     test -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should exist"; exit 1; }
 done
 test ! -e "TESTREPO_truncated/sessions/7" || { echo "Snapshot should not exist yet"; exit 1; }
@@ -57,7 +57,7 @@ txtmatch.py expected_truncate_msg.txt truncate_msg.txt || {
 
 echo --- Verify that deleted snapshots are gone
 for snapshot in 1   3 4   6; do
-    # Make sure that all sessions exist before
+    # Make sure that only the expected snapshots exist after truncation
     test ! -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should be deleted"; exit 1; }
 done
 test -e "TESTREPO_truncated/sessions/2" || { echo "Untruncated snapshot 2 should exist"; exit 1; }
@@ -70,6 +70,7 @@ cat >expected_list_msg.txt <<EOF
 !Finished in .* seconds
 EOF
 
+echo --- Verify that other session is intact
 $BOAR --repo=TESTREPO_truncated list TestSession >list_msg.txt 2>&1 || exit 1
 txtmatch.py expected_list_msg.txt list_msg.txt
 
@@ -82,6 +83,57 @@ EOF
 $BOAR --repo=TESTREPO_truncated list AnotherTestSession >list_msg2.txt 2>&1 || exit 1
 txtmatch.py expected_list_msg2.txt list_msg2.txt
 
+echo --- Verify truncated repo
 $BOAR --repo=TESTREPO_truncated verify || { echo "Truncated repo failed verify"; exit 1; }
+
+rm -r TESTREPO_truncated # Delete the used repo to avoid using it again by mistake
+
+echo --- Test atomicity
+
+cp -an TESTREPO TESTREPO_atomic || exit 1
+touch TESTREPO_atomic/ENABLE_PERMANENT_ERASE || exit 1
+
+cat >crash_after_create_base_snapshot.py <<"EOF"
+import front
+def modify_fn(fn):
+    def newfn(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            sys.exit(76)
+    return newfn
+
+front.Front.create_base_snapshot = modify_fn(front.Front.create_base_snapshot)
+EOF
+
+set +e
+$BOAR --EXEC crash_after_create_base_snapshot.py --repo=TESTREPO_atomic truncate TestSession
+RET=$?
+if [ $RET -eq 0 ]; then
+    { echo "Truncate operation should crash after base snapshot creation"; exit 1; }
+elif [ $RET -ne 76 ]; then
+    { echo "Truncate operation should crash, but not in this way (was $RET)"; exit 1; }
+else
+    echo Crash ok
+fi
+set -e
+
+for snapshot in 1 2 3 4 5 6; do
+    # Make sure that all snapshots still exist
+    test -e "TESTREPO_atomic/sessions/$snapshot" || { echo "Snapshot $snapshot should exist"; exit 1; }
+done
+
+# Resume truncate by accessing the repo
+$BOAR --repo=TESTREPO_atomic verify || exit 1
+
+for snapshot in 1   3 4   6; do
+    # Make sure that the expected snapshots are gone
+    test ! -e "TESTREPO_atomic/sessions/$snapshot" || { echo "Snapshot $snapshot should be deleted"; exit 1; }
+done
+
+for snapshot in   2     5   7; do
+    test -e "TESTREPO_atomic/sessions/$snapshot" || { echo "Snapshot $snapshot should exist"; exit 1; }
+done
+
 
 exit 0 # All is well
