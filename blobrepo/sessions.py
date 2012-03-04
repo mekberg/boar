@@ -318,7 +318,11 @@ class SessionReader:
         return self.properties['fingerprint']
 
     def get_base_id(self):
-        return self.properties.get('base_session', None)
+        base_session = None
+        if "base_session" in self.properties and self.properties["base_session"] != None:
+            base_session = int(self.properties["base_session"])
+            assert base_session > 0
+        return base_session
 
     def get_raw_bloblist(self):
         self.__load_raw_bloblist()

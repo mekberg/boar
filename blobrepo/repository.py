@@ -570,14 +570,31 @@ class Repo:
         self.process_queue()
         return session_id
 
+    def get_referring_snapshots(self, rev):
+        """ Returns a (possibly empty) list of all the snapshots that
+        has the given rev as base snapshot. """
+        assert isinstance(rev, int)
+        result = []
+        for sid in self.get_all_sessions():
+            snapshot = self.get_session(sid)
+            if snapshot.get_base_id() == rev:
+                result.append(rev)
+        return result
+
     def erase_snapshots(self, snapshot_ids):
         if not self.allows_permanent_erase:
-            raise Exception("Not allowed for this repo")
+            raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
         eraseid = "_".join(map(str,snapshot_ids))
         trashdir = os.path.join(self.repopath, TMP_DIR, "erase_" + eraseid)
         os.mkdir(trashdir)
+        snapshot_ids.sort()
+        snapshot_ids.reverse()
         for rev in snapshot_ids:
+            if self.get_referring_snapshots(rev):
+                raise MisuseError("Erasing rev %s would create orphan snapshots" % rev)
+            if rev in self.session_readers:
+                del self.session_readers[rev]
             shutil.move(self.get_session_path(rev), trashdir)
 
     def process_queue(self):
