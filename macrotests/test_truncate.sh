@@ -27,7 +27,7 @@ ERROR: This repository does not allow destructive changes.
 EOF
 
 $BOAR --repo=TESTREPO truncate TestSession >disallowed_msg.txt 2>&1 && { 
-    echo "Truncation of protected repo should fail"; exit 1; }
+    cat disallowed_msg.txt; echo "Truncation of protected repo should fail"; exit 1; }
 txtmatch.py expected_disallowed_msg.txt disallowed_msg.txt || { 
     echo "Protected repo gave unexpected error message"; exit 1; }
 
@@ -50,7 +50,7 @@ Session TestSession has been truncated to revision 7
 EOF
 
 $BOAR --repo=TESTREPO_truncated truncate TestSession >truncate_msg.txt 2>&1 || { 
-    echo "Truncation failed"; exit 1; }
+    cat truncate_msg.txt; echo "Truncation failed"; exit 1; }
 txtmatch.py expected_truncate_msg.txt truncate_msg.txt || { 
     echo "Protected repo gave unexpected output for truncate"; exit 1; }
 
