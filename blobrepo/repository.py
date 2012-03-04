@@ -582,7 +582,7 @@ class Repo:
         return result
 
     def erase_snapshots(self, snapshot_ids):
-        if not self.allows_permanent_erase:
+        if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
         eraseid = "_".join(map(str,snapshot_ids))
