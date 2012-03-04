@@ -447,13 +447,16 @@ class Repo:
             m = blobpattern.search(f)
             if m:
                 matches.add(m.group(1))
-        blobpattern = re.compile("([0-9a-f]{32})\\.recipe$")
-        tree = get_tree(os.path.join(self.repopath, RECIPES_DIR))
-        for f in tree:
-            m = blobpattern.search(f)
-            if m:
-                matches.add(m.group(1))
         return list(matches)
+
+    def get_orphan_blobs(self):
+        used_blobs = set()
+        for sid in self.get_all_sessions():
+            snapshot = self.get_session(sid)
+            for blobinfo in snapshot.get_raw_bloblist():
+                used_blobs.add(blobinfo['md5sum'])
+        orphans = set(self.get_blob_names()) - used_blobs
+        return orphans
 
     def verify_blob(self, sum):
         recipe = self.get_recipe(sum)
