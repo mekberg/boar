@@ -130,6 +130,18 @@ class TestBlobRepo(unittest.TestCase):
         writer1 = self.repo.create_session(SESSION_NAME)
         self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")        
 
+    def test_find_orphan_blobs(self):
+        committed_info = copy(self.fileinfo1)
+        writer = self.repo.create_session(SESSION_NAME)
+        writer.init_new_blob(DATA1_MD5, len(DATA1))
+        writer.add_blob_data(DATA1_MD5, DATA1)
+        writer.add(committed_info)
+        writer.blob_finished(DATA1_MD5)
+        writer.commit()
+        self.assertEqual(self.repo.get_orphan_blobs(), set())
+        open(os.path.join(self.repo.repopath, "blobs", "55", "551d8cd98f00b204e9800998ecf8427e"), "w")
+        self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
+
     def test_split(self):
         #  0          1        2         3
         #  0123456789012345678901234567890123456789
