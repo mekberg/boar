@@ -22,14 +22,14 @@ import front
 
 class BoarServer:
     def __init__(self, repopath, port = 50000):
+        self.repopath = repopath
         self.server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
                                      jsonrpc.TransportTcpIp(timeout=60.0, 
                                                             addr=("0.0.0.0", port)))
-        repo = repository.Repo(repopath)
-        fr = front.Front(repo)
-        self.server.register_instance(fr, "front")
-
     def serve(self):
+        repo = repository.Repo(self.repopath)
+        fr = front.Front(repo)
+        self.server.register_instance(fr, "front")        
         self.server.serve()
 
 class ThreadedBoarServer(BoarServer):
@@ -37,7 +37,9 @@ class ThreadedBoarServer(BoarServer):
         BoarServer.__init__(self, repopath, port)
 
     def serve(self):
-        self.serverThread = threading.Thread(target = self.server.serve)
+        def super_serve():
+            BoarServer.serve(self)
+        self.serverThread = threading.Thread(target = super_serve)
         self.serverThread.setDaemon(True)
         self.serverThread.start()
 
