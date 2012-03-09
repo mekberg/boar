@@ -180,14 +180,15 @@ class Front:
 
     def create_base_snapshot(self, session_name):
         assert not self.new_session
-        sid = self.find_last_revision(session_name)
-        old_fingerprint = self.get_session_fingerprint(sid)
-        bloblist = self.get_session_bloblist(sid)
-        sessioninfo = self.get_session_info(sid)
-        self.create_session(session_name)
-        for blobinfo in bloblist:
-            self.add(blobinfo)
-        new_sid = self.commit(session_name, log_message = u"Standalone snapshot")
+        with self.repo:
+            sid = self.find_last_revision(session_name)
+            old_fingerprint = self.get_session_fingerprint(sid)
+            bloblist = self.get_session_bloblist(sid)
+            sessioninfo = self.get_session_info(sid)
+            self.create_session(session_name)
+            for blobinfo in bloblist:
+                self.add(blobinfo)
+            new_sid = self.commit(session_name, log_message = u"Standalone snapshot")
         new_fingerprint = self.get_session_fingerprint(new_sid)
         assert old_fingerprint == new_fingerprint
         assert self.repo.get_session(new_sid).get_base_id() == None
@@ -197,11 +198,12 @@ class Front:
         assert not self.new_session
         if not self.repo.allows_permanent_erase():
             raise UserError("This repository does not allow destructive changes.")
-        new_base = self.create_base_snapshot(session_name)
-        sids_to_remove = self.get_session_ids(session_name)
-        sids_to_remove.remove(new_base)
-        assert new_base not in sids_to_remove
-        self.repo.erase_snapshots(sids_to_remove)
+        with self.repo:
+            new_base = self.create_base_snapshot(session_name)
+            sids_to_remove = self.get_session_ids(session_name)
+            sids_to_remove.remove(new_base)
+            assert new_base not in sids_to_remove
+            self.repo.erase_snapshots(sids_to_remove)
         return new_base
 
     def cancel_snapshot(self):
