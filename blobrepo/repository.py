@@ -516,6 +516,12 @@ class Repo:
     def pullFrom(self, other_repo):
         """Updates this repository with changes from the other
         repo. The other repo must be a continuation of this repo."""
+        with self:
+            with other_repo:
+                self.__pullFrom(other_repo)
+
+    def __pullFrom(self, other_repo):
+        assert self.repo_mutex.is_locked()
         misuse_assert(not self.readonly, "Cannot pull changes into a write protected repo")
         print "Pulling updates from %s into %s" % (other_repo, self)
         # Check that other repo is a continuation of this one
