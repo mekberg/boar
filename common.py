@@ -26,6 +26,7 @@ import codecs
 import time
 
 from tempfile import TemporaryFile
+from threading import current_thread
 
 if sys.version_info >= (2, 6):
     import json
@@ -410,6 +411,17 @@ def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     return all_files
 
 class FileMutex:
+    """ The purpose of this class is to protect a shared resource from
+    other processes. It accomplishes this by using the atomicity of
+    the mkdir system call.
+
+    This class allows any number of concurrent locks within a single
+    process, and hence does not work as a mutex in that
+    context. Access from multiple threads is not supported and will
+    cause an assertion error. The mutex must only be accessed from the
+    same thread that created it.
+    """
+
     class MutexLocked(Exception):
         def __init__(self, mutex_name, mutex_file):
             self.mutex_name = mutex_name
@@ -420,25 +432,50 @@ class FileMutex:
             return self.value
 
     def __init__(self, mutex_dir, mutex_name):
+        """The mutex will be created in the mutex_dir directory, which
+        must exist and be writable. The actual name of the mutex will
+        be a hash of the mutex_name, and therefore the mutex_name does
+        not need to be a valid filename.
+        """
         assert isinstance(mutex_name, basestring)
-        self.mutex_dir = mutex_dir
+        self.owner_thread = current_thread()
         self.mutex_name = mutex_name
         self.mutex_id = md5sum(mutex_name.encode("utf-8"))
-        self.mutex_file = os.path.join(self.mutex_dir, "mutex-" + self.mutex_id)
-        self.locked = False
+        self.mutex_file = os.path.join(mutex_dir, "mutex-" + self.mutex_id)
+        self.owner_id = md5sum(str(time.time()) + str(os.getpid())) + "-" + str(os.getpid())
+        self.mutex_owner_file = os.path.join(self.mutex_file, self.owner_id)
+        self.lock_levels = 0
     
     def lock(self):
-        assert not self.locked, "Tried to lock a mutex twice"
+        """ Lock the mutex. Throws a FileMutex.MutexLocked exception
+        if the lock is already locked by another process. If the lock
+        is free, it will be acquired.
+        """
+        assert self.owner_thread.ident == current_thread().ident, "FileMutex does not support threading"
+        if self.is_locked() and os.path.exists(self.mutex_owner_file):
+            # This thread already owns the lock
+            self.lock_levels += 1
+            return
         try:
             os.mkdir(self.mutex_file)
-            self.locked = True
+            with open(self.mutex_owner_file, "w"): pass
+            self.lock_levels += 1
         except OSError, e:
             if e.errno != 17: # errno 17 = directory already exists
                 raise
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
 
     def lock_with_timeout(self, timeout):
-        assert not self.locked, "Tried to lock a mutex twice"
+        """ Lock the mutex. If the lock is already taken by another
+        process, it will be retried until 'timeout' seconds have
+        passed. If the lock is still not available, a
+        FileMutex.MutexLocked exception is thrown.
+        """
+        assert self.owner_thread.ident == current_thread().ident, "FileMutex does not support threading" + str(self.owner_thread.ident) + " " + str(current_thread().ident)
+        if self.is_locked() and os.path.exists(self.mutex_owner_file):
+            # This thread already owns the lock
+            self.lock_levels += 1
+            return
         t0 = time.time()
         while True:
             try:
@@ -448,22 +485,31 @@ class FileMutex:
                 if time.time() - t0 > timeout:
                     break
                 time.sleep(1)
-        if not self.locked:
+        if not self.is_locked():
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
 
     def is_locked(self):
-        return self.locked
+        """ Returns True iff the lock is acquired by the current process. """
+        return self.lock_levels > 0
     
     def release(self):
-        assert self.locked, "Tried to release unlocked mutex"
+        """ Releases the lock. Actual mutex release will happen only
+        when all users in the current process has released their
+        locks. If release is called when the mutex is not locked, an
+        assertion error will be raised."""
+        assert self.owner_thread.ident == current_thread().ident, "FileMutex does not support threading"
+        assert self.is_locked(), "Tried to release unlocked mutex"
+        self.lock_levels -= 1
+        if self.lock_levels > 0:
+            return
         try:
+            os.unlink(self.mutex_owner_file)
             os.rmdir(self.mutex_file)
-            self.locked = False
         except OSError:
             print "Warning: could not remove lockfile", self.mutex_file
 
     def __del__(self):
-        if self.locked:
+        if self.is_locked():
             print "Warning: lockfile %s was forgotten. Cleaning up..." % self.mutex_name
             self.release()
 
