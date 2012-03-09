@@ -143,6 +143,7 @@ def is_recipe_filename(filename):
 def looks_like_repo(repo_path):
     """Superficial check to see if the given path contains anything
     resembling a repo of any version."""
+    assert LATEST_REPO_FORMAT == 2 # Look through this function when updating format
     for dirname in (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR):
         dirpath = os.path.join(repo_path, dirname)
         if not (os.path.exists(dirpath) and os.path.isdir(dirpath)):
@@ -185,6 +186,14 @@ class Repo:
             finally:
                 self.repo_mutex.release()
 
+    def __enter__(self):
+        self.repo_mutex.lock()
+        assert self.repo_mutex.is_locked()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.repo_mutex.release()
+
     def close(self):
         pass
 
@@ -198,6 +207,7 @@ class Repo:
         integrity_assert(repo_version == LATEST_REPO_FORMAT,
                          ("Repo version %s can not be handled by this version of boar" % repo_version))
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
+        assert LATEST_REPO_FORMAT == 2 # Check below must be updated when repo format changes
         for directory in REPO_DIRS_V2:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
 
@@ -206,7 +216,7 @@ class Repo:
 
     def __upgrade_repo(self):
         assert not self.readonly, "Repo is read only, cannot upgrade"
-        assert self.repo_mutex.locked
+        assert self.repo_mutex.is_locked()
         version = self.__get_repo_version()
         if version > LATEST_REPO_FORMAT:
             raise UserError("Repo version %s can not be handled by this version of boar" % version)
@@ -454,7 +464,8 @@ class Repo:
         for sid in self.get_all_sessions():
             snapshot = self.get_session(sid)
             for blobinfo in snapshot.get_raw_bloblist():
-                used_blobs.add(blobinfo['md5sum'])
+                if 'md5sum' in blobinfo:
+                    used_blobs.add(blobinfo['md5sum'])
         orphans = set(self.get_blob_names()) - used_blobs
         return orphans
 
@@ -585,6 +596,7 @@ class Repo:
         return result
 
     def erase_snapshots(self, snapshot_ids):
+        assert self.repo_mutex.is_locked()
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
