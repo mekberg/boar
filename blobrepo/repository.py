@@ -667,7 +667,13 @@ class Repo:
             if is_md5sum(filename):
                 blob_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_blob_path(filename)
-                move_file(blob_to_move, destination_path, mkdirs = True)
+                # Check for existence before moving. Another
+                # snapshot might have checked in this same file
+                # concurrently, see issue 70.
+                if os.path.exists(destination_path):
+                    os.remove(blob_to_move)
+                else:
+                    move_file(blob_to_move, destination_path, mkdirs = True)
             elif is_recipe_filename(filename):
                 recipe_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_recipe_path(filename)
