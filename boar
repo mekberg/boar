@@ -265,6 +265,7 @@ def cmd_ls(args):
                       help="List more information about the files.")
     (options, args) = parser.parse_args(args)
     front = init_repo_from_env(cmdline_repo)
+
     if len(args) == 0:
         list_sessions(front, show_meta = False, verbose = options.verbose)
         return
@@ -273,10 +274,13 @@ def cmd_ls(args):
     else:
         session_name, path = split_path_from_start(args[0])
         path = path.rstrip("/")
+
     if options.revision:
         revision = options.revision
     else:
         revision = front.find_last_revision(session_name)
+        if not revision:
+            raise UserError("There is no session with the name '%s'" % session_name)
     session_info = front.get_session_info(revision)
     if session_info == None or session_info.get("name") != session_name:
         raise UserError("There is no such session/revision")
@@ -312,7 +316,7 @@ def cmd_ls(args):
         if is_child_path(path, info['filename']) or path == info['filename']:
             print_info(info, path, subdirs)
             anything_printed = True
-    if not anything_printed:
+    if path != "" and not anything_printed:
         raise UserError("No such file or directory found in session: "+path)        
     
 def cmd_verify(args):
