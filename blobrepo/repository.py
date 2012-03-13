@@ -33,7 +33,7 @@ from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
 from boar_exceptions import *
 
-LATEST_REPO_FORMAT = 2
+LATEST_REPO_FORMAT = 3
 VERSION_FILE = "version.txt"
 RECOVERYTEXT_FILE = "recovery.txt"
 QUEUE_DIR = "queue"
@@ -43,12 +43,17 @@ RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
 DERIVED_SHA256_DIR = "derived/sha256"
+STATE_DIR = "state"
+STATE_SNAPSHOTS_DIR = "state/existing_snapshots"
+STATE_DELETED_DIR = "state/deleted_snapshots"
 
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
 REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR, DERIVED_SHA256_DIR)
 REPO_DIRS_V2 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
+REPO_DIRS_V3 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR, STATE_DIR, STATE_SNAPSHOTS_DIR, STATE_DELETED_DIR)
 
 recoverytext = """Repository format v%s
 
@@ -127,11 +132,9 @@ def integrity_assert(test, errormsg = None):
 def create_repository(repopath):
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
-    os.mkdir(os.path.join(repopath, QUEUE_DIR))
-    os.mkdir(os.path.join(repopath, BLOB_DIR))
-    os.mkdir(os.path.join(repopath, SESSIONS_DIR))
-    os.mkdir(os.path.join(repopath, TMP_DIR))
-    os.mkdir(os.path.join(repopath, DERIVED_DIR))
+    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, \
+            STATE_DIR, STATE_SNAPSHOTS_DIR, STATE_DELETED_DIR:
+        os.mkdir(os.path.join(repopath, d))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
 
 def is_recipe_filename(filename):
@@ -143,7 +146,7 @@ def is_recipe_filename(filename):
 def looks_like_repo(repo_path):
     """Superficial check to see if the given path contains anything
     resembling a repo of any version."""
-    assert LATEST_REPO_FORMAT == 2 # Look through this function when updating format
+    assert LATEST_REPO_FORMAT == 3 # Look through this function when updating format
     for dirname in (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR):
         dirpath = os.path.join(repo_path, dirname)
         if not (os.path.exists(dirpath) and os.path.isdir(dirpath)):
@@ -207,8 +210,8 @@ class Repo:
         integrity_assert(repo_version == LATEST_REPO_FORMAT,
                          ("Repo version %s can not be handled by this version of boar" % repo_version))
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        assert LATEST_REPO_FORMAT == 2 # Check below must be updated when repo format changes
-        for directory in REPO_DIRS_V2:
+        assert LATEST_REPO_FORMAT == 3 # Check below must be updated when repo format changes
+        for directory in REPO_DIRS_V3:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
 
     def allows_permanent_erase(self):
@@ -227,6 +230,8 @@ class Repo:
             self.__upgrade_repo_v0()
         elif version == 1:
             self.__upgrade_repo_v1()
+        elif version == 2:
+            self.__upgrade_repo_v2()
         else:
             assert False, "Internal error: upgrade procedure missing"
         try:
@@ -293,6 +298,34 @@ class Repo:
             if os.path.exists(sha256_dir):
                 os.rmdir(sha256_dir)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "2")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+
+    def __upgrade_repo_v2(self):
+        """ This upgrade will perform the following actions:
+        * Create directory "state"
+        * Update "version.txt" to 3
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
+        version = self.__get_repo_version()
+        assert version == 2
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        for directory in REPO_DIRS_V2:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                 "Repository says it is v2 format but is missing %s" % directory)
+        try:
+            for d in STATE_DIR, STATE_SNAPSHOTS_DIR, STATE_DELETED_DIR:
+                path = os.path.join(self.repopath, d)
+                if not os.path.exists(path):
+                    os.mkdir(path)
+            for sid in self.get_all_sessions():
+                marker_file = os.path.join(self.repopath, STATE_SNAPSHOTS_DIR, str(sid) + ".json")
+                session = self.get_session(sid)
+                marker_file_content = json.dumps({'snapshot': sid, 'fingerprint': session.get_fingerprint()})
+                replace_file(marker_file, marker_file_content)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "3")
         except OSError, e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
