@@ -49,7 +49,7 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
 echo "--- Test future version detection"
 tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
-echo "3" >$REPO/version.txt || exit 1
+echo "4" >$REPO/version.txt || exit 1
 REPO_PATH=$REPO $BOAR verify && { echo "Future version repo should fail"; exit 1; }
 (REPO_PATH=$REPO $BOAR verify 2>&1 | grep "Repo is from a future boar version.") || \
     { echo "Operation didn't give expected error message"; exit 1; }

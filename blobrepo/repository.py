@@ -174,7 +174,7 @@ class Repo:
         if not isWritable(os.path.join(repopath, TMP_DIR)):
             if self.get_queued_session_id() != None:
                 raise UserError("Repo is write protected with pending changes. Cannot continue.")
-            if self.__get_repo_version() not in (0, 1, 2):
+            if self.__get_repo_version() not in (0, 1, 2, 3):
                 # Intentional explicit counting so that we'll remember to check compatability with future versions
                 raise UserError("Repo is write protected and from an unsupported older version of boar. Cannot continue.")
             notice("Repo is write protected - only read operations can be performed")
@@ -226,14 +226,16 @@ class Repo:
         if version == LATEST_REPO_FORMAT:
             return
         notice("Old repo format detected. Upgrading...")
-        if version == 0:
+        if self.__get_repo_version() == 0:
             self.__upgrade_repo_v0()
-        elif version == 1:
+            assert self.__get_repo_version() == 1
+        if self.__get_repo_version() == 1:
             self.__upgrade_repo_v1()
-        elif version == 2:
+            assert self.__get_repo_version() == 2
+        if self.__get_repo_version() == 2:
             self.__upgrade_repo_v2()
-        else:
-            assert False, "Internal error: upgrade procedure missing"
+            assert self.__get_repo_version() == 3
+
         try:
             self.__quick_check()
         except:
@@ -245,8 +247,9 @@ class Repo:
         performing the following actions:
         
         * Create directory "derived"
+        * Create directory "derived/sha256"
         * Update "recovery.txt"
-        * Create "version.txt"
+        * Create "version.txt" with value 1
         """
         assert not self.readonly, "Repo is read only, cannot upgrade"
         version = self.__get_repo_version()
@@ -264,12 +267,14 @@ class Repo:
                     raise UserError("Problem removing obsolete 'recipes' dir. Make sure it is empty and try again.")
             if not dir_exists(self.repopath + "/" + DERIVED_DIR):
                 os.mkdir(self.repopath + "/" + DERIVED_DIR)
+            if not dir_exists(os.path.join(self.repopath, DERIVED_SHA256_DIR)):
+                os.mkdir(os.path.join(self.repopath, DERIVED_SHA256_DIR))
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
             version_file = os.path.join(self.repopath, VERSION_FILE)
             if os.path.exists(version_file):
                 warn("Version marker should not exist for repo format v0")
                 safe_delete_file(version_file)
-            create_file(version_file, "2")
+            create_file(version_file, "1")
         except OSError, e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
@@ -321,14 +326,28 @@ class Repo:
                 if not os.path.exists(path):
                     os.mkdir(path)
             for sid in self.get_all_sessions():
-                marker_file = os.path.join(self.repopath, STATE_SNAPSHOTS_DIR, str(sid) + ".json")
                 session = self.get_session(sid)
-                marker_file_content = json.dumps({'snapshot': sid, 'fingerprint': session.get_fingerprint()})
-                replace_file(marker_file, marker_file_content)
+                self.__add_snapshot_marker(sid, session.get_fingerprint(), overwrite = True)
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "3")
         except OSError, e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
+
+    def get_path(self, subdir, filename = None):
+        if filename == None:
+            return os.path.join(self.repopath, subdir)
+        return os.path.join(self.repopath, subdir, filename)
+
+    def __add_snapshot_marker(self, snapshot_id, fingerprint, overwrite = False):
+        assert is_md5sum(fingerprint)
+        snapshot_id = int(snapshot_id)
+        marker_file = self.get_path(STATE_SNAPSHOTS_DIR, str(snapshot_id))
+        marker_file_content = json.dumps({'snapshot': snapshot_id, 'fingerprint': fingerprint})
+        if overwrite:
+            replace_file(marker_file, marker_file_content)
+        else:
+            create_file(marker_file, marker_file_content)
         
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
@@ -430,19 +449,56 @@ class Repo:
         assert isinstance(session_id, int)
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
 
+        
     def get_all_sessions(self):
-        session_dirs = []
-        for dir in os.listdir(os.path.join(self.repopath, SESSIONS_DIR)):
-            if re.match("^[0-9]+$", dir) != None:
-                assert int(dir) > 0, "No session 0 allowed in repo"
-                session_dirs.append(int(dir))
-        session_dirs.sort()
-        return session_dirs
+        return get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
+
+    def get_highest_used_revision(self):
+        """ Returns the highest used revision id in the
+        repository. Deleted revisions are counted as well. Note that
+        this method returns 0 in the case that there are no
+        revisions. """
+        existing_sessions = get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
+        deleted_sessions = get_all_ids_in_directory(self.get_path(STATE_DELETED_DIR))
+        marked_sessions = get_all_ids_in_directory(self.get_path(STATE_SNAPSHOTS_DIR))
+        # We could test for consistency here, but if we do that, it
+        # will be hard for verify() to do its job.
+        return max([0] + existing_sessions + deleted_sessions + marked_sessions)
 
     def has_snapshot(self, id):
         assert isinstance(id, int)
         path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
         return os.path.exists(path)
+
+    def verify_snapshot(self, id):
+        if self.__get_repo_version() < 3: # To make it possible to access old read-only repos
+            assert False, "todo: implement verify_snapshot for early versions"
+        print "Verify snapshot", id
+        session_exists = self.has_snapshot(id)
+        session_marker_exists = os.path.exists(self.get_path(STATE_SNAPSHOTS_DIR, str(id)))
+        if session_exists == session_marker_exists:
+            return session_exists
+        elif session_exists:
+            raise CorruptionError("Conflicting snapshot state marker (exists=%s, deleted=%s)" % \
+                                      (session_exists, session_marker_exists))
+        elif session_marker_exists:
+            raise CorruptionError("Snapshot %s is missing" % id)
+        else:
+            assert False, "Should never get here"
+        return session_exists
+
+    def is_deleted(self, snapshot_id):
+        assert isinstance(snapshot_id, int)
+        path = os.path.join(self.repopath, SESSIONS_DIR, str(snapshot_id))
+        session_exists = os.path.exists(path)
+        if self.__get_repo_version() < 3: # To make it possible to access old read-only repos
+            # Allow for possible manual deletions pre-v3
+            return not session_exists
+
+        deleted_marker_exists = os.path.exists(self.get_path(STATE_DELETED_DIR, str(snapshot_id)))
+        if self.has_snapshot(snapshot_id) and deleted_marker_exists:
+            raise CorruptionError("Snapshot %s is marked as deleted but is not" % snapshot_id)
+        return deleted_marker_exists
 
     def get_session(self, id):
         assert id, "Id was: "+ str(id)
@@ -476,10 +532,7 @@ class Repo:
         return None
 
     def find_next_session_id(self):
-        assert os.path.exists(self.repopath)
-        session_dirs = self.get_all_sessions()
-        session_dirs.append(0)
-        return max(session_dirs) + 1            
+        return self.get_highest_used_revision() + 1
 
     def get_blob_names(self):
         blobpattern = re.compile("/([0-9a-f]{32})$")
@@ -713,9 +766,18 @@ class Repo:
                 move_file(recipe_to_move, destination_path, mkdirs = True)
             else:
                 pass # The rest becomes a snapshot definition directory
-
+        self.__add_snapshot_marker(session_id, meta_info['fingerprint'], overwrite = True)
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         shutil.move(queued_item, session_path)
         assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
 
 
+def get_all_ids_in_directory(path):
+    result = []
+    for dir in os.listdir(path):
+        if re.match("^[0-9]+$", dir) != None:
+            assert int(dir) > 0, "No session 0 allowed in repo"
+            result.append(int(dir))
+    assert len(result) == len(set(result))
+    result.sort()
+    return result

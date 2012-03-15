@@ -87,7 +87,7 @@ RUT=REPO_missing_snapshot
 cp -an TESTREPO $RUT || exit 1
 rm -r $RUT/sessions/2 || exit 1
 $BOAR verify --repo=$RUT && { echo "Error in $RUT was not dteected"; exit 1; }
-$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Required base snapshot 2 is missing" || \
+$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Snapshot 2 is missing" || \
     { echo "$RUT gave unexpected error message"; exit 1; }
 }
 
@@ -119,6 +119,16 @@ echo "Certainly not a valid json document" > $RUT/sessions/2/session.json || exi
 (cd $RUT/sessions/2 && md5sum *.json >session.md5) || exit 1
 $BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
 $BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Session data for snapshot 2 is mangled" || \
+    { echo "$RUT gave unexpected error message"; exit 1; }
+}
+
+{ # Test missing head snapshot (testing the snapshot state markers)
+RUT=REPO_missing_head
+cp -an TESTREPO $RUT || exit 1
+test -e $RUT/sessions/4 -a ! -e $RUT/sessions/5 || { echo "Test assumes the last snapshot is number 4"; exit 1; }
+rm -r $RUT/sessions/4 || exit 1
+$BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
+$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Snapshot 4 is missing" || \
     { echo "$RUT gave unexpected error message"; exit 1; }
 }
 
