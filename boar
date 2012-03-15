@@ -108,6 +108,8 @@ def verify_repo(repo, verify_blobs = True):
     exception."""
     front = Front(repo)
     print "Verifying repo", repo
+    for rev in range(1, repo.get_highest_used_revision() + 1):
+        repo.verify_snapshot(rev)
     session_ids = front.get_session_ids()
     print "Verifying %s snapshots" % (len(session_ids))
     ok_blobs = set()
