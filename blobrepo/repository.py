@@ -325,9 +325,15 @@ class Repo:
                 path = os.path.join(self.repopath, d)
                 if not os.path.exists(path):
                     os.mkdir(path)
-            for sid in self.get_all_sessions():
-                session = self.get_session(sid)
-                self.__add_snapshot_marker(sid, session.get_fingerprint(), overwrite = True)
+            all_snapshots = self.get_all_sessions()
+            all_expected_snapshots = range(1, max(all_snapshots)+1)
+            for sid in all_expected_snapshots:
+                if sid in all_snapshots:
+                    session = self.get_session(sid)
+                    self.__add_snapshot_marker(sid, session.get_fingerprint(), overwrite = True)
+                else:
+                    self.__add_snapshot_marker(sid, "0"*32, overwrite = True)
+                    self.__mark_snapshot_deleted(sid)
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "3")
         except OSError, e:
@@ -348,6 +354,15 @@ class Repo:
             replace_file(marker_file, marker_file_content)
         else:
             create_file(marker_file, marker_file_content)
+
+    def __mark_snapshot_deleted(self, snapshot_id):
+        marker_file = self.get_path(STATE_SNAPSHOTS_DIR, str(snapshot_id))
+        assert os.path.exists(marker_file)
+        destination = self.get_path(STATE_DELETED_DIR, str(snapshot_id))
+        if os.path.exists(destination):
+            os.remove(marker_file)
+        else:
+            shutil.move(marker_file, destination)
         
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
@@ -459,6 +474,8 @@ class Repo:
         this method returns 0 in the case that there are no
         revisions. """
         existing_sessions = get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
+        if self.__get_repo_version() < 3:
+            return max([0] + existing_sessions)
         deleted_sessions = get_all_ids_in_directory(self.get_path(STATE_DELETED_DIR))
         marked_sessions = get_all_ids_in_directory(self.get_path(STATE_SNAPSHOTS_DIR))
         # We could test for consistency here, but if we do that, it
@@ -472,22 +489,34 @@ class Repo:
 
     def verify_snapshot(self, id):
         if self.__get_repo_version() < 3: # To make it possible to access old read-only repos
-            assert False, "todo: implement verify_snapshot for early versions"
+            warn("todo: implement verify_snapshot for early versions")
+            return True
         print "Verify snapshot", id
         session_exists = self.has_snapshot(id)
         session_marker_exists = os.path.exists(self.get_path(STATE_SNAPSHOTS_DIR, str(id)))
-        if session_exists == session_marker_exists:
-            return session_exists
-        elif session_exists:
-            raise CorruptionError("Conflicting snapshot state marker (exists=%s, deleted=%s)" % \
-                                      (session_exists, session_marker_exists))
-        elif session_marker_exists:
+        deletion_marker_exists = os.path.exists(self.get_path(STATE_DELETED_DIR, str(id)))
+        state = session_exists, session_marker_exists, deletion_marker_exists
+        if session_exists and session_marker_exists and not deletion_marker_exists:
+            return # All is well
+        elif not session_exists and not session_marker_exists and deletion_marker_exists:
+            return # All is well - snapshot legally deleted
+        elif not session_exists and not session_marker_exists and not deletion_marker_exists:
+            raise CorruptionError("Snapshot %s is missing and does not have a state marker" % id)
+        elif not session_marker_exists and not deletion_marker_exists:
+            raise CorruptionError("Snapshot %s is missing a state marker" % id)
+        elif session_marker_exists and not session_exists:
             raise CorruptionError("Snapshot %s is missing" % id)
-        else:
-            assert False, "Should never get here"
-        return session_exists
+        elif session_marker_exists and deletion_marker_exists:
+            raise CorruptionError("Snapshot %s has conflicting state markers" % id)
+        elif session_exists and not session_marker_exists and deletion_marker_exists:
+            raise CorruptionError("Snapshot %s is marked as deleted but still exists" % id)
+        # Should never get here. All possible combinations handled above.
+        raise CorruptionError("Illegal snapshot state: snapshot_exists=%s, marker=%s, marker_deleted=%s" % \
+                                  (session_exists, session_marker_exists, deletion_marker_exists)
+    
 
     def is_deleted(self, snapshot_id):
+        assert False
         assert isinstance(snapshot_id, int)
         path = os.path.join(self.repopath, SESSIONS_DIR, str(snapshot_id))
         session_exists = os.path.exists(path)
@@ -703,6 +732,8 @@ class Repo:
             if rev in self.session_readers:
                 del self.session_readers[rev]
             shutil.move(self.get_session_path(rev), trashdir)
+            #warn("TODO: make atomic")
+            shutil.move(self.get_path(STATE_SNAPSHOTS_DIR, str(rev)), self.get_path(STATE_DELETED_DIR))
 
     def process_queue(self):
         assert self.repo_mutex.is_locked()
