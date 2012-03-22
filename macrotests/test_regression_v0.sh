@@ -108,5 +108,11 @@ rm -r regression-boar-daily.11-Jul-2011 || exit 1
 echo "--- Test repo cloning"
 tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 $BOAR clone $REPO clone || { echo "Couldn't clone"; exit 1; }
+rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
-
+echo "--- Test legal missing snapshot"
+# Test the case that the user has manually removed a non-base
+# snapshot. This should be legal.
+tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
+rm -r $REPO/sessions/4 || exit 1
+REPO_PATH=$REPO $BOAR verify || { echo "Upgrade of repo with legal missing snapshot failed"; exit 1; }
