@@ -215,10 +215,14 @@ class Front:
         finally:
             self.new_session = None
 
-    def has_snapshot(self, snapshot_id):
-        """ Returns True if there exists a snapshot with the given
-        id """
-        return self.repo.has_snapshot(snapshot_id)
+    def has_snapshot(self, session_name, snapshot_id):
+        """ Returns True if there exists a session with the given
+        session_name and snapshot id """
+        if snapshot_id not in self.get_session_ids():
+            return False
+        session_info = self.get_session_info(snapshot_id)
+        name = session_info.get("name", None)
+        return name == session_name
 
     def get_highest_used_revision(self):
         return self.repo.get_highest_used_revision()
