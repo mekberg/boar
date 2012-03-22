@@ -26,6 +26,7 @@ import re
 import shutil
 import sessions
 import sys
+import tempfile
 
 from common import *
 from boar_common import *
@@ -708,24 +709,40 @@ class Repo:
                 result.append(rev)
         return result
 
-    def erase_snapshots(self, snapshot_ids):
+    def __erase_snapshots(self, snapshot_ids):
         assert self.repo_mutex.is_locked()
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
         eraseid = "_".join(map(str,snapshot_ids))
-        trashdir = os.path.join(self.repopath, TMP_DIR, "erase_" + eraseid)
-        os.mkdir(trashdir)
+        trashdir = tempfile.mkdtemp(prefix = "erased_", dir = self.get_path(TMP_DIR))
         snapshot_ids.sort()
         snapshot_ids.reverse()
+
+        for rev in snapshot_ids:
+            # Make a pre-check that the markers are reasonably ok before we start deleting
+            assert os.path.exists(self.get_path(STATE_SNAPSHOTS_DIR, str(rev))) or \
+                os.path.exists(self.get_path(STATE_DELETED_DIR), str(rev))
+
         for rev in snapshot_ids:
             if self.get_referring_snapshots(rev):
                 raise MisuseError("Erasing rev %s would create orphan snapshots" % rev)
             if rev in self.session_readers:
                 del self.session_readers[rev]
-            shutil.move(self.get_session_path(rev), trashdir)
-            #warn("TODO: make atomic")
-            shutil.move(self.get_path(STATE_SNAPSHOTS_DIR, str(rev)), self.get_path(STATE_DELETED_DIR))
+
+            session_path = self.get_session_path(rev)
+            marker_path = self.get_path(STATE_SNAPSHOTS_DIR, str(rev))
+            delmarker_path = self.get_path(STATE_DELETED_DIR, str(rev))
+
+            # Carefully here... We must allow for a resumed operation
+            if os.path.exists(self.get_session_path(rev)):
+                # Nothing is done yet. Make sure the marker is intact as well
+                assert os.path.exists(marker_path)
+                shutil.move(session_path, trashdir)
+            if os.path.exists(marker_path):
+                shutil.move(marker_path, delmarker_path)
+            else:
+                assert os.path.exists(delmarker_path)            
 
     def process_queue(self):
         assert self.repo_mutex.is_locked()
@@ -748,6 +765,8 @@ class Repo:
         meta_info = read_json(os.path.join(queued_item, "session.json"))
         
         contents = os.listdir(queued_item)
+        snapshots_to_delete = []
+
         # Check that there are no unexpected files in the snapshot,
         # and perform a simple test for json well-formedness
         for filename in contents:
@@ -762,6 +781,9 @@ class Repo:
                 continue
             if is_recipe_filename(filename):
                 read_json(os.path.join(queued_item, filename)) # Check if malformed
+                continue
+            if filename == "delete.json":
+                snapshots_to_delete = read_json(os.path.join(queued_item, "delete.json"))
                 continue
             assert False, "Unexpected file in new session:" + filename
 
@@ -789,6 +811,14 @@ class Repo:
                 move_file(recipe_to_move, destination_path, mkdirs = True)
             else:
                 pass # The rest becomes a snapshot definition directory
+
+        if snapshots_to_delete:
+            # Intentionally redundant check for erase enable flag
+            assert os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
+            self.__erase_snapshots(snapshots_to_delete)
+        if os.path.exists(os.path.join(queued_item, "delete.json")):
+            safe_delete_file(os.path.join(queued_item, "delete.json"))
+
         self.__add_snapshot_marker(session_id, meta_info['fingerprint'], overwrite = True)
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         shutil.move(queued_item, session_path)
