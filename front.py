@@ -178,7 +178,7 @@ class Front:
         self.new_session = self.repo.create_session(session_name = session_name, \
                                                         base_session = base_session)
 
-    def create_base_snapshot(self, session_name):
+    def create_base_snapshot(self, session_name, truncate = False):
         assert not self.new_session
         with self.repo:
             sid = self.find_last_revision(session_name)
@@ -188,6 +188,11 @@ class Front:
             self.create_session(session_name)
             for blobinfo in bloblist:
                 self.add(blobinfo)
+            if truncate:
+                if not self.repo.allows_permanent_erase():
+                    raise UserError("This repository does not allow destructive changes.")
+                snapshots_to_erase = self.get_session_ids(session_name)
+                self.new_session.erase_snapshots(snapshots_to_erase)
             new_sid = self.commit(session_name, log_message = u"Standalone snapshot")
         new_fingerprint = self.get_session_fingerprint(new_sid)
         assert old_fingerprint == new_fingerprint
@@ -195,16 +200,7 @@ class Front:
         return new_sid
 
     def truncate(self, session_name):
-        assert not self.new_session
-        if not self.repo.allows_permanent_erase():
-            raise UserError("This repository does not allow destructive changes.")
-        with self.repo:
-            new_base = self.create_base_snapshot(session_name)
-            sids_to_remove = self.get_session_ids(session_name)
-            sids_to_remove.remove(new_base)
-            assert new_base not in sids_to_remove
-            self.repo.erase_snapshots(sids_to_remove)
-        return new_base
+        return self.create_base_snapshot(session_name, truncate = True)
 
     def cancel_snapshot(self):
         if not self.new_session:

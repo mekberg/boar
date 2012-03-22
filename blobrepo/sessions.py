@@ -120,6 +120,11 @@ class SessionWriter:
         self.dead = True
         self.session_mutex.release()
 
+    def erase_snapshots(self, snapshot_ids):
+        for sid in snapshot_ids:
+            assert type(sid) == int and sid > 0
+        write_json(os.path.join(self.session_path, "delete.json"), snapshot_ids)
+
     def init_new_blob(self, blob_md5, blob_size):
         assert is_md5sum(blob_md5)
         assert not self.repo.has_blob(blob_md5), "blob already exists"
