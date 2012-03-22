@@ -500,19 +500,11 @@ class Repo:
             return # All is well
         elif not session_exists and not session_marker_exists and deletion_marker_exists:
             return # All is well - snapshot legally deleted
-        elif not session_exists and not session_marker_exists and not deletion_marker_exists:
-            raise CorruptionError("Snapshot %s is missing and does not have a state marker" % id)
-        elif not session_marker_exists and not deletion_marker_exists:
-            raise CorruptionError("Snapshot %s is missing a state marker" % id)
         elif session_marker_exists and not session_exists:
             raise CorruptionError("Snapshot %s is missing" % id)
-        elif session_marker_exists and deletion_marker_exists:
-            raise CorruptionError("Snapshot %s has conflicting state markers" % id)
-        elif session_exists and not session_marker_exists and deletion_marker_exists:
-            raise CorruptionError("Snapshot %s is marked as deleted but still exists" % id)
-        # Should never get here. All possible combinations handled above.
-        raise CorruptionError("Illegal snapshot state: snapshot_exists=%s, marker=%s, marker_deleted=%s" % \
-                                  (session_exists, session_marker_exists, deletion_marker_exists)
+        # All the other possiblities are illegal
+        raise CorruptionError("Illegal state for snapshot %s (exists=%s, marker=%s, del_marker=%s)" % \
+                                  (id, session_exists, session_marker_exists, deletion_marker_exists))
     
 
     def is_deleted(self, snapshot_id):
