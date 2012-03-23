@@ -722,7 +722,7 @@ class Repo:
         for rev in snapshot_ids:
             # Make a pre-check that the markers are reasonably ok before we start deleting
             assert os.path.exists(self.get_path(STATE_SNAPSHOTS_DIR, str(rev))) or \
-                os.path.exists(self.get_path(STATE_DELETED_DIR), str(rev))
+                os.path.exists(self.get_path(STATE_DELETED_DIR, str(rev)))
 
         for rev in snapshot_ids:
             if self.get_referring_snapshots(rev):
@@ -739,6 +739,7 @@ class Repo:
                 # Nothing is done yet. Make sure the marker is intact as well
                 assert os.path.exists(marker_path)
                 shutil.move(session_path, trashdir)
+            _snapshot_delete_test_hook(rev)
             if os.path.exists(marker_path):
                 shutil.move(marker_path, delmarker_path)
             else:
@@ -834,3 +835,8 @@ def get_all_ids_in_directory(path):
     assert len(result) == len(set(result))
     result.sort()
     return result
+
+def _snapshot_delete_test_hook(rev):
+    """ This method is intended to be replaced during testing to
+    simulate an interrupted operation."""
+    pass
