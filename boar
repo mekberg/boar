@@ -92,6 +92,18 @@ def list_revisions(front, session_name):
         print "Revision id", str(sid), "(" + session_info['date'] + "),", \
             len(bloblist), "files,", is_base, "Log: %s" % (log_message)
 
+def dump_all_revisions(front):
+    sids = front.get_session_ids()
+    deleted_sids = front.get_deleted_snapshots()
+    for sid in sids:
+        session_info = front.get_session_info(sid)
+        log_message = session_info.get("log_message", None)
+        name = session_info.get("name", None)
+        base = front.get_base_id(sid)
+        deleted = sid in deleted_sids
+        print json.dumps((sid, base, name, front.get_session_fingerprint(sid), log_message, deleted))
+        #print json.dumps({"snapshot":sid, "base":base, "fingerprint":front.get_session_fingerprint(sid), "log":log_message, "deleted": sid in deleted_sids})
+
 def list_files(front, session_name, revision):
     try:
         revision = int(revision)
@@ -242,14 +254,20 @@ def cmd_mkrepo(args):
 
 
 def cmd_list(args):
-    parser = OptionParser(usage="usage: boar list [session name [snapshot id]]")
+    parser = OptionParser(usage="usage: boar list [-a|--list-all] [session name [snapshot id]]")
     parser.add_option("-m", "--show-meta", dest = "show_meta", action="store_true",
                       help="Show meta sessions (stores session properties, normally hidden)")
+    parser.add_option("-d", "--dump", dest = "dump", action="store_true",
+                      help="Dump a machine readable listing of all revisions and their properties")
     (options, args) = parser.parse_args(args)
     if len(args) > 2:
         raise UserError("Too many arguments")
     front = init_repo_from_env(cmdline_repo)
-    if len(args) == 0:
+    if options.dump:
+        if args:
+            raise UserError("a dump can not be combined with other arguments")
+        dump_all_revisions(front)
+    elif len(args) == 0:
         list_sessions(front, options.show_meta)
     elif len(args) == 1:
         list_revisions(front, args[0])
