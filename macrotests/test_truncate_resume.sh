@@ -34,7 +34,7 @@ for snapshot in 1 2 3 4 5 6 7; do
 done
 test ! -e "TESTREPO_truncated/sessions/8" || { echo "Snapshot should not exist yet"; exit 1; }
 
-cat >pause_at_commit.py <<"EOF"
+cat >snapshot_delete_test_hook.py <<"EOF"
 def kill_at_4(rev):
     if rev != 4:
         return
@@ -43,35 +43,32 @@ def kill_at_4(rev):
 repository._snapshot_delete_test_hook = kill_at_4
 EOF
 
-$BOAR --EXEC pause_at_commit.py --repo=TESTREPO_truncated truncate TestSession
+$BOAR --EXEC snapshot_delete_test_hook.py --repo=TESTREPO_truncated truncate TestSession
 
 if [ $? -ne 123 ]; then
     echo "Truncation didn't return expected error code"
     exit 1
 fi
 
-for snapshot in 4 6 8; do
-    # These snapshots should be gone by now (no 4 halfway)
-    test ! -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should be deleted"; exit 1; }
-done
+grep __deleted TESTREPO_truncated/sessions/3/session.json && { echo "Repo should only be partially truncated"; exit 1; }
+grep __deleted TESTREPO_truncated/sessions/6/session.json || { echo "Repo should be partially truncated"; exit 1; }
 
-for snapshot in 1 2 3   5 7; do
-    # These snapshots should still exist since operation was aborted
-    # before 1 2 3 was deleted and the new base snapshot could be
-    # created.
-    test -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should still exist"; exit 1; }
-done
+cat >expected.txt <<EOF
+[1, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
+[2, null, "AnotherTestSession", "d41d8cd98f00b204e9800998ecf8427e", null, false]
+[3, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
+[4, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
+[5, 2, "AnotherTestSession", "0e997688909a2d27886dfdeaa627b560", null, false]
+[6, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
+[7, 5, "AnotherTestSession", "31a44468d11cc4924b15c5d106410a63", null, false]
+[8, null, "TestSession", "ed6b2754f96ba1e3c1cf10ab3e492b03", "Standalone snapshot", false]
+!Finished in .* seconds
+EOF
+
+$BOAR --repo=TESTREPO_truncated list -d >output.txt 2>&1 || exit 1
+txtmatch.py expected.txt output.txt || exit 1
 
 # This verify will access the repo and process the queue before verification
 $BOAR --repo=TESTREPO_truncated verify || { echo "Truncated repo failed verify"; exit 1; }
-
-for snapshot in 1 3 4 6 9; do
-    test ! -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should not exist"; exit 1; }
-done
-
-for snapshot in 5 7 8; do
-    test -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should still exist"; exit 1; }
-done
-
 
 exit 0 # All is well
