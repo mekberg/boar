@@ -142,27 +142,5 @@ class TestBlobRepo(unittest.TestCase):
         open(os.path.join(self.repo.repopath, "blobs", "55", "551d8cd98f00b204e9800998ecf8427e"), "w")
         self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
 
-    def test_split(self):
-        #  0          1        2         3
-        #  0123456789012345678901234567890123456789
-        # "tjosan hejsan tjosan hejsan hejsan"
-        # cafa2ed1e085869b3bfe9e43b60e7a5a
-        writer = self.repo.create_session(SESSION_NAME)
-        writer.init_new_blob(DATA3_MD5, len(DATA3))
-        writer.add_blob_data(DATA3_MD5, DATA3)
-        writer.add(self.fileinfo3)
-        writer.blob_finished(DATA3_MD5)
-        writer.commit()
-        writer = self.repo.create_session(SESSION_NAME)
-        writer.split_blob("cafa2ed1e085869b3bfe9e43b60e7a5a", [14,28])
-        split_snapshot = writer.commit()
-        redundant = list(self.repo.find_redundant_raw_blobs())
-        self.assertEquals(redundant, ["cafa2ed1e085869b3bfe9e43b60e7a5a"])
-        os.remove(self.repo.get_blob_path("cafa2ed1e085869b3bfe9e43b60e7a5a"))
-        reader = self.repo.get_session(split_snapshot)
-        blobinfos = reader.get_all_blob_infos()
-        for bi in blobinfos:
-            self.assertTrue(self.repo.verify_blob(bi['md5sum']))
-
 if __name__ == '__main__':
     unittest.main()

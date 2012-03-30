@@ -469,6 +469,19 @@ class Repo:
     def get_all_sessions(self):
         return get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
 
+    def get_deleted_snapshots(self):
+        explicitly_deleted = set(get_all_ids_in_directory(self.get_path(STATE_DELETED_DIR)))
+        existing_snapshots = set(self.get_all_sessions())
+        if not explicitly_deleted.isdisjoint(existing_snapshots):
+            # Some snapshot both exists and is deleted
+            raise CorruptionError("One or more snapshots has conflicting state.")
+        expected_snapshots = set(range(1, self.get_highest_used_revision() + 1))
+        if not (explicitly_deleted | existing_snapshots == expected_snapshots):
+            raise CorruptionError("One or more snapshots lacks an explicit state marker.")
+        result = list(explicitly_deleted)
+        result.sort()
+        return result
+
     def get_highest_used_revision(self):
         """ Returns the highest used revision id in the
         repository. Deleted revisions are counted as well. Note that
@@ -646,17 +659,26 @@ class Repo:
             assert other_repo.has_raw_blob(blobname), "Cloning of recipe blobs not yet implemented"
 
         # Copy all new sessions
-        self_sessions = set(self.get_all_sessions())
-        other_sessions = set(other_repo.get_all_sessions())
-        sessions_to_copy = list(other_sessions - self_sessions)
-        sessions_to_copy.sort()
+        other_max_rev = other_repo.get_highest_used_revision()
+        self_max_rev = self.get_highest_used_revision()
+        assert other_max_rev >= self_max_rev 
+        snapshots_to_delete = [rev for rev in other_repo.get_deleted_snapshots() if rev <= self_max_rev]
+        sessions_to_clone = range(self_max_rev + 1, other_max_rev + 1)
         count = 0
-        for session_id in sessions_to_copy:
+        self.__erase_snapshots(snapshots_to_delete)
+        for session_id in sessions_to_clone:
             count += 1
             # This cuts right through all ideas of layering. But
             # progress info is nice.
             # TODO: When a boar server is implemented, fix this.
-            print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_copy))
+            print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_clone))
+            deleted_marker_file = other_repo.get_path(STATE_DELETED_DIR, str(session_id))
+            is_deleted = os.path.exists(deleted_marker_file)
+            print "Session is not deleted", deleted_marker_file
+            if is_deleted:
+                marker_file = self.get_path(STATE_DELETED_DIR, str(session_id))
+                replace_file(marker_file, "") # TODO: add correct content
+                continue
             reader = other_repo.get_session(session_id)
             base_session = reader.get_properties().get('base_session', None)
             writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
@@ -711,6 +733,9 @@ class Repo:
 
     def __erase_snapshots(self, snapshot_ids):
         assert self.repo_mutex.is_locked()
+        if not snapshot_ids:
+            # Avoid check for erase permissions if not erasing anything
+            return
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
