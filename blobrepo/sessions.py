@@ -78,6 +78,90 @@ def bloblist_fingerprint(bloblist):
         md5.update(sep)
     return md5.hexdigest()
 
+class _NaiveSessionWriter:
+    """ This class takes care of the actual writing of data files to a
+    snapshot directory. It checks its arguments for only the most
+    basic errors. Specifically, it does not attempt to verify the
+    existence of blobs, the validity of the fingerprint or the
+    existence/validity of base snapshots. These things must be checked
+    by the caller."""
+
+    def __init__(self, session_name, base_session, path):
+        assert session_name and isinstance(session_name, unicode)
+        assert base_session == None or isinstance(base_session, int)
+        assert os.path.exists(path) and os.path.isdir(path) and not os.listdir(path)
+        self.session_name = session_name
+        self.session_path = path
+        self.datestr = None
+        self.timestamp = None
+        self.fingerprint = None
+        self.base_session = None
+        self.client_data = {"name": session_name}
+
+        self.dead = False
+        self.blobinfos = []
+        self.seen_blobinfos = set()
+
+    def cancel(self):
+        self.dead = True
+
+    def set_fingerprint(self, fingerprint):
+        assert is_md5sum(fingerprint)
+        self.fingerprint = fingerprint
+    
+    def add_blobinfo(self, blobinfo):
+        assert type(blobinfo) == type({})
+        #assert "size" in blobinfo
+        assert "md5sum" in blobinfo and is_md5sum(blobinfo['md5sum'])
+        #assert "mtime" in blobinfo and type(blobinfo['mtime']) == int
+        #assert "ctime" in blobinfo and type(blobinfo['ctime']) == int
+        assert "filename" in blobinfo
+        assert blobinfo['filename'] not in self.seen_blobinfos
+        self.seen_blobinfos.add(blobinfo['filename'])
+        self.blobinfos.append(copy.copy(blobinfo))
+
+    def add_action_remove(self, filename):
+        assert filename not in self.seen_blobinfos
+        self.seen_blobinfos.add(filename)
+        self.blobinfos.append({"action": "remove",
+                               "filename": filename})
+
+    def set_base_session(self, base_session):
+        assert type(base_session) == int
+        self.base_session = base_session
+
+    def set_client_data(self, client_data):
+        assert type(client_data) == type({})
+        if "name" not in client_data:
+            client_data['name'] = self.session_name
+        self.client_data = copy.copy(client_data)
+
+    def commit(self):
+        assert not self.dead
+        assert self.fingerprint
+        assert self.client_data
+        self.dead = True
+        sessioninfo = {}
+        sessioninfo['base_session'] = self.base_session
+        sessioninfo['fingerprint'] = self.fingerprint
+        sessioninfo['client_data'] = self.client_data
+
+        bloblist_filename = os.path.join(self.session_path, "bloblist.json")
+        write_json(bloblist_filename, self.blobinfos)
+
+        session_filename = os.path.join(self.session_path, "session.json")
+        write_json(session_filename, sessioninfo)
+
+        md5_filename = os.path.join(self.session_path, "session.md5")
+        with open(md5_filename, "wb") as f:
+            f.write(md5sum_file(bloblist_filename) + " *bloblist.json\n")
+            f.write(md5sum_file(session_filename) + " *session.json\n")
+        
+        fingerprint_marker = os.path.join(self.session_path, self.fingerprint + ".fingerprint")
+        with open(fingerprint_marker, "wb") as f:
+            pass
+
+
 class SessionWriter:
     def __init__(self, repo, session_name, base_session = None, session_id = None):
         assert session_name and isinstance(session_name, unicode)
@@ -99,6 +183,7 @@ class SessionWriter:
             prefix = "tmp_", 
             dir = os.path.join(self.repo.repopath, repository.TMP_DIR))
 
+        self.writer = _NaiveSessionWriter(session_name, base_session, self.session_path)
         # The latest_snapshot is used to detect any unexpected
         # concurrent changes in the repo when it is time to commit.
         self.latest_snapshot = repo.find_last_revision(session_name)
@@ -204,48 +289,6 @@ class SessionWriter:
                 self.blob_finished(blobname)
         return self.commit(sessioninfo)
 
-    # def split_file(source, dest_dir, cut_positions, want_piece = None):
-
-    def split_blob(self, blob, cut_positions):
-        """'Cuts' is a list of positions where to split the blob. If the
-        cut is at position n, the first part will end at byte n-1, and
-        the second part will begin with byte n as the first byte."""
-
-        assert not self.dead
-        blob_path = self.repo.get_blob_path(blob)
-        pieces = split_file(blob_path, self.session_path, cut_positions, \
-                                lambda b: not self.repo.has_blob(b))
-        recipe_pieces = []
-        offset = 0
-        for piece in pieces:
-            piece_path = os.path.join(self.session_path, piece)
-            if self.repo.has_blob(piece):
-                piece_size = self.get_blob_size(piece)
-            else:
-                piece_size = os.path.getsize(piece_path)
-            recipe_pieces.append({"source": piece,
-                                  "offset": offset,
-                                  "length": piece_size})
-            
-        recipe_path = os.path.join(self.session_path, blob + ".recipe")
-        assert not os.path.exists(recipe_path)
-        # TODO: resolve secondary recipes - only first level blobs allowed
-        write_json(recipe_path,
-                   {"method": "concat",
-                    "md5sum": blob,
-                    "size": self.repo.get_blob_size(blob),
-                    "pieces": recipe_pieces})
-        
-        # Exekvera transaktionen
-        #     Kopiera de nya blobbarna till sina positioner
-        #     Kopiera receptet till receptkatalogen
-        # Leta efter redundanta blobbar och ta bort dem
-
-        # Saker att testa: Splitta en fil i flera identiska delar
-        # Saker att testa: Splitta en fil i delar som finns som recept
-        # Saker att testa: Splitta en fil i delar som finns som blobbar
-
-
     def commit(self, sessioninfo = {}):
         assert not self.dead
         try:
@@ -257,29 +300,20 @@ class SessionWriter:
         assert not self.dead
         assert self.session_path != None
         assert not self.blob_writer, "Commit while blob writer is active"
-        if sessioninfo == {}:
-            sessioninfo['name'] = self.session_name
-        assert self.session_name == sessioninfo['name'], \
-            "Committed session name '%s' did not match expected name '%s'" % \
-            (sessioninfo['name'], self.session_name)
-        fingerprint = bloblist_fingerprint(self.resulting_blobdict.values())
-        metainfo = { 'base_session': self.base_session,
-                     'fingerprint': fingerprint,
-                     'client_data': sessioninfo}
-        bloblist_filename = os.path.join(self.session_path, "bloblist.json")
-        write_json(bloblist_filename, self.metadatas.values())
-
-        session_filename = os.path.join(self.session_path, "session.json")
-        write_json(session_filename, metainfo)
-
-        md5_filename = os.path.join(self.session_path, "session.md5")
-        with open(md5_filename, "wb") as f:
-            f.write(md5sum_file(bloblist_filename) + " *bloblist.json\n")
-            f.write(md5sum_file(session_filename) + " *session.json\n")
-        
-        fingerprint_marker = os.path.join(self.session_path, fingerprint + ".fingerprint")
-        with open(fingerprint_marker, "wb") as f:
-            pass
+        if "name" in sessioninfo:
+            assert self.session_name == sessioninfo['name'], \
+                "Committed session name '%s' did not match expected name '%s'" % \
+                (sessioninfo['name'], self.session_name)
+        self.writer.set_fingerprint(bloblist_fingerprint(self.resulting_blobdict.values()))
+        if self.base_session:
+            self.writer.set_base_session(self.base_session)
+        self.writer.set_client_data(sessioninfo)
+        for blobitem in self.metadatas.values():
+            if "action" in blobitem:
+                self.writer.add_action_remove(blobitem['filename'])
+            else:
+                self.writer.add_blobinfo(blobitem)
+        self.writer.commit()
 
         # This is a fail-safe to reduce the risk of lockfile problems going undetected. 
         # It is not meant to be 100% safe. That responsibility lies with the lockfile.
@@ -318,6 +352,9 @@ class SessionReader:
         """ Returns the value of the client property with the name
         'key', or None if there are no such value """
         return self.properties['client_data'].get(key, None)
+
+    def is_deleted(self):
+        return "deleted_name" in self.properties
 
     def get_fingerprint(self):
         return self.properties['fingerprint']
