@@ -319,10 +319,15 @@ class Repo:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
                                  "Repository says it is v2 format but is missing %s" % directory)
         # TODO: take care of missing snapshots
-        #for rev in range(1, self.get_highest_used_revision() + 1):
-        #    snapshot = self.create_session(u"__deleted", rev)
-        #    snapshot.commit()
-
+        for rev in range(1, self.get_highest_used_revision() + 1):
+            if os.path.exists(self.get_session_path(rev)):
+                continue
+            tmpdir = tempfile.mkdtemp(prefix = "tmp_", dir = os.path.join(self.repopath, TMP_DIR))
+            writer = sessions._NaiveSessionWriter(session_name = u"__deleted", base_session = None, path = tmpdir)
+            writer.set_fingerprint("d41d8cd98f00b204e9800998ecf8427e")
+            writer.commit()
+            del writer
+            os.rename(tmpdir, self.get_session_path(rev))
         try:
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "3")
