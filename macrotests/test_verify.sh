@@ -20,6 +20,20 @@ echo "Rev 4" >TestSession/r4.txt || exit 1
 
 $BOAR verify --repo=TESTREPO || { echo "Repo failed initial verification"; exit 1; }
 
+
+cat >expected.txt <<EOF
+[1, null, "TestSession", "d41d8cd98f00b204e9800998ecf8427e", null, false]
+[2, 1, "TestSession", "8061e73301587d92fdca155181c92961", null, false]
+[3, 2, "TestSession", "4e35e0568a64e6b3c9dbaf26961deb38", null, false]
+[4, null, "EmptySnapshot", "d41d8cd98f00b204e9800998ecf8427e", null, false]
+[5, 3, "TestSession", "ed6b2754f96ba1e3c1cf10ab3e492b03", null, false]
+!Finished in .* seconds
+EOF
+
+$BOAR --repo=TESTREPO list -d >output.txt 2>&1 || exit 1
+txtmatch.py expected.txt output.txt || exit 1
+
+
 { # Test missing blob
 RUT=REPO_missing_blob
 cp -an TESTREPO $RUT || exit 1
@@ -84,11 +98,11 @@ $BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Internal file bloblist.json fo
     { echo "$RUT gave unexpected error message"; exit 1; }
 }
 
-{ # Test missing snapshot
+{ # Test missing base snapshot
 RUT=REPO_missing_snapshot
 cp -an TESTREPO $RUT || exit 1
 rm -r $RUT/sessions/2 || exit 1
-$BOAR verify --repo=$RUT && { echo "Error in $RUT was not dteected"; exit 1; }
+$BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
 $BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Snapshot 2 is missing" || \
     { echo "$RUT gave unexpected error message"; exit 1; }
 }
@@ -124,51 +138,24 @@ $BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Session data for snapshot 2 is
     { echo "$RUT gave unexpected error message"; exit 1; }
 }
 
-{ # Test missing head snapshot (testing the snapshot state markers)
-RUT=REPO_missing_head
-cp -an TESTREPO $RUT || exit 1
-test -e $RUT/sessions/5 -a ! -e $RUT/sessions/6 || { echo "Test assumes the last snapshot is number 5"; exit 1; }
-rm -r $RUT/sessions/5 || exit 1
-$BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
-$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Snapshot 5 is missing" || \
-    { echo "$RUT gave unexpected error message"; exit 1; }
-}
+# Test disabled. Boar does not support this feature at the moment.
+#{ # Test missing head snapshot (testing the snapshot state markers)
+#RUT=REPO_missing_head
+#cp -an TESTREPO $RUT || exit 1
+#test -e $RUT/sessions/5 -a ! -e $RUT/sessions/6 || { echo "Test assumes the last snapshot is number 5"; exit 1; }
+#rm -r $RUT/sessions/5 || exit 1
+#$BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
+#$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Snapshot 5 is missing" || \
+#    { echo "$RUT gave unexpected error message"; exit 1; }
+#}
 
-{ # Test detection of missing snapshot and missing corresponding marker 
+{ # Test detection of missing non-linked snapshot
 RUT=REPO_missing_snapshot_and_marker
 cp -an TESTREPO $RUT || exit 1
 $BOAR list --repo=$RUT EmptySnapshot | grep "Revision id 4" || exit 1
 rm -r $RUT/sessions/4 || exit 1
-rm $RUT/state/existing_snapshots/4 || exit 1
 $BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
-$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Illegal state for snapshot 4 (exists=False, marker=False, del_marker=False)" || \
-    { echo "$RUT gave unexpected error message"; exit 1; }
-}
-
-{ # Test detection of missing marker 
-RUT=REPO_missing_marker
-cp -an TESTREPO $RUT || exit 1
-rm $RUT/state/existing_snapshots/4 || exit 1
-$BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
-$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Illegal state for snapshot 4 (exists=True, marker=False, del_marker=False)" || \
-    { echo "$RUT gave unexpected error message"; exit 1; }
-}
-
-{ # Test detection of conflicting markers
-RUT=REPO_conflicting_marker
-cp -an TESTREPO $RUT || exit 1
-cp -n $RUT/state/existing_snapshots/4 $RUT/state/deleted_snapshots/4 || exit 1
-$BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
-$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Illegal state for snapshot 4 (exists=True, marker=True, del_marker=True)" || \
-    { echo "$RUT gave unexpected error message"; exit 1; }
-}
-
-{ # Test detection of snapshot marked as deleted but still present
-RUT=REPO_ghost_snapshot
-cp -an TESTREPO $RUT || exit 1
-mv $RUT/state/existing_snapshots/4 $RUT/state/deleted_snapshots/4 || exit 1
-$BOAR verify --repo=$RUT && { echo "Error in $RUT was not detected"; exit 1; }
-$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Illegal state for snapshot 4 (exists=True, marker=False, del_marker=True)" || \
+$BOAR verify --repo=$RUT | grep "REPO CORRUPTION: Snapshot 4 is missing" || \
     { echo "$RUT gave unexpected error message"; exit 1; }
 }
 

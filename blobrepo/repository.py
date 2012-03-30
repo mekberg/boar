@@ -44,9 +44,7 @@ RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
 DERIVED_SHA256_DIR = "derived/sha256"
-STATE_DIR = "state"
-STATE_SNAPSHOTS_DIR = "state/existing_snapshots"
-STATE_DELETED_DIR = "state/deleted_snapshots"
+DELETE_MARKER = "deleted.json"
 
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
 REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
@@ -54,7 +52,7 @@ REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
 REPO_DIRS_V2 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
 REPO_DIRS_V3 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
-    DERIVED_DIR, STATE_DIR, STATE_SNAPSHOTS_DIR, STATE_DELETED_DIR)
+    DERIVED_DIR)
 
 recoverytext = """Repository format v%s
 
@@ -133,8 +131,7 @@ def integrity_assert(test, errormsg = None):
 def create_repository(repopath):
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
-    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, \
-            STATE_DIR, STATE_SNAPSHOTS_DIR, STATE_DELETED_DIR:
+    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR:
         os.mkdir(os.path.join(repopath, d))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
 
@@ -321,20 +318,12 @@ class Repo:
         for directory in REPO_DIRS_V2:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
                                  "Repository says it is v2 format but is missing %s" % directory)
+        # TODO: take care of missing snapshots
+        for rev in range(1, self.get_highest_used_revision() + 1):
+            snapshot = self.create_session(u"__deleted", rev)
+            snapshot.commit()
+
         try:
-            for d in STATE_DIR, STATE_SNAPSHOTS_DIR, STATE_DELETED_DIR:
-                path = os.path.join(self.repopath, d)
-                if not os.path.exists(path):
-                    os.mkdir(path)
-            all_snapshots = self.get_all_sessions()
-            all_expected_snapshots = range(1, max(all_snapshots)+1)
-            for sid in all_expected_snapshots:
-                if sid in all_snapshots:
-                    session = self.get_session(sid)
-                    self.__add_snapshot_marker(sid, session.get_fingerprint(), overwrite = True)
-                else:
-                    self.__add_snapshot_marker(sid, "0"*32, overwrite = True)
-                    self.__mark_snapshot_deleted(sid)
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "3")
         except OSError, e:
@@ -346,6 +335,7 @@ class Repo:
             return os.path.join(self.repopath, subdir)
         return os.path.join(self.repopath, subdir, filename)
 
+    """
     def __add_snapshot_marker(self, snapshot_id, fingerprint, overwrite = False):
         assert is_md5sum(fingerprint)
         snapshot_id = int(snapshot_id)
@@ -355,15 +345,7 @@ class Repo:
             replace_file(marker_file, marker_file_content)
         else:
             create_file(marker_file, marker_file_content)
-
-    def __mark_snapshot_deleted(self, snapshot_id):
-        marker_file = self.get_path(STATE_SNAPSHOTS_DIR, str(snapshot_id))
-        assert os.path.exists(marker_file)
-        destination = self.get_path(STATE_DELETED_DIR, str(snapshot_id))
-        if os.path.exists(destination):
-            os.remove(marker_file)
-        else:
-            shutil.move(marker_file, destination)
+    """
         
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
@@ -475,13 +457,7 @@ class Repo:
         this method returns 0 in the case that there are no
         revisions. """
         existing_sessions = get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
-        if self.__get_repo_version() < 3:
-            return max([0] + existing_sessions)
-        deleted_sessions = get_all_ids_in_directory(self.get_path(STATE_DELETED_DIR))
-        marked_sessions = get_all_ids_in_directory(self.get_path(STATE_SNAPSHOTS_DIR))
-        # We could test for consistency here, but if we do that, it
-        # will be hard for verify() to do its job.
-        return max([0] + existing_sessions + deleted_sessions + marked_sessions)
+        return max([0] + existing_sessions)
 
     def has_snapshot(self, id):
         assert isinstance(id, int)
@@ -494,33 +470,10 @@ class Repo:
             return True
         print "Verify snapshot", id
         session_exists = self.has_snapshot(id)
-        session_marker_exists = os.path.exists(self.get_path(STATE_SNAPSHOTS_DIR, str(id)))
-        deletion_marker_exists = os.path.exists(self.get_path(STATE_DELETED_DIR, str(id)))
-        state = session_exists, session_marker_exists, deletion_marker_exists
-        if session_exists and session_marker_exists and not deletion_marker_exists:
-            return # All is well
-        elif not session_exists and not session_marker_exists and deletion_marker_exists:
-            return # All is well - snapshot legally deleted
-        elif session_marker_exists and not session_exists:
+        if not session_exists:
             raise CorruptionError("Snapshot %s is missing" % id)
-        # All the other possiblities are illegal
-        raise CorruptionError("Illegal state for snapshot %s (exists=%s, marker=%s, del_marker=%s)" % \
-                                  (id, session_exists, session_marker_exists, deletion_marker_exists))
-    
-
-    def is_deleted(self, snapshot_id):
-        assert False
-        assert isinstance(snapshot_id, int)
-        path = os.path.join(self.repopath, SESSIONS_DIR, str(snapshot_id))
-        session_exists = os.path.exists(path)
-        if self.__get_repo_version() < 3: # To make it possible to access old read-only repos
-            # Allow for possible manual deletions pre-v3
-            return not session_exists
-
-        deleted_marker_exists = os.path.exists(self.get_path(STATE_DELETED_DIR, str(snapshot_id)))
-        if self.has_snapshot(snapshot_id) and deleted_marker_exists:
-            raise CorruptionError("Snapshot %s is marked as deleted but is not" % snapshot_id)
-        return deleted_marker_exists
+        snapshot = self.get_session(id)
+        # No exception - all is well
 
     def get_session(self, id):
         assert id, "Id was: "+ str(id)
@@ -714,15 +667,9 @@ class Repo:
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
-        eraseid = "_".join(map(str,snapshot_ids))
         trashdir = tempfile.mkdtemp(prefix = "erased_", dir = self.get_path(TMP_DIR))
         snapshot_ids.sort()
         snapshot_ids.reverse()
-
-        for rev in snapshot_ids:
-            # Make a pre-check that the markers are reasonably ok before we start deleting
-            assert os.path.exists(self.get_path(STATE_SNAPSHOTS_DIR, str(rev))) or \
-                os.path.exists(self.get_path(STATE_DELETED_DIR, str(rev)))
 
         for rev in snapshot_ids:
             if self.get_referring_snapshots(rev):
@@ -731,19 +678,29 @@ class Repo:
                 del self.session_readers[rev]
 
             session_path = self.get_session_path(rev)
-            marker_path = self.get_path(STATE_SNAPSHOTS_DIR, str(rev))
-            delmarker_path = self.get_path(STATE_DELETED_DIR, str(rev))
 
             # Carefully here... We must allow for a resumed operation
-            if os.path.exists(self.get_session_path(rev)):
-                # Nothing is done yet. Make sure the marker is intact as well
-                assert os.path.exists(marker_path)
-                shutil.move(session_path, trashdir)
+            shutil.copytree(session_path, os.path.join(trashdir, str(rev) + ".deleted"))
+            session_file = os.path.join(session_path, "session.json")
+            bloblist_file = os.path.join(session_path, "bloblist.json")
+            md5_file = os.path.join(session_path, "session.md5")
+            # TODO: What if we interrupt here? Session file state?
+            session_data = read_json(session_file)
+            deleted_fingerprint = session_data['fingerprint']
+            session_data['base_session'] = None
+            session_data['deleted_fingerprint'] = deleted_fingerprint
+            session_data['deleted_name'] = session_data['client_data']['name']
+            session_data['fingerprint'] = "d41d8cd98f00b204e9800998ecf8427e"
+            session_data['client_data']['name'] = "__deleted"
+            os.unlink(os.path.join(session_path, deleted_fingerprint + ".fingerprint"))
+            create_file(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint"), "")
+            replace_file(session_file, json.dumps(session_data))
+            replace_file(bloblist_file, "[]")
+            new_md5 = "%s *%s\n%s *%s\n" % (md5sum_file(session_file), "session.json", 
+                                            md5sum_file(bloblist_file), "bloblist.json")
+            replace_file(md5_file, new_md5)
+            #create_file(delmarker_file, "")
             _snapshot_delete_test_hook(rev)
-            if os.path.exists(marker_path):
-                shutil.move(marker_path, delmarker_path)
-            else:
-                assert os.path.exists(delmarker_path)            
 
     def process_queue(self):
         assert self.repo_mutex.is_locked()
@@ -820,7 +777,6 @@ class Repo:
         if os.path.exists(os.path.join(queued_item, "delete.json")):
             safe_delete_file(os.path.join(queued_item, "delete.json"))
 
-        self.__add_snapshot_marker(session_id, meta_info['fingerprint'], overwrite = True)
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         shutil.move(queued_item, session_path)
         assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
