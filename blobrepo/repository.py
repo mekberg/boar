@@ -585,6 +585,8 @@ class Repo:
                 continue
             self_session = self.get_session(session_id)
             other_session = other_repo.get_session(session_id)
+            if self_session.get_name() != other_session.get_name():
+                return False
             if self_session.get_fingerprint() != other_session.get_fingerprint():
                 return False
         return True
@@ -627,13 +629,6 @@ class Repo:
             # progress info is nice.
             # TODO: When a boar server is implemented, fix this.
             print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_clone))
-            #deleted_marker_file = other_repo.get_path(STATE_DELETED_DIR, str(session_id))
-            #is_deleted = os.path.exists(deleted_marker_file)
-            #print "Session is not deleted", deleted_marker_file
-            #if is_deleted:
-            #    marker_file = self.get_path(STATE_DELETED_DIR, str(session_id))
-            #    replace_file(marker_file, "") # TODO: add correct content
-            #    continue
             reader = other_repo.get_session(session_id)
             base_session = reader.get_properties().get('base_session', None)
             writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
