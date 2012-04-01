@@ -579,7 +579,10 @@ class Repo:
         if set(self.get_all_sessions()) > set(other_repo.get_all_sessions()):
             # Not same sessions - cannot be successor
             return False
+        other_deleted = other_repo.get_deleted_snapshots()
         for session_id in self.get_all_sessions():
+            if session_id in other_deleted:
+                continue
             self_session = self.get_session(session_id)
             other_session = other_repo.get_session(session_id)
             if self_session.get_fingerprint() != other_session.get_fingerprint():

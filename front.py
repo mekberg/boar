@@ -100,7 +100,7 @@ class Front:
         return result
 
     def get_deleted_snapshots(self):
-        return self.get_session_ids("__deleted")
+        return self.repo.get_deleted_snapshots()
 
     def __set_session_property(self, session_name, property_name, new_value):
         assert property_name in valid_session_props
