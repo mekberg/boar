@@ -63,11 +63,14 @@ $BOAR clone TESTREPO TESTREPO_clone || { echo "Simple cloning failed"; exit 1; }
 
 $BOAR clone TESTREPO_truncated TESTREPO_clone && { echo "Cloning with deletions to a repo without enabled deletions should fail"; exit 1; }
 touch TESTREPO_clone/ENABLE_PERMANENT_ERASE || exit 1
+
 $BOAR clone TESTREPO_truncated TESTREPO_clone || { echo "Cloning deletions failed"; exit 1; }
 
 $BOAR --repo=TESTREPO_clone list -d >output.txt 2>&1 || { 
     cat output.txt; echo "Listing cloned repo with deletions failed"; exit 1; }
 txtmatch.py expected.txt output.txt || { echo "Unexpected list result for repo with cloned deletions"; exit 1; }
+
+$BOAR clone TESTREPO_truncated TESTREPO_clone || { echo "Cloning deletions for identical repo failed"; exit 1; }
 
 
 exit 0
