@@ -37,45 +37,23 @@ test ! -e "TESTREPO_truncated/sessions/8" || { echo "Snapshot should not exist y
 
 
 $BOAR --repo=TESTREPO_truncated truncate TestSession || { echo "Truncation failed"; exit 1; }
-
 $BOAR --repo=TESTREPO_truncated verify || { echo "Truncated repo failed verify"; exit 1; }
-
 $BOAR clone TESTREPO_truncated TESTREPO_truncated_clone || { echo "Truncated cloning failed"; exit 1; }
 
-cat >expected_list_msg.txt <<EOF
-!Revision id 8 .*, 1 files, \(standalone\) Log: Standalone snapshot
+cat >expected.txt <<EOF
+[1, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
+[2, null, "AnotherTestSession", "d41d8cd98f00b204e9800998ecf8427e", null, false]
+[3, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
+[4, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
+[5, 2, "AnotherTestSession", "0e997688909a2d27886dfdeaa627b560", null, false]
+[6, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
+[7, 5, "AnotherTestSession", "31a44468d11cc4924b15c5d106410a63", null, false]
+[8, null, "TestSession", "ed6b2754f96ba1e3c1cf10ab3e492b03", "Standalone snapshot", false]
 !Finished in .* seconds
 EOF
 
-$BOAR --repo=TESTREPO_truncated_clone list TestSession >list_msg.txt 2>&1 || exit 1
-txtmatch.py expected_list_msg.txt list_msg.txt || { echo "Unexpected list result"; exit 1; }
-
+$BOAR --repo=TESTREPO_truncated_clone list -d >output.txt 2>&1 || exit 1
+txtmatch.py expected.txt output.txt || { echo "Unexpected list result"; exit 1; }
 $BOAR --repo=TESTREPO_truncated_clone verify || { echo "Truncated clone repo failed verify"; exit 1; }
 
 exit 0
----------------------------------
-for snapshot in 4 6 8; do
-    # These snapshots should be gone by now (no 4 halfway)
-    test ! -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should be deleted"; exit 1; }
-done
-
-for snapshot in 1 2 3   5 7; do
-    # These snapshots should still exist since operation was aborted
-    # before 1 2 3 was deleted and the new base snapshot could be
-    # created.
-    test -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should still exist"; exit 1; }
-done
-
-# This verify will access the repo and process the queue before verification
-$BOAR --repo=TESTREPO_truncated verify || { echo "Truncated repo failed verify"; exit 1; }
-
-for snapshot in 1 3 4 6 9; do
-    test ! -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should not exist"; exit 1; }
-done
-
-for snapshot in 5 7 8; do
-    test -e "TESTREPO_truncated/sessions/$snapshot" || { echo "Snapshot $snapshot should still exist"; exit 1; }
-done
-
-
-exit 0 # All is well
