@@ -95,7 +95,9 @@ class _NaiveSessionWriter:
         self.datestr = None
         self.timestamp = None
         self.fingerprint = None
-        self.base_session = None
+        self.base_session = base_session
+        self.deleted_session_name = None
+        self.deleted_fingerprint = None
         self.client_data = {"name": session_name}
 
         self.dead = False
@@ -126,9 +128,15 @@ class _NaiveSessionWriter:
         self.blobinfos.append({"action": "remove",
                                "filename": filename})
 
-    def set_base_session(self, base_session):
-        assert type(base_session) == int
-        self.base_session = base_session
+    def delete(self, deleted_session_name, deleted_fingerprint):
+        assert is_md5sum(deleted_fingerprint)
+        assert type(deleted_session_name) == unicode
+        self.deleted_session_name = deleted_session_name
+        self.deleted_fingerprint = deleted_fingerprint
+
+    #def set_base_session(self, base_session):
+    #    assert type(base_session) == int
+    #    self.base_session = base_session
 
     def set_client_data(self, client_data):
         assert type(client_data) == type({})
@@ -140,12 +148,20 @@ class _NaiveSessionWriter:
         assert not self.dead
         assert self.fingerprint
         assert self.client_data
+        if self.deleted_session_name or self.deleted_fingerprint:
+            assert self.deleted_session_name and self.deleted_fingerprint
+            assert self.client_data['name'] == "__deleted"
+            assert len(self.blobinfos) == 0
+            assert self.base_session == None
         self.dead = True
         sessioninfo = {}
         sessioninfo['base_session'] = self.base_session
         sessioninfo['fingerprint'] = self.fingerprint
         sessioninfo['client_data'] = self.client_data
-
+        if self.deleted_session_name:
+            sessioninfo['deleted_name'] = self.deleted_session_name
+        if self.deleted_fingerprint:            
+            sessioninfo['deleted_fingerprint'] = self.deleted_fingerprint
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
         write_json(bloblist_filename, self.blobinfos)
 
@@ -263,6 +279,9 @@ class SessionWriter:
     def commitClone(self, session):
         assert not self.dead
         other_bloblist = session.get_all_blob_infos()
+        if session.is_deleted():
+            self.writer.delete(deleted_session_name = session.properties['deleted_name'], 
+                               deleted_fingerprint = session.properties['deleted_fingerprint'])
         self.resulting_blobdict = bloblist_to_dict(other_bloblist)
         self.metadatas = bloblist_to_dict(session.get_raw_bloblist())
         self.base_session = session.properties.get("base_session", None)
@@ -305,8 +324,6 @@ class SessionWriter:
                 "Committed session name '%s' did not match expected name '%s'" % \
                 (sessioninfo['name'], self.session_name)
         self.writer.set_fingerprint(bloblist_fingerprint(self.resulting_blobdict.values()))
-        if self.base_session:
-            self.writer.set_base_session(self.base_session)
         self.writer.set_client_data(sessioninfo)
         for blobitem in self.metadatas.values():
             if "action" in blobitem:
@@ -354,10 +371,17 @@ class SessionReader:
         return self.properties['client_data'].get(key, None)
 
     def is_deleted(self):
-        return "deleted_name" in self.properties
+        if "deleted_name" in self.properties:
+            assert self.get_name() == "__deleted"
+            return True
+        assert self.get_name() != "__deleted"
+        return False
 
     def get_fingerprint(self):
         return self.properties['fingerprint']
+
+    def get_name(self):
+        return self.properties['client_data']['name']
 
     def get_base_id(self):
         base_session = None
