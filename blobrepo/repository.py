@@ -687,7 +687,7 @@ class Repo:
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
-        trashdir = tempfile.mkdtemp(prefix = "erased_snapshots_", dir = self.get_path(TMP_DIR))
+        trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_snapshots_", dir = self.get_path(TMP_DIR))
         snapshot_ids.sort()
         snapshot_ids.reverse()
 
@@ -727,7 +727,7 @@ class Repo:
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         orphan_blobs = self.get_orphan_blobs()
-        trashdir = tempfile.mkdtemp(prefix = "erased_blobs_", dir = self.get_path(TMP_DIR))
+        trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_blobs_", dir = self.get_path(TMP_DIR))
         for blob in orphan_blobs:
             os.rename(self.get_blob_path(blob), os.path.join(trashdir, blob))
         return len(orphan_blobs)
