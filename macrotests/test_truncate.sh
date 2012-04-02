@@ -8,9 +8,12 @@ $BOAR mksession --repo=TESTREPO AnotherTestSession || exit 1
 $BOAR --repo=TESTREPO co AnotherTestSession || exit 1
 
 echo "Rev 2" >TestSession/r2.txt || exit 1
+# md5("avocado") -> 6118fda28fbc20966ba8daafdf836683
+echo "avocado" >TestSession/soon_to_be_orhpan_blob.txt || exit 1 
 (cd TestSession && $BOAR ci -q) || exit 1
 
 rm TestSession/r2.txt || exit 1
+rm TestSession/soon_to_be_orhpan_blob.txt || exit 1
 echo "Rev 3" >TestSession/r3.txt || exit 1
 (cd TestSession && $BOAR ci -q) || exit 1
 
