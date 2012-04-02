@@ -335,10 +335,8 @@ class Repo:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
 
-    def get_path(self, subdir, filename = None):
-        if filename == None:
-            return os.path.join(self.repopath, subdir)
-        return os.path.join(self.repopath, subdir, filename)
+    def get_path(self, subdir, *parts):
+        return os.path.join(self.repopath, subdir, *parts)
 
     """
     def __add_snapshot_marker(self, snapshot_id, fingerprint, overwrite = False):
@@ -539,6 +537,12 @@ class Repo:
             for blobinfo in snapshot.get_raw_bloblist():
                 if 'md5sum' in blobinfo:
                     used_blobs.add(blobinfo['md5sum'])
+        if self.get_queued_session_id():
+            # Must ensure that any queued new snapshot is considered as well
+            queued_session = sessions.SessionReader(None, self.get_path(QUEUE_DIR, str(self.get_queued_session_id())))
+            for blobinfo in queued_session.get_raw_bloblist():
+                if 'md5sum' in blobinfo:
+                    used_blobs.add(blobinfo['md5sum'])
         orphans = set(self.get_blob_names()) - used_blobs
         return orphans
 
@@ -606,15 +610,6 @@ class Repo:
         assert self.isContinuation(other_repo), \
             "Cannot pull: %s is not a continuation of %s" % (other_repo, self)
 
-        # Copy all new blobs
-        self_blobs = set(self.get_blob_names())
-        other_blobs = set(other_repo.get_blob_names())
-        assert set(self_blobs) <= set(other_blobs), \
-            "Other repo is missing some blobs that are present in this repo. Corrupt repository?"
-
-        for blobname in other_blobs - self_blobs:
-            assert other_repo.has_raw_blob(blobname), "Cloning of recipe blobs not yet implemented"
-
         # Copy all new sessions
         other_max_rev = other_repo.get_highest_used_revision()
         self_max_rev = self.get_highest_used_revision()
@@ -633,6 +628,9 @@ class Repo:
             base_session = reader.get_properties().get('base_session', None)
             writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
             writer.commitClone(reader)
+        if self.allows_permanent_erase():
+            removed_blobs_count = self.__erase_orphan_blobs()
+            print "Found and removed", removed_blobs_count," orphan blobs"
 
     def get_queued_session_id(self):
         path = os.path.join(self.repopath, QUEUE_DIR)
@@ -659,7 +657,7 @@ class Repo:
         assert self.repo_mutex.is_locked()
         assert not self.get_queued_session_id()
         assert not self.readonly, "Cannot consolidate because repo is read-only"
-        if forced_session_id: 
+        if forced_session_id:
             session_id = forced_session_id
         else:
             session_id = self.find_next_session_id()
@@ -689,7 +687,7 @@ class Repo:
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
-        trashdir = tempfile.mkdtemp(prefix = "erased_", dir = self.get_path(TMP_DIR))
+        trashdir = tempfile.mkdtemp(prefix = "erased_snapshots_", dir = self.get_path(TMP_DIR))
         snapshot_ids.sort()
         snapshot_ids.reverse()
 
@@ -723,6 +721,16 @@ class Repo:
             replace_file(md5_file, new_md5)
             #create_file(delmarker_file, "")
             _snapshot_delete_test_hook(rev)
+
+    def __erase_orphan_blobs(self):
+        assert self.repo_mutex.is_locked()
+        if not self.allows_permanent_erase():
+            raise MisuseError("Not allowed for this repo")
+        orphan_blobs = self.get_orphan_blobs()
+        trashdir = tempfile.mkdtemp(prefix = "erased_blobs_", dir = self.get_path(TMP_DIR))
+        for blob in orphan_blobs:
+            os.rename(self.get_blob_path(blob), os.path.join(trashdir, blob))
+        return len(orphan_blobs)
 
     def process_queue(self):
         assert self.repo_mutex.is_locked()
@@ -797,6 +805,7 @@ class Repo:
             assert os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
             self.__erase_snapshots(snapshots_to_delete)
         if os.path.exists(os.path.join(queued_item, "delete.json")):
+            self.__erase_orphan_blobs()
             safe_delete_file(os.path.join(queued_item, "delete.json"))
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))

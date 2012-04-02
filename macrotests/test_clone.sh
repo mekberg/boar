@@ -29,4 +29,8 @@ $BOAR clone TESTREPO TESTREPO_clone || { echo "Update of cloned repo failed"; ex
 
 $BOAR clone TESTREPO_clone TESTREPO_clone2 || { echo "Second clone failed"; exit 1; }
 
+$BOAR clone TESTREPO TESTREPO_corrupted || { echo "Cloning failed"; exit 1; }
+rm TESTREPO_corrupted/blobs/64/64c1fdc8fa4f740f95f3274707726d7c || exit 1
+$BOAR clone TESTREPO_corrupted TESTREPO_corrupted_clone && { echo "Cloning of corrupted repo should fail"; exit 1; }
+
 exit 0 # All is well
