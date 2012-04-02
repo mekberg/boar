@@ -505,8 +505,8 @@ def cmd_truncate(args):
         args = ["--help"]
     parser = OptionParser(usage="usage: boar truncate <session name>")
     (options, args) = parser.parse_args(args)
-    if len(args) != 1:
-        raise UserError("mkstandalone requires a single existing session name as argument")
+    if len(args) > 1:
+        raise UserError("Too many arguments")
     session_name, = args
     front = init_repo_from_env(cmdline_repo)
     sid = front.truncate(session_name)
