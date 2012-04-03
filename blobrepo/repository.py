@@ -700,27 +700,33 @@ class Repo:
             session_path = self.get_session_path(rev)
 
             # Carefully here... We must allow for a resumed operation
-            shutil.copytree(session_path, os.path.join(trashdir, str(rev) + ".deleted"))
+            delete_copy = os.path.join(session_path, "deleted")
+            if not os.path.exists(delete_copy):
+                tmpcopy = self.get_path(TMP_DIR, str(rev) + ".deleted")
+                shutil.copytree(session_path, tmpcopy)
+                os.rename(tmpcopy, delete_copy)
             session_file = os.path.join(session_path, "session.json")
             bloblist_file = os.path.join(session_path, "bloblist.json")
             md5_file = os.path.join(session_path, "session.md5")
-            # TODO: What if we interrupt here? Session file state?
-            session_data = read_json(session_file)
+            session_data = read_json(os.path.join(delete_copy, "session.json"))
             deleted_fingerprint = session_data['fingerprint']
             session_data['base_session'] = None
             session_data['deleted_fingerprint'] = deleted_fingerprint
             session_data['deleted_name'] = session_data['client_data']['name']
             session_data['fingerprint'] = "d41d8cd98f00b204e9800998ecf8427e"
             session_data['client_data']['name'] = "__deleted"
-            os.unlink(os.path.join(session_path, deleted_fingerprint + ".fingerprint"))
-            create_file(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint"), "")
+            if os.path.exists(os.path.join(session_path, deleted_fingerprint + ".fingerprint")):
+                os.unlink(os.path.join(session_path, deleted_fingerprint + ".fingerprint"))
+            _snapshot_delete_test_hook(rev)
+            if not os.path.exists(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint")):
+                create_file(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint"), "")
             replace_file(session_file, json.dumps(session_data))
             replace_file(bloblist_file, "[]")
             new_md5 = "%s *%s\n%s *%s\n" % (md5sum_file(session_file), "session.json", 
                                             md5sum_file(bloblist_file), "bloblist.json")
             replace_file(md5_file, new_md5)
+            os.rename(delete_copy, os.path.join(trashdir, str(rev) + ".deleted"))
             #create_file(delmarker_file, "")
-            _snapshot_delete_test_hook(rev)
 
     def __erase_orphan_blobs(self):
         assert self.repo_mutex.is_locked()
