@@ -348,6 +348,10 @@ class SessionReader:
     def __init__(self, repo, session_path):
         assert session_path, "Session path must be given"
         assert isinstance(session_path, unicode)
+        if os.path.exists(os.path.join(session_path, "deleted")):
+            # If a session is in the middle of being deleted, read all
+            # data from the deletion folder instead
+            session_path = os.path.join(session_path, "deleted")
         self.path = session_path
         self.dirname = os.path.basename(self.path)
         self.repo = repo

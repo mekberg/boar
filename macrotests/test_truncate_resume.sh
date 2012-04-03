@@ -50,8 +50,8 @@ if [ $? -ne 123 ]; then
     exit 1
 fi
 
-grep __deleted TESTREPO_truncated/sessions/3/session.json && { echo "Repo should only be partially truncated"; exit 1; }
-grep __deleted TESTREPO_truncated/sessions/6/session.json || { echo "Repo should be partially truncated"; exit 1; }
+grep __deleted TESTREPO_truncated/sessions/3/session.json >/dev/null && { echo "Repo should only be partially truncated"; exit 1; }
+grep __deleted TESTREPO_truncated/sessions/6/session.json >/dev/null || { echo "Repo should be partially truncated"; exit 1; }
 
 cat >expected.txt <<EOF
 [1, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
@@ -65,7 +65,7 @@ cat >expected.txt <<EOF
 !Finished in .* seconds
 EOF
 
-$BOAR --repo=TESTREPO_truncated list -d >output.txt 2>&1 || exit 1
+$BOAR --repo=TESTREPO_truncated list -d >output.txt 2>&1 || { cat output.txt; echo "Resumption failed"; exit 1; }
 txtmatch.py expected.txt output.txt || exit 1
 
 # This verify will access the repo and process the queue before verification
