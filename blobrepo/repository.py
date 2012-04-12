@@ -678,10 +678,11 @@ class Repo:
         snapshot_ids.sort()
         snapshot_ids.reverse()
 
+        trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_snapshots_", dir = self.get_path(TMP_DIR))
         for rev in snapshot_ids:
-            self.__erase_snapshot(rev)
+            self.__erase_snapshot(rev, trashdir)
 
-    def __erase_snapshot(self, rev):
+    def __erase_snapshot(self, rev, trashdir):
         # Carefully here... We must allow for a resumed operation 
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
@@ -690,13 +691,14 @@ class Repo:
         if rev in self.session_readers:
             del self.session_readers[rev]
 
-        trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_snapshots_", dir = self.get_path(TMP_DIR))
         session_path = self.get_session_path(rev)
         delete_copy = os.path.join(session_path, "deleted")
         if not os.path.exists(delete_copy):
             tmpcopy = tempfile.mktemp(prefix ="deleted_", dir = self.get_path(TMP_DIR))
             shutil.copytree(session_path, tmpcopy)
             os.rename(tmpcopy, delete_copy)
+
+        session_data = read_json(os.path.join(delete_copy, "session.json"))        
 
         for filename in "session.json", "bloblist.json", "session.md5", session_data['fingerprint'] + ".fingerprint":
             full_path = os.path.join(session_path, filename)
@@ -705,7 +707,6 @@ class Repo:
 
         _snapshot_delete_test_hook(rev)
 
-        session_data = read_json(os.path.join(delete_copy, "session.json"))        
         writer = sessions._NaiveSessionWriter(session_name = u"__deleted", base_session = None, path = session_path)
         writer.delete(deleted_session_name = session_data['client_data']['name'], deleted_fingerprint = session_data['fingerprint'])
         writer.set_fingerprint("d41d8cd98f00b204e9800998ecf8427e")
