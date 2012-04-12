@@ -689,6 +689,7 @@ class Repo:
             raise MisuseError("Erasing rev %s would create orphan snapshots" % rev)
         if rev in self.session_readers:
             del self.session_readers[rev]
+
         trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_snapshots_", dir = self.get_path(TMP_DIR))
         session_path = self.get_session_path(rev)
         delete_copy = os.path.join(session_path, "deleted")
@@ -696,28 +697,20 @@ class Repo:
             tmpcopy = tempfile.mktemp(prefix ="deleted_", dir = self.get_path(TMP_DIR))
             shutil.copytree(session_path, tmpcopy)
             os.rename(tmpcopy, delete_copy)
-        session_file = os.path.join(session_path, "session.json")
-        bloblist_file = os.path.join(session_path, "bloblist.json")
-        md5_file = os.path.join(session_path, "session.md5")
-        session_data = read_json(os.path.join(delete_copy, "session.json"))
-        deleted_fingerprint = session_data['fingerprint']
-        session_data['base_session'] = None
-        session_data['deleted_fingerprint'] = deleted_fingerprint
-        session_data['deleted_name'] = session_data['client_data']['name']
-        session_data['fingerprint'] = "d41d8cd98f00b204e9800998ecf8427e"
-        session_data['client_data']['name'] = "__deleted"
-        if os.path.exists(os.path.join(session_path, deleted_fingerprint + ".fingerprint")):
-            os.unlink(os.path.join(session_path, deleted_fingerprint + ".fingerprint"))
-        _snapshot_delete_test_hook(rev)
-        if not os.path.exists(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint")):
-            create_file(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint"), "")
-        replace_file(session_file, json.dumps(session_data))
-        replace_file(bloblist_file, "[]")
-        new_md5 = "%s *%s\n%s *%s\n" % (md5sum_file(session_file), "session.json", 
-                                        md5sum_file(bloblist_file), "bloblist.json")
-        replace_file(md5_file, new_md5)
-        os.rename(delete_copy, os.path.join(trashdir, str(rev) + ".deleted"))
 
+        for filename in "session.json", "bloblist.json", "session.md5", session_data['fingerprint'] + ".fingerprint":
+            full_path = os.path.join(session_path, filename)
+            if os.path.exists(full_path):
+                os.unlink(full_path)
+
+        _snapshot_delete_test_hook(rev)
+
+        session_data = read_json(os.path.join(delete_copy, "session.json"))        
+        writer = sessions._NaiveSessionWriter(session_name = u"__deleted", base_session = None, path = session_path)
+        writer.delete(deleted_session_name = session_data['client_data']['name'], deleted_fingerprint = session_data['fingerprint'])
+        writer.set_fingerprint("d41d8cd98f00b204e9800998ecf8427e")
+        writer.commit()
+        os.rename(delete_copy, os.path.join(trashdir, str(rev) + ".deleted"))
 
     def __erase_orphan_blobs(self):
         assert self.repo_mutex.is_locked()
