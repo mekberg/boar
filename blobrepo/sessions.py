@@ -89,7 +89,8 @@ class _NaiveSessionWriter:
     def __init__(self, session_name, base_session, path):
         assert session_name and isinstance(session_name, unicode)
         assert base_session == None or isinstance(base_session, int)
-        assert os.path.exists(path) and os.path.isdir(path) and not os.listdir(path)
+        assert os.path.exists(path) and os.path.isdir(path)
+        assert (not os.listdir(path)) or os.listdir(path) == ["deleted"] # Allow for writing in snapshots currently being deleted
         self.session_name = session_name
         self.session_path = path
         self.datestr = None
