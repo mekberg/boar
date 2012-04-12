@@ -307,8 +307,8 @@ class Repo:
 
     def __upgrade_repo_v2(self):
         """ This upgrade will perform the following actions:
-        * Create directory "state"
         * Update "version.txt" to 3
+        * Restore any legally missing snapshots with a deleted snapshot definition.
         """
         assert not self.readonly, "Repo is read only, cannot upgrade"
         version = self.__get_repo_version()
@@ -337,18 +337,6 @@ class Repo:
 
     def get_path(self, subdir, *parts):
         return os.path.join(self.repopath, subdir, *parts)
-
-    """
-    def __add_snapshot_marker(self, snapshot_id, fingerprint, overwrite = False):
-        assert is_md5sum(fingerprint)
-        snapshot_id = int(snapshot_id)
-        marker_file = self.get_path(STATE_SNAPSHOTS_DIR, str(snapshot_id))
-        marker_file_content = json.dumps({'snapshot': snapshot_id, 'fingerprint': fingerprint})
-        if overwrite:
-            replace_file(marker_file, marker_file_content)
-        else:
-            create_file(marker_file, marker_file_content)
-    """
         
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
@@ -687,46 +675,49 @@ class Repo:
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
-        trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_snapshots_", dir = self.get_path(TMP_DIR))
         snapshot_ids.sort()
         snapshot_ids.reverse()
 
         for rev in snapshot_ids:
-            if self.get_referring_snapshots(rev):
-                raise MisuseError("Erasing rev %s would create orphan snapshots" % rev)
-            if rev in self.session_readers:
-                del self.session_readers[rev]
+            self.__erase_snapshot(rev)
 
-            session_path = self.get_session_path(rev)
+    def __erase_snapshot(self, rev):
+        # Carefully here... We must allow for a resumed operation 
+        if not self.allows_permanent_erase():
+            raise MisuseError("Not allowed for this repo")
+        if self.get_referring_snapshots(rev):
+            raise MisuseError("Erasing rev %s would create orphan snapshots" % rev)
+        if rev in self.session_readers:
+            del self.session_readers[rev]
+        trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_snapshots_", dir = self.get_path(TMP_DIR))
+        session_path = self.get_session_path(rev)
+        delete_copy = os.path.join(session_path, "deleted")
+        if not os.path.exists(delete_copy):
+            tmpcopy = self.get_path(TMP_DIR, str(rev) + ".deleted")
+            shutil.copytree(session_path, tmpcopy)
+            os.rename(tmpcopy, delete_copy)
+        session_file = os.path.join(session_path, "session.json")
+        bloblist_file = os.path.join(session_path, "bloblist.json")
+        md5_file = os.path.join(session_path, "session.md5")
+        session_data = read_json(os.path.join(delete_copy, "session.json"))
+        deleted_fingerprint = session_data['fingerprint']
+        session_data['base_session'] = None
+        session_data['deleted_fingerprint'] = deleted_fingerprint
+        session_data['deleted_name'] = session_data['client_data']['name']
+        session_data['fingerprint'] = "d41d8cd98f00b204e9800998ecf8427e"
+        session_data['client_data']['name'] = "__deleted"
+        if os.path.exists(os.path.join(session_path, deleted_fingerprint + ".fingerprint")):
+            os.unlink(os.path.join(session_path, deleted_fingerprint + ".fingerprint"))
+        _snapshot_delete_test_hook(rev)
+        if not os.path.exists(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint")):
+            create_file(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint"), "")
+        replace_file(session_file, json.dumps(session_data))
+        replace_file(bloblist_file, "[]")
+        new_md5 = "%s *%s\n%s *%s\n" % (md5sum_file(session_file), "session.json", 
+                                        md5sum_file(bloblist_file), "bloblist.json")
+        replace_file(md5_file, new_md5)
+        os.rename(delete_copy, os.path.join(trashdir, str(rev) + ".deleted"))
 
-            # Carefully here... We must allow for a resumed operation
-            delete_copy = os.path.join(session_path, "deleted")
-            if not os.path.exists(delete_copy):
-                tmpcopy = self.get_path(TMP_DIR, str(rev) + ".deleted")
-                shutil.copytree(session_path, tmpcopy)
-                os.rename(tmpcopy, delete_copy)
-            session_file = os.path.join(session_path, "session.json")
-            bloblist_file = os.path.join(session_path, "bloblist.json")
-            md5_file = os.path.join(session_path, "session.md5")
-            session_data = read_json(os.path.join(delete_copy, "session.json"))
-            deleted_fingerprint = session_data['fingerprint']
-            session_data['base_session'] = None
-            session_data['deleted_fingerprint'] = deleted_fingerprint
-            session_data['deleted_name'] = session_data['client_data']['name']
-            session_data['fingerprint'] = "d41d8cd98f00b204e9800998ecf8427e"
-            session_data['client_data']['name'] = "__deleted"
-            if os.path.exists(os.path.join(session_path, deleted_fingerprint + ".fingerprint")):
-                os.unlink(os.path.join(session_path, deleted_fingerprint + ".fingerprint"))
-            _snapshot_delete_test_hook(rev)
-            if not os.path.exists(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint")):
-                create_file(os.path.join(session_path, "d41d8cd98f00b204e9800998ecf8427e.fingerprint"), "")
-            replace_file(session_file, json.dumps(session_data))
-            replace_file(bloblist_file, "[]")
-            new_md5 = "%s *%s\n%s *%s\n" % (md5sum_file(session_file), "session.json", 
-                                            md5sum_file(bloblist_file), "bloblist.json")
-            replace_file(md5_file, new_md5)
-            os.rename(delete_copy, os.path.join(trashdir, str(rev) + ".deleted"))
-            #create_file(delmarker_file, "")
 
     def __erase_orphan_blobs(self):
         assert self.repo_mutex.is_locked()
