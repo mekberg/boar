@@ -693,7 +693,7 @@ class Repo:
         session_path = self.get_session_path(rev)
         delete_copy = os.path.join(session_path, "deleted")
         if not os.path.exists(delete_copy):
-            tmpcopy = self.get_path(TMP_DIR, str(rev) + ".deleted")
+            tmpcopy = tempfile.mktemp(prefix ="deleted_", dir = self.get_path(TMP_DIR))
             shutil.copytree(session_path, tmpcopy)
             os.rename(tmpcopy, delete_copy)
         session_file = os.path.join(session_path, "session.json")
