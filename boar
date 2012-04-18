@@ -677,10 +677,10 @@ def cmd_clone(args):
         raise UserError("Cloning requires local repositories")
     repopath1 = os.path.abspath(repopath1)
     repopath2 = os.path.abspath(repopath2)
-    repo1 = repository.Repo(repopath1)
+    repo1 = workdir.user_friendly_open_repository(repopath1)
     if not os.path.exists(repopath2):
         repository.create_repository(repopath2)
-    repo2 = repository.Repo(repopath2)
+    repo2 = workdir.user_friendly_open_repository(repopath2)
     if not repo2.isContinuation(repo1):
         raise UserError("The source repo is not a continuation of the destination repo. Cannot clone.")
     if options.replicate:
@@ -701,8 +701,8 @@ def cmd_diffrepo(args):
         raise UserError("Cloning requires local repositories")
     repopath1 = os.path.abspath(repopath1)
     repopath2 = os.path.abspath(repopath2)
-    repo1 = repository.Repo(repopath1)
-    repo2 = repository.Repo(repopath2)
+    repo1 = workdir.user_friendly_open_repository(repopath1)
+    repo2 = workdir.user_friendly_open_repository(repopath2)
     if repo1.isIdentical(repo2):
         assert repo2.isIdentical(repo1)
         print "Repositories are identical"
@@ -734,7 +734,7 @@ def init_repo_from_env(repo_from_cmdline):
     if repopath.startswith("boar://"):
         front = client.connect(repopath)
     else:
-        front = Front(repository.Repo(repopath))
+        front = Front(workdir.user_friendly_open_repository(repopath))
     assert front
     return front
 
@@ -825,7 +825,6 @@ def main():
     else:
         print_help()
         return 1
-
 
 return_code = 0
 
