@@ -680,7 +680,11 @@ class Repo:
 
         trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_snapshots_", dir = self.get_path(TMP_DIR))
         for rev in snapshot_ids:
-            self.__erase_snapshot(rev, trashdir)
+            try:
+                self.__erase_snapshot(rev, trashdir)
+            except OSError, e:
+                if e.errno == 13:
+                    raise UserError("Snapshot %s is write protected, cannot erase. Change your repository file permissions and try again." % rev)
 
     def __erase_snapshot(self, rev, trashdir):
         # Carefully here... We must allow for a resumed operation 
