@@ -124,7 +124,7 @@ def verify_repo(repo, verify_blobs = True):
         repo.verify_snapshot(rev)
     session_ids = front.get_session_ids()
     print "Verifying %s snapshots" % (len(session_ids))
-    ok_blobs = set()
+    existing_blobs = set(front.get_all_blobs())
     for i in range(0, len(session_ids)):
         id = session_ids[i]
         bloblist = front.get_session_bloblist(id)
@@ -132,9 +132,8 @@ def verify_repo(repo, verify_blobs = True):
         if calc_fingerprint != front.get_session_fingerprint(id):
             raise CorruptionError("Fingerprint didn't match for snapshot %s" % id)
         for bi in bloblist:
-            if not (bi['md5sum'] in ok_blobs or front.has_blob(bi['md5sum'])):
+            if bi['md5sum'] not in existing_blobs:
                 raise CorruptionError("Snapshot %s is missing blob %s" % (session_ids[i], bi['md5sum']))
-            ok_blobs.add(bi['md5sum'])
         print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
     if not verify_blobs:
         print "Skipping blob verification"
@@ -839,6 +838,7 @@ if __name__ == "__main__":
     #import pstats
     #p = pstats.Stats('prof.txt')
     #p.sort_stats('cum').print_stats(10)
+    #sys.exit(0)
     try:
         return_code = main()
     except KeyboardInterrupt:
