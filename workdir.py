@@ -18,7 +18,7 @@ from __future__ import with_statement
 
 import os
 from front import Front, DryRunFront, RevisionFront
-from blobrepo.repository import Repo
+import blobrepo.repository as repository
 from treecomp import TreeComparer
 from common import *
 from boar_exceptions import *
@@ -582,7 +582,7 @@ def create_front(repoUrl):
         front = client.connect(repoUrl)
         front.isRemote = True
     else:
-        front = Front(Repo(repoUrl))
+        front = Front(user_friendly_open_repository(repoUrl))
         front.isRemote = False
     return front
 
@@ -635,6 +635,14 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
     finally:
         if os.path.exists(tmpfile):
             os.remove(tmpfile)
+
+def user_friendly_open_repository(path):
+    if repository.looks_like_repo(path) and repository.has_pending_operations(path):
+        notice("The repository at %s has pending operations. Resuming..." % path)
+        repo = repository.Repo(path)
+        notice("Pending operations completed.")
+        return repo
+    return repository.Repo(path)
 
 def bloblist_to_dict(bloblist):
     d = {}

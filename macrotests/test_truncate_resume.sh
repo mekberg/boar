@@ -54,6 +54,8 @@ grep __deleted TESTREPO_truncated/sessions/3/session.json >/dev/null && { echo "
 grep __deleted TESTREPO_truncated/sessions/6/session.json >/dev/null || { echo "Repo should be partially truncated"; exit 1; }
 
 cat >expected.txt <<EOF
+!NOTICE: The repository at .* has pending operations. Resuming...
+NOTICE: Pending operations completed.
 [1, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
 [2, null, "AnotherTestSession", "d41d8cd98f00b204e9800998ecf8427e", null, false]
 [3, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]

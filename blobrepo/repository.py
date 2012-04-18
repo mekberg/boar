@@ -151,6 +151,10 @@ def looks_like_repo(repo_path):
             return False
     return True
 
+def has_pending_operations(repo_path):
+    dirpath = os.path.join(repo_path, QUEUE_DIR)
+    return len(os.listdir(dirpath)) != 0
+
 class Repo:
     def __init__(self, repopath):
         # The path must be absolute to avoid problems with clients
