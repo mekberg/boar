@@ -204,6 +204,10 @@ def cmd_status(args):
         raise UserError(not_a_workdir_msg)
     if args:
         raise UserError("Too many arguments")
+
+    if wd.front.is_deleted(wd.revision):
+        raise UserError("The current snapshot has been deleted in the repository.")
+
     wd.use_progress_printer(not options.quiet)
     unchanged_files, new_files, modified_files, deleted_files, ignored_files \
         = wd.get_changes(wd.revision)
@@ -432,10 +436,21 @@ def cmd_update(args):
     if not wd:
         raise UserError(not_a_workdir_msg)
     wd.use_progress_printer(not options.quiet)
+    new_revision = options.revision
+    old_revision = wd.revision
+    if not new_revision:
+        new_revision = wd.front.find_last_revision(wd.sessionName)
+        assert not wd.front.is_deleted(new_revision) # Should not be possible, but could potentially cause deletion of workdir files
+    if wd.front.is_deleted(old_revision):
+        # We can't know what has actually changed in the
+        # workdir. Let's assume that any differences with latest revision
+        # are modifications, to avoid overwriting any un-committed
+        # workdir changes.
+        old_revision = new_revision
     if options.ignore_changes:
         wd.update_revision(options.revision)
     else:
-        wd.update(new_revision = options.revision, ignore_errors = options.ignore_errors)
+        wd.update(old_revision = old_revision, new_revision = new_revision, ignore_errors = options.ignore_errors)
     print "Workdir now at revision", wd.revision
 
 def cmd_ci(args):
