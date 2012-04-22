@@ -24,6 +24,7 @@ import platform
 import locale
 import codecs
 import time
+import textwrap
 
 from tempfile import TemporaryFile
 from threading import current_thread
@@ -69,15 +70,28 @@ def is_sha256(str):
 
 assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 
-def warn(s):
-    sys.stderr.write("WARNING: ")
-    sys.stderr.write(s)
-    sys.stderr.write("\n")
+def prefixwrap(prefix, text, rowlen = 80):
+    rows = textwrap.wrap(text, width = rowlen - len(prefix))
+    result = [prefix + rows.pop(0)]
+    while rows:
+        result.append(" " * len(prefix) + rows.pop(0))
+    return result
 
-def notice(s):
-    sys.stderr.write("NOTICE: ")
-    sys.stderr.write(s)
-    sys.stderr.write("\n")
+def prefixprint(prefix, text, stream = None):
+    if stream == None:
+        stream = sys.stderr
+    for row in prefixwrap(prefix, text):
+        stream.write(row)
+        stream.write("\n")
+
+def error(s, stream = None):
+    prefixprint("ERROR: ", s, stream)
+
+def warn(s, stream = None):
+    prefixprint("WARNING: ", s, stream)
+
+def notice(s, stream = None):
+    prefixprint("NOTICE: ", s, stream)
 
 def read_file(path):
     """Reads and returns the contents of the given filename."""
