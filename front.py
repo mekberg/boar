@@ -196,7 +196,7 @@ class Front:
                     raise UserError("This repository does not allow destructive changes.")
                 snapshots_to_erase = self.get_session_ids(session_name)
                 self.new_session.erase_snapshots(snapshots_to_erase)
-            new_sid = self.commit(session_name, log_message = u"Standalone snapshot")
+            new_sid = self.commit(session_name)
         new_fingerprint = self.get_session_fingerprint(new_sid)
         assert old_fingerprint == new_fingerprint
         assert self.repo.get_session(new_sid).get_base_id() == None
