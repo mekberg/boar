@@ -188,13 +188,13 @@ class Workdir:
         assert self.revision, "Cannot update - unknown current revision"
         new_revision = self.front.find_last_revision(self.sessionName)
         assert not self.front.is_deleted(new_revision) # Should not be possible, but could potentially cause deletion of workdir files
-        self.update(self.revision, new_revision, ignore_errors)
+        return self.update(self.revision, new_revision, ignore_errors)
 
     def update(self, old_revision, new_revision, ignore_errors = False):
         """ Apply the changes from old_revision to
         new_revision. Differences in the workdir from old_revision
         will be considered modifications and will not be
-        overwritten. Old_revision should typically be self.revision."""
+        overwritten. Old_revision should typically be self.revision. """
         assert type(new_revision) == int and new_revision > 0
         assert type(old_revision) == int and old_revision > 0
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
@@ -515,6 +515,7 @@ class Workdir:
             assert not deleted_files, deleted_files
         result = unchanged_files, new_files, modified_files, deleted_files, ignored_files
         progress.finished()
+        self.last_get_changes = result # A little bit of a hack for update()... User experience trumps code beauty
         return result
 
 def fnmatch_multi(patterns, filename):
@@ -647,7 +648,7 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
 
 def user_friendly_open_repository(path):
     if repository.looks_like_repo(path) and repository.has_pending_operations(path):
-        notice("The repository at %s has pending operations. Resuming..." % path)
+        notice("The repository at %s has pending operations. Resuming..." % os.path.basename(path))
         repo = repository.Repo(path)
         notice("Pending operations completed.")
         return repo
