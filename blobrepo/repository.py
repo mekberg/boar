@@ -446,6 +446,9 @@ class Repo:
     def get_all_sessions(self):
         return get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
 
+    def is_deleted(self, rev):
+        return self.get_session(rev).is_deleted()
+
     def get_deleted_snapshots(self):
         result = []
         for sid in self.get_all_sessions():
