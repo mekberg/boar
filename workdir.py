@@ -182,19 +182,28 @@ class Workdir:
         self.revision = new_revision
         self.write_metadata()
 
-    def update(self, new_revision = None, ignore_errors = False):
-        assert self.revision, "Cannot update. Current revision is unknown: '%s'" % self.revision
+    def update_to_latest(self, ignore_errors = False):
+        """ Updates to the latest revision. Equivalent to using
+        self.update(<current revision>, <latest revision>), """
+        assert self.revision, "Cannot update - unknown current revision"
+        new_revision = self.front.find_last_revision(self.sessionName)
+        assert not self.front.is_deleted(new_revision) # Should not be possible, but could potentially cause deletion of workdir files
+        self.update(self.revision, new_revision, ignore_errors)
 
+    def update(self, old_revision, new_revision, ignore_errors = False):
+        """ Apply the changes from old_revision to
+        new_revision. Differences in the workdir from old_revision
+        will be considered modifications and will not be
+        overwritten. Old_revision should typically be self.revision."""
+        assert type(new_revision) == int and new_revision > 0
+        assert type(old_revision) == int and old_revision > 0
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes(self.revision)
+            self.get_changes(old_revision)
         front = self.get_front()
         log = self.output
-        if new_revision:
-            if not front.has_snapshot(self.sessionName, new_revision):
-                raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
-        else:
-            new_revision = front.find_last_revision(self.sessionName)
-        old_bloblist = self.get_bloblist(self.revision)
+        if not front.has_snapshot(self.sessionName, new_revision):
+            raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
+        old_bloblist = self.get_bloblist(old_revision)
         new_bloblist = front.get_session_bloblist(new_revision)
         new_bloblist_dict = bloblist_to_dict(new_bloblist)
         for b in new_bloblist:

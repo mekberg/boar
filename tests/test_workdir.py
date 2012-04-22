@@ -329,7 +329,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd_update = self.createWorkdir(self.repoUrl, 
                                        {'file2.txt': 'f2 mod1'}, 
                                        revision = rev1)
-        wd_update.update()
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file2.txt': 'f2 mod1',
                                          'file3.txt': 'f3'})
@@ -352,7 +352,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'file2.txt': 'f2 v1',  # normal v1
                                         'file3.txt': 'f3 mod'},# normal modification, but not v2
                                        revision = rev1)
-        wd_update.update()
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file1.txt': 'f1 v2',
                                          'file2.txt': 'f2 v2',
@@ -370,7 +370,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                        {'d/file2.txt': 'f2 mod1'}, 
                                        revision = rev1,
                                        offset = u"subdir")
-        wd_update.update()
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'d/file2.txt': 'f2 mod1',
                                          'd/file3.txt': 'f3'})
@@ -390,7 +390,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'file2.txt': 'f2 mod',
                                         'file3.txt': 'f3'}, 
                                        revision = rev1)
-        wd_update.update()
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file1.txt': 'f1 mod',
                                          'file2.txt': 'f2 mod'})
@@ -411,7 +411,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'd/file3.txt': 'f3'}, 
                                        revision = rev1,
                                        offset = u"subdir")
-        wd_update.update()
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'d/file1.txt': 'f1 mod',
                                          'd/file2.txt': 'f2 mod'})
@@ -492,7 +492,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
 
         wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
-        wd.update()
+        wd.update_to_latest()
         write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
         wd.checkin()
 
@@ -523,7 +523,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
 
         wd.front.set_session_include_list(u"TestSession", ["*.txt"])
-        wd.update()
+        wd.update_to_latest()
         write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
         wd.checkin()
 
@@ -537,7 +537,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl, tree)
         wd.checkin()
         wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
-        wd.update()
+        wd.update_to_latest()
         wd.get_changes()
         full_tree_filenames = set(read_tree(wd.root).keys())
         expected_filenames = set([u'file.txt', 
