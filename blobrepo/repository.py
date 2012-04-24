@@ -473,7 +473,6 @@ class Repo:
         if self.__get_repo_version() < 3: # To make it possible to access old read-only repos
             warn("todo: implement verify_snapshot for early versions")
             return True
-        print "Verify snapshot", id
         session_exists = self.has_snapshot(id)
         if not session_exists:
             raise CorruptionError("Snapshot %s is missing" % id)
