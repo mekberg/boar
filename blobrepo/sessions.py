@@ -130,8 +130,9 @@ class _NaiveSessionWriter:
                                "filename": filename})
 
     def delete(self, deleted_session_name, deleted_fingerprint):
-        assert is_md5sum(deleted_fingerprint)
-        assert type(deleted_session_name) == unicode
+        assert deleted_fingerprint == None or is_md5sum(deleted_fingerprint)
+        assert deleted_session_name == None or type(deleted_session_name) == unicode
+        assert (deleted_fingerprint == None) == (deleted_session_name == None)
         self.deleted_session_name = deleted_session_name
         self.deleted_fingerprint = deleted_fingerprint
 
@@ -281,8 +282,9 @@ class SessionWriter:
         assert not self.dead
         other_bloblist = session.get_all_blob_infos()
         if session.is_deleted():
-            self.writer.delete(deleted_session_name = session.properties['deleted_name'], 
-                               deleted_fingerprint = session.properties['deleted_fingerprint'])
+            # Allow for None as deleted_name and deleted_fingerprint.
+            self.writer.delete(deleted_session_name = session.properties.get('deleted_name', None), 
+                               deleted_fingerprint = session.properties.get('deleted_fingerprint', None))
         self.resulting_blobdict = bloblist_to_dict(other_bloblist)
         self.metadatas = bloblist_to_dict(session.get_raw_bloblist())
         self.base_session = session.properties.get("base_session", None)
