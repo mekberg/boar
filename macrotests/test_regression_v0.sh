@@ -118,3 +118,5 @@ rm -r $REPO/sessions/4 || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Upgrade of repo with legal missing snapshot failed"; exit 1; }
 REPO_PATH=$REPO $BOAR ls || { echo "Ls of repo with legal missing snapshot failed"; exit 1; }
 REPO_PATH=$REPO $BOAR list --dump || { echo "List --dump of repo with legal missing snapshot failed"; exit 1; }
+$BOAR clone $REPO clone_missing_snapshot || { echo "Clone of repo with legal missing snapshot failed"; exit 1; }
+$BOAR verify --repo=clone_missing_snapshot || { echo "Verify of clone with legal missing snapshot failed"; exit 1; }
