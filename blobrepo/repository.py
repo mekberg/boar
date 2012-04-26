@@ -245,7 +245,8 @@ class Repo:
             raise
 
     def __upgrade_repo_v0(self):
-        """ This upgrade will upgrade the repository to the latest format by 
+        """ This upgrade will upgrade a repository from before strict 
+        version numbering (v0), to a v1 format repository. It does this by 
         performing the following actions:
         
         * Create directory "derived"
