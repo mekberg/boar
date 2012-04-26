@@ -322,7 +322,6 @@ class Repo:
         for directory in REPO_DIRS_V2:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
                                  "Repository says it is v2 format but is missing %s" % directory)
-        # TODO: take care of missing snapshots
         for rev in range(1, self.get_highest_used_revision() + 1):
             if os.path.exists(self.get_session_path(rev)):
                 continue
