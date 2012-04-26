@@ -379,7 +379,12 @@ class SessionReader:
         if "deleted_name" in self.properties:
             assert self.get_name() == "__deleted"
             return True
-        assert self.get_name() != "__deleted"
+        elif self.get_name() == "__deleted":
+            # Missing snapshots that are re-created as explicitly
+            # deleted during an upgrade does not have deleted_name or
+            # deleted_fingerprint in their properties.
+            assert not "deleted_fingerprint" in self.properties
+            return True
         return False
 
     def get_fingerprint(self):

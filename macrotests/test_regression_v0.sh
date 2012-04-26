@@ -116,3 +116,5 @@ echo "--- Test legal missing snapshot"
 tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 rm -r $REPO/sessions/4 || exit 1
 REPO_PATH=$REPO $BOAR verify || { echo "Upgrade of repo with legal missing snapshot failed"; exit 1; }
+REPO_PATH=$REPO $BOAR ls || { echo "Ls of repo with legal missing snapshot failed"; exit 1; }
+REPO_PATH=$REPO $BOAR list --dump || { echo "List --dump of repo with legal missing snapshot failed"; exit 1; }
