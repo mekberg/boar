@@ -230,7 +230,9 @@ class SessionWriter:
 
     def init_new_blob(self, blob_md5, blob_size):
         assert is_md5sum(blob_md5)
-        assert not self.repo.has_blob(blob_md5), "blob already exists"
+        # It is ok for a blob to already exist in the repo
+        # here. Possibly some other session is uploading, or has
+        # uploaded this blob, before we get here. But that is ok. 
         assert not self.dead
         assert not self.blob_writer.keys(), "Another new blob is already in progress"
         fname = os.path.join(self.session_path, blob_md5)
