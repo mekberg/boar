@@ -13,7 +13,7 @@ for session in $SESSIONS; do
     # Simple checkout of latest revision
     CO_NAME=`mktemp -u EXCERCISE_CO_XXXX`
     REPO_PATH=$REPO $BOAR co $session "$CO_NAME" || { echo $prefix "Co of session '$session' failed"; exit 1; }
-    rm -r "$CO_NAME" || exit 1
+    rm -r "$CO_NAME" || { echo  $prefix "Couldn't remove co dir"; exit 1; }
 
     # Check out every revision of this session explicitly
     REVISIONS=$($BOAR --repo=$REPO list $session |grep "Revision id"|cut -d ' ' -f 3)
@@ -21,10 +21,9 @@ for session in $SESSIONS; do
 	CO_NAME=`mktemp -u EXCERCISE_CO_XXXX`
 	REPO_PATH=$REPO $BOAR co -r $revision $session "$CO_NAME" || { 
 	    echo $prefix "Co of session '$session' revision $revision failed"; exit 1; }
-	rm -r "$CO_NAME" || exit 1    
+	rm -r "$CO_NAME" || { echo  $prefix "Couldn't remove co dir"; exit 1; }
     done
 done
-exit 1
 
 $BOAR clone $REPO $CLONE || { echo $prefix "Clone failed (Clone path: $CLONE)"; exit 1; }
 $BOAR verify --repo=$CLONE || { echo $prefix "Clone verify failed (Clone path: $CLONE)"; exit 1; }
