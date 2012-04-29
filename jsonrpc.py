@@ -173,8 +173,6 @@ class SocketDataSource(DataSource):
     def __init__(self, socket, data_size):
         self.socket = socket
         self.remaining = data_size
-        if self.remaining == 0:
-            self.socket.close()
 
     def bytes_left(self):
         return self.remaining
@@ -183,13 +181,11 @@ class SocketDataSource(DataSource):
         if self.remaining == 0:
             return ""
         bytes_to_read = min(n, self.remaining)
-        data = RecvNBytes(self.socket, bytes_to_read)
+        data = self.socket.read(bytes_to_read)
         self.remaining -= bytes_to_read
         assert len(data) == bytes_to_read
         assert len(data) <= n
         assert self.remaining >= 0
-        if self.remaining == 0:
-            self.socket.close()
         return data
 
 class FileDataSource(DataSource):
@@ -501,7 +497,7 @@ class TransportStream:
         print "Waiting for read on", self.s_in
         header = self.s_in.read(HEADER_SIZE)
         datasize, binary_data_size = unpack_header(header)
-        print "Got header, size = ", datasize
+        print "Got header", [datasize, binary_data_size]
         data = self.s_in.read(datasize)
         self.log( "TransportSocket.Recv() --> "+repr(data) )
         if binary_data_size != None:            
@@ -523,28 +519,30 @@ class TransportStream:
 
     def serve(self, handler, n=None):
         try:
+            self.log( "TransportSocket.Serve(): connected")
             while 1:
-                self.log( "TransportSocket.Serve(): connected")
                 header = self.s_in.read(HEADER_SIZE)
                 if not header:
                     self.log("Connection was closed by other side")
                     break
-                self.log( "TransportSocket.Serve(): got an header: " + str(header))
                 datasize, binary_data_size = unpack_header(header)
+                self.log( "TransportSocket.Serve(): got a header: " + str([datasize, binary_data_size]))
                 assert binary_data_size == None, "Not implemented yet. Was: " + str(binary_data_size)
                 data = self.s_in.read(datasize)
                 self.log( "TransportSocket.Serve(): Got a message: %s" % (repr(data)) )
                 result = handler(data)
                 self.log( "TransportSocket.Serve(): Message was handled ok" )
                 assert result != None
-                self.log( "TransportSocket.Serve(): Responding to %s" % (repr(result)) )  
+                self.log( "TransportSocket.Serve(): Responding with %s" % (repr(result)) )  
                 if isinstance(result, DataSource):
                     dummy_result = jsonrpc20.dumps_response(None)
                     header = pack_header(len(dummy_result), result.bytes_left())
                     self.s_out.write( header )
                     self.s_out.write( dummy_result )
                     while result.bytes_left() > 0:
-                        self.s_out.write(result.read(2**14))
+                        piece = result.read(2**14)
+                        print "Sending", len(piece), "binary bytes"
+                        self.s_out.write(piece)
                 else:
                     header = pack_header(len(result))
                     self.s_out.write( header )
