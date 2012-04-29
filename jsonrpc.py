@@ -480,7 +480,7 @@ def unpack_header(header_str):
     assert len(header_str) == HEADER_SIZE
     magic, version, payload_size, has_binary_payload, binary_payload_size = \
         struct.unpack("!III?I", header_str)
-    assert magic == HEADER_MAGIC, header_str
+    assert magic == HEADER_MAGIC, "Unexpected header: " + header_str
     if not has_binary_payload:
         assert binary_payload_size == 0
         binary_payload_size = None
