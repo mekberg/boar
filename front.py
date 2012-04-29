@@ -84,9 +84,6 @@ class Front:
         self.new_session = None
         self.blobs_to_verify = []
 
-    def get_repo_path(self):
-        return self.repo.get_repo_path()
-
     def get_session_ids(self, session_name = None):
         sids = self.repo.get_all_sessions()
         if not session_name:
@@ -409,9 +406,6 @@ class DryRunFront:
 
     def __init__(self, front):
         self.realfront = front
-
-    def get_repo_path(self):
-        return self.realfront.get_repo_path()
 
     def get_session_ids(self):
         return self.realfront.get_session_ids()

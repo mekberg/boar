@@ -591,6 +591,9 @@ def create_front(repoUrl):
     if repoUrl.startswith("boar://"):
         front = client.connect(repoUrl)
         front.isRemote = True
+    elif repoUrl.startswith("boar+ssh://"):
+        front = client.connect_ssh(repoUrl)
+        front.isRemote = True
     else:
         front = Front(user_friendly_open_repository(repoUrl))
         front.isRemote = False
