@@ -672,7 +672,8 @@ class StrictFileWriter:
     
     def close(self):
         if self.written_bytes != self.expected_size:
-            raise ConstraintViolation("Violation of file contract (too small) detected: "+str(self.filename))
+            raise ConstraintViolation("Violation of file contract (too small, %s < %s) detected: %s" %
+                                      (self.written_bytes, self.expected_size, self.filename))
         if self.f:
             self.f.close()
             self.f = None
