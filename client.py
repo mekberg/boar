@@ -21,7 +21,7 @@ import re
 import sys
 
 def connect(url):
-    m = re.match("boar+ssh://(.*?)(:[0-9]+)?/", url)
+    m = re.match("boar://(.*?)(:[0-9]+)?/", url)
     assert m, "Not a valid boar url"
     address = m.group(1)    
     port = 50000
