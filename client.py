@@ -18,9 +18,10 @@
 import jsonrpc
 import base64
 import re
+import sys
 
 def connect(url):
-    m = re.match("boar://(.*?)(:[0-9]+)?/", url)
+    m = re.match("boar+ssh://(.*?)(:[0-9]+)?/", url)
     assert m, "Not a valid boar url"
     address = m.group(1)    
     port = 50000
@@ -31,4 +32,30 @@ def connect(url):
                                  jsonrpc.TransportTcpIp(addr=(address, port), 
                                                         timeout=60.0, limit=2**16))
     return server.front
+
+
+import subprocess, time
+
+def connect_ssh(url):
+    print "Connecting with command"
+    url_match = re.match("boar\+ssh://(.*)@([^/]+)(/.*)", url)
+    assert url_match, "Not a valid Boar URL:" + url
+    user, host, path = url_match.groups()
+    cmd = "ssh '%s'@'%s' python hg/boar-contrib/server.py '%s'" % (user, host, path)
+    print user, host, path
+    p = subprocess.Popen(cmd, 
+                         shell = True, 
+                         stdout = subprocess.PIPE, 
+                         stdin = subprocess.PIPE, 
+                         stderr = open("output-server.txt", "w"))
+    if p.poll() != None:
+        print "*** Command failed: ", cmd
+        sys.exit(1)
+    else:
+        print "*** Command running"
+    server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
+                                 jsonrpc.TransportStream(p.stdout, p.stdin))
+    assert server.front.ping() == "pong"
+    return server.front
+
 
