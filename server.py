@@ -19,13 +19,20 @@ from blobrepo import repository
 import jsonrpc
 import os, time, threading
 import front
+import sys
 
 class BoarServer:
-    def __init__(self, repopath, port = 50000):
+    def __init__(self, repopath):
         self.repopath = repopath
+        cmd_stdin = sys.stdin
+        cmd_stdout = sys.stdout
+        sys.stdin = None
+        sys.stdout = sys.stderr
         self.server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
-                                     jsonrpc.TransportTcpIp(timeout=60.0, 
-                                                            addr=("0.0.0.0", port)))
+                                     jsonrpc.TransportStream(cmd_stdin, cmd_stdout))
+        sys.stdin = None
+        sys.stdout = sys.stderr
+
     def serve(self):
         repo = repository.Repo(self.repopath)
         fr = front.Front(repo)
@@ -44,13 +51,11 @@ class ThreadedBoarServer(BoarServer):
         self.serverThread.start()
 
 def main():
-    repopath = os.getenv("REPO_PATH")
-    if repopath == None:
-        print "You need to set REPO_PATH"
-        return
+    repopath = unicode(sys.argv[1])
     server = BoarServer(repopath)
     print "Serving"
     pid = server.serve()
+    print "Done serving"
 
 if __name__ == "__main__":
     main()
