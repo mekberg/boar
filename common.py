@@ -594,6 +594,9 @@ class FakeFile:
     def close(self):
         pass
 
+    def flush(self):
+        pass
+
 class RateLimiter:
     """This class makes it easy to perform some action only when a
     certain time has passed. The maxrate parameter is given in Hz and

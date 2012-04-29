@@ -20,6 +20,7 @@ import jsonrpc
 import os, time, threading
 import front
 import sys
+from common import FakeFile
 
 class TcpIpBoarServer:
     """This is a boar server that accepts connections on a tcp
@@ -46,13 +47,11 @@ class StdioBoarServer:
     def __init__(self, repopath):
         self.repopath = repopath
         cmd_stdin = sys.stdin
-        cmd_stdout = sys.stdout
+        cmd_stdout = sys.stdout 
         sys.stdin = None
-        sys.stdout = sys.stderr
+        sys.stdout = FakeFile()
         self.server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
                                      jsonrpc.TransportStream(cmd_stdin, cmd_stdout))
-        sys.stdin = None
-        sys.stdout = sys.stderr
 
     def serve(self):
         repo = repository.Repo(self.repopath)
@@ -84,4 +83,9 @@ def main():
     print "Done serving"
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception, e:
+        open("/tmp/server-crash.txt", "a").write(repr(e))
+        raise
+
