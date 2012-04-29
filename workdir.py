@@ -647,7 +647,7 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
             os.remove(tmpfile)
 
 def user_friendly_open_repository(path):
-    if repository.looks_like_repo(path) and repository.has_pending_operations(path):
+    if "://" not in path and repository.looks_like_repo(path) and repository.has_pending_operations(path):
         notice("The repository at %s has pending operations. Resuming..." % os.path.basename(path))
         repo = repository.Repo(path)
         notice("Pending operations completed.")

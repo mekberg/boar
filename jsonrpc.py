@@ -467,131 +467,90 @@ def unpack_header(header_str):
         binary_payload_size = None
     return payload_size, binary_payload_size
 
-import socket, select
-class TransportTcpIp:
-    """Transport via socket.
-   
-    :SeeAlso:   python-module socket
-    :TODO:
-        - documentation
-        - improve this (e.g. make sure that connections are closed, socket-files are deleted etc.)
-        - exception-handling? (socket.error)
-    """
-    def __init__( self, addr = None, limit=4096, sock_type=socket.AF_INET, sock_prot=socket.SOCK_STREAM, timeout=1.0, logfunc=log_dummy ):
-        """
-        :Parameters:
-            - addr: socket-address
-            - timeout: timeout in seconds
-            - logfunc: function for logging, logfunc(message)
-        :Raises: socket.timeout after timeout
-        """
-        self.limit  = limit
-        self.addr   = addr
-        self.s_type = sock_type
-        self.s_prot = sock_prot
-        self.s      = None
-        self.timeout = timeout
-        self.log    = logfunc
+class TransportStream:
+
+    def __init__( self, s_in, s_out, logfunc=log_dummy ):
+        print "s_in =", s_in
+        print "s_out =", s_out
+        self.s_in = s_in
+        self.s_out = s_out
 
     def connect( self ):
-        self.close()
-        self.log( "connect to %s" % repr(self.addr) )
-        self.s = socket.socket( self.s_type, self.s_prot )
-        self.s.settimeout( self.timeout )
-        self.s.connect( self.addr )
+        pass
+
+    def log(self, s):
+        print s
 
     def close( self ):
-        if self.s is not None:
-            self.log( "close %s" % repr(self.addr) )
-            self.s.close()
-            self.s = None
+        print "Closing transport stream"
+        if self.s_in is not None:
+            self.s_in.close()
+            self.s_out.close()
 
     def __repr__(self):
-        return "<TransportSocket, %s>" % repr(self.addr)
+        return "<TransportSocket, %s, %s>" % (self.s_in, self.s_out)
     
     def send( self, string ):
-        if self.s is None:
-            self.connect()
         header = pack_header(len(string))
-        self.s.sendall( header )
-        self.s.sendall( string )
+        self.s_out.write(header)
+        self.s_out.write(string)
+        self.s_out.flush()
         self.log( "TransportSocket.Send() --> "+repr(string) )
         
     def recv( self ):
-        if self.s is None:
-            self.connect()
-        header = RecvNBytes(self.s, HEADER_SIZE)
+        print "Waiting for read on", self.s_in
+        header = self.s_in.read(HEADER_SIZE)
         datasize, binary_data_size = unpack_header(header)
-        data = RecvNBytes(self.s, datasize, 5.0)
+        print "Got header, size = ", datasize
+        data = self.s_in.read(datasize)
         self.log( "TransportSocket.Recv() --> "+repr(data) )
         if binary_data_size != None:            
-            return data, SocketDataSource(self.s, binary_data_size)
+            return data, SocketDataSource(self.s_in, binary_data_size)
         else:
             return data, None
 
     def sendrecv( self, string ):
         """send data + receive data + close"""
-        self.close()
-        data_source = None
-        try:
-            self.log("SendRecv id = " + str(id(self)))
-            self.send( string )
-            self.log("SendRecv Waiting for reply")
-            reply, data_source = self.recv()
-            self.log("SendRecv Got a reply")
-            return reply, data_source
-        finally: 
-            if data_source == None:
-                self.close()
+        self.log("SendRecv id = " + str(id(self)))
+        self.send( string )
+        self.log("SendRecv Waiting for reply")
+        reply, data_source = self.recv()
+        self.log("SendRecv Got a reply")
+        return reply, data_source
 
     def init_server(self):
-        if self.s:
-            return
-        self.close()
-        self.s = socket.socket( self.s_type, self.s_prot )
-        self.log( "Server id %s listens at %s" % (id(self),self.addr) )
-        self.s.bind( self.addr )
-        self.s.listen(1)
+        pass
 
     def serve(self, handler, n=None):
-        """open socket, wait for incoming connections and handle them.
-        
-        :Parameters:
-            - n: serve n requests, None=forever
-        """
         try:
-            self.init_server()
-            n_current = 0
             while 1:
-                if n is not None  and  n_current >= n:
+                self.log( "TransportSocket.Serve(): connected")
+                header = self.s_in.read(HEADER_SIZE)
+                if not header:
+                    self.log("Connection was closed by other side")
                     break
-                conn, addr = self.s.accept()
-                self.log( "TransportSocket.Serve(): %s connected" % repr(addr) )
-                header = RecvNBytes(conn, HEADER_SIZE)
-                self.log( "TransportSocket.Serve(): got an header")
+                self.log( "TransportSocket.Serve(): got an header: " + str(header))
                 datasize, binary_data_size = unpack_header(header)
                 assert binary_data_size == None, "Not implemented yet. Was: " + str(binary_data_size)
-                data = RecvNBytes(conn, datasize, 5.0)
-                self.log( "TransportSocket.Serve(): Got a message: %s --> %s" % (repr(addr), repr(data)) )
+                data = self.s_in.read(datasize)
+                self.log( "TransportSocket.Serve(): Got a message: %s" % (repr(data)) )
                 result = handler(data)
                 self.log( "TransportSocket.Serve(): Message was handled ok" )
                 assert result != None
-                self.log( "TransportSocket.Serve(): Responding to %s <-- %s" % (repr(addr), repr(result)) )  
+                self.log( "TransportSocket.Serve(): Responding to %s" % (repr(result)) )  
                 if isinstance(result, DataSource):
                     dummy_result = jsonrpc20.dumps_response(None)
                     header = pack_header(len(dummy_result), result.bytes_left())
-                    conn.sendall( header )
-                    conn.sendall( dummy_result )
+                    self.s_out.write( header )
+                    self.s_out.write( dummy_result )
                     while result.bytes_left() > 0:
-                        conn.sendall(result.read(2**14))
+                        self.s_out.write(result.read(2**14))
                 else:
                     header = pack_header(len(result))
-                    conn.sendall( header )
-                    conn.sendall( result )
+                    self.s_out.write( header )
+                    self.s_out.write( result )
+                self.s_out.flush()
                 self.log( "TransportSocket.Serve(): Response sent" )
-                self.log( "TransportSocket.Serve(): %s close" % repr(addr) )
-                conn.close()
-                n_current += 1
         finally:
             self.close()
 

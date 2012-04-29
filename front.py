@@ -342,6 +342,8 @@ class Front:
                 scanner.scan_finish()
         return succeeded
 
+    def ping(self):
+        return "pong"
 
 class RevisionFront:
     """RevisionFront is a wrapper for the Front class that provides
