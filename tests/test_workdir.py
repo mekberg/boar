@@ -561,36 +561,6 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         write_tree(wd.root, {'subdir/file3.txt': "data"}, False)
         wd.checkin()
                    
-                              
-
-class TestWorkdirWithServer(TestWorkdir):
-    def create_server(self):
-        for p in range(11000, 12000):
-            try:
-                self.server = server.ThreadedBoarServer(self.raw_repopath, p)
-                self.port = p
-                break
-            except socket.error, e:
-                if e.errno != errno.EADDRINUSE:
-                    raise e
-
-    def setUp(self):
-        self.remove_at_teardown = []
-        self.workdir = self.createTmpName()
-        self.raw_repopath = self.createTmpName()
-        repository.create_repository(self.raw_repopath)
-        os.mkdir(self.workdir)
-        self.create_server()
-        self.server.serve()
-        self.repoUrl = u"boar://localhost:%s/" % (self.port)
-        self.wd = workdir.Workdir(self.repoUrl, u"TestSession", u"", 
-                                  None, self.workdir)
-        self.wd.setLogOutput(DevNull())
-        self.wd.use_progress_printer(False)
-        front = self.wd.get_front()
-        assert front.isRemote
-        id = self.wd.get_front().mksession(u"TestSession")
-        assert id == 1
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def setUp(self):

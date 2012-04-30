@@ -22,22 +22,6 @@ import front
 import sys
 from common import FakeFile
 
-class TcpIpBoarServer:
-    """This is a boar server that accepts connections on a tcp
-    port."""
-
-    def __init__(self, repopath, port = 50000):
-        self.repopath = repopath
-        self.server = jsonrpc.Server(jsonrpc.JsonRpc20(),
-                                     jsonrpc.TransportTcpIp(timeout=60.0,
-                                                            addr=("0.0.0.0", port)))
-    def serve(self):
-        repo = repository.Repo(self.repopath)
-        fr = front.Front(repo)
-        self.server.register_instance(fr, "front")
-        self.server.serve()
-
-
 class StdioBoarServer:
     """This is a boar server that uses stdin/stdout to communicate
     with the client. When initialized, this server hides the real
@@ -59,21 +43,6 @@ class StdioBoarServer:
         self.server.register_instance(fr, "front")        
         self.server.serve()
 
-class ThreadedBoarServer(TcpIpBoarServer):
-    """This class is similar to TcpIpBoarServer, only that this
-    server allows the main thread to continue doing other
-    things. Useful for testing, when the same process needs to act as
-    both client and server. """
-
-    def __init__(self, repopath, port = 50000):
-        TcpIpBoarServer.__init__(self, repopath, port)
-
-    def serve(self):
-        def super_serve():
-            TcpIpBoarServer.serve(self)
-        self.serverThread = threading.Thread(target = super_serve)
-        self.serverThread.setDaemon(True)
-        self.serverThread.start()
 
 def main():
     repopath = unicode(sys.argv[1])
