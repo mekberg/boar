@@ -235,6 +235,10 @@ class Front:
         """ Must be called after a create_session()  """
         self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))
 
+    def add_blob_data_streamed(self, blob_md5, datasource):
+        while datasource.remaining > 0:
+            self.new_session.add_blob_data(blob_md5, datasource.read(2**12))
+
     def blob_finished(self, blob_md5):
         self.new_session.blob_finished(blob_md5)
 
@@ -424,6 +428,10 @@ class DryRunFront:
 
     def add_blob_data(self, blob_md5, b64data):
         pass
+
+    def add_blob_data_streamed(self, blob_md5, datasource):
+        while datasource.remaining:
+            datasource.read(2**12)
 
     def blob_finished(self, blob_md5):
         pass
