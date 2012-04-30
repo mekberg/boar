@@ -23,6 +23,8 @@ from treecomp import TreeComparer
 from common import *
 from boar_exceptions import *
 from boar_common import *
+from jsonrpc import FileDataSource
+
 import client
 
 from base64 import b64decode, b64encode
@@ -541,16 +543,10 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
     if not front.has_blob(expected_md5sum) and not front.new_snapshot_has_blob(expected_md5sum):
         # File does not exist in repo or previously in this new snapshot. Upload it.
         with open_raw(abspath) as f:
-            m = hashlib.md5()
-            freader = file_reader(f, blocksize = 1048576) # 1048576 = 2^20
             front.init_new_blob(expected_md5sum, blobinfo["size"])
-            for block in freader:
-                m.update(block)
-                front.add_blob_data(expected_md5sum, b64encode(block))
-            front.add_blob_data(expected_md5sum, b64encode(""))
+            datasource = FileDataSource(f, os.path.getsize(abspath))
+            front.add_blob_data_streamed(expected_md5sum, datasource = datasource)
             front.blob_finished(expected_md5sum)
-            assert m.hexdigest() == expected_md5sum, \
-                "File changed during checkin process: " + abspath
     front.add(blobinfo)
 
 def init_workdir(path):

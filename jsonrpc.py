@@ -626,10 +626,16 @@ class TransportStream:
     def __repr__(self):
         return "<TransportSocket, %s, %s>" % (self.s_in, self.s_out)
     
-    def send( self, string ):
-        header = pack_header(len(string))
+    def send( self, string, datasource = None ):
+        bin_length = 0
+        if datasource:
+            bin_length = datasource.bytes_left()
+        header = pack_header(len(string), bin_length)
         self.s_out.write(header)
         self.s_out.write(string)
+        if datasource:
+            while datasource.bytes_left() > 0:
+                self.s_out.write(datasource.read(2**14))
         self.s_out.flush()
         self.log( "TransportSocket.Send() --> "+repr(string) )
         
@@ -645,14 +651,10 @@ class TransportStream:
         else:
             return data, None
 
-    def sendrecv( self, string ):
+    def sendrecv( self, string, data_source = None ):
         """send data + receive data + close"""
-        self.log("SendRecv id = " + str(id(self)))
-        self.send( string )
-        self.log("SendRecv Waiting for reply")
-        reply, data_source = self.recv()
-        self.log("SendRecv Got a reply")
-        return reply, data_source
+        self.send( string, data_source )
+        return self.recv()
 
     def init_server(self):
         pass
@@ -667,10 +669,13 @@ class TransportStream:
                     break
                 datasize, binary_data_size = unpack_header(header)
                 self.log( "TransportSocket.Serve(): got a header: " + str([datasize, binary_data_size]))
-                assert binary_data_size == None, "Not implemented yet. Was: " + str(binary_data_size)
                 data = self.s_in.read(datasize)
+                if binary_data_size:
+                    incoming_data_source = StreamDataSource(self.s_in, binary_data_size)
+                else:
+                    incoming_data_source = None
                 self.log( "TransportSocket.Serve(): Got a message: %s" % (repr(data)) )
-                result = handler(data)
+                result = handler(data, incoming_data_source)
                 self.log( "TransportSocket.Serve(): Message was handled ok" )
                 assert result != None
                 self.log( "TransportSocket.Serve(): Responding with %s" % (repr(result)) )  
@@ -727,6 +732,13 @@ class ServerProxy:
 
     def __req( self, methodname, args=None, kwargs=None, id=0 ):
         # JSON-RPC 2.0: only args OR kwargs allowed!
+        datasource = kwargs.get("datasource", None)
+        if datasource:
+            assert isinstance(datasource, DataSource)
+            del kwargs["datasource"]
+        for arg in args:
+            assert not isinstance(arg, DataSource), "DataSource must be a keyword argument"
+                
         if len(args) > 0 and len(kwargs) > 0:
             raise ValueError("Only positional or named parameters are allowed!")
         if len(kwargs) == 0:
@@ -734,9 +746,9 @@ class ServerProxy:
         else:
             req_str  = self.__data_serializer.dumps_request( methodname, kwargs, id )
 
-        resp_str, data_source = self.__transport.sendrecv( req_str )
-        if data_source:
-            return data_source
+        resp_str, result_data_source = self.__transport.sendrecv( req_str, datasource)
+        if result_data_source:
+            return result_data_source
         resp = self.__data_serializer.loads_response( resp_str )
         return resp[0]
 
@@ -843,7 +855,7 @@ class Server:
         else:
             self.funcs[name] = function
     
-    def handle(self, rpcstr):
+    def handle(self, rpcstr, incoming_data_source):
         """Handle a RPC-Request.
 
         :Parameters:
@@ -868,9 +880,14 @@ class Server:
 
         try:
             if isinstance(params, dict):
+                if incoming_data_source:
+                    params['datasource'] = incoming_data_source
                 result = self.funcs[method]( **params )
             else:
-                result = self.funcs[method]( *params )
+                if incoming_data_source:     
+                    result = self.funcs[method]( *params, **{'datasource': incoming_data_source} )
+                else:
+                    result = self.funcs[method]( *params )
             if isinstance(result, DataSource):
                 return result
 
