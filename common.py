@@ -585,17 +585,9 @@ class StreamEncoder:
 def dir_exists(path):
     return os.path.exists(path) and os.path.isdir(path)
 
-class FakeFile:
+def FakeFile():
     """ Behaves like a file object, but does not actually do anything."""
-
-    def write(self, s):
-        pass
-
-    def close(self):
-        pass
-
-    def flush(self):
-        pass
+    return open(os.path.devnull, "w")
 
 class RateLimiter:
     """This class makes it easy to perform some action only when a
