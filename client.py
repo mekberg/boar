@@ -21,13 +21,47 @@ import re
 import sys
 
 import subprocess
+from front import Front
+from blobrepo import repository
+from common import *
+from boar_exceptions import *
+
+BOAR_URL_PATTERN = "boar\+([a-z]+)://.*"
+
+def is_boar_url(string):
+    return re.match(BOAR_URL_PATTERN, string) != None
+
+def connect(repourl):
+    m = re.match(BOAR_URL_PATTERN, repourl)
+    if not m:
+        return Front(user_friendly_open_local_repository(repourl))
+
+    transporter = m.group(1)
+    if transporter == "ssh":
+        front = connect_ssh(repourl)
+    elif transporter == "nc":
+        front = connect_nc(repourl)
+    else:
+        raise UserError("No such transporter: '%s'" % transporter)
+    assert front
+    return front    
+
+def user_friendly_open_local_repository(path):
+    # This won't catch invalid/nonexisting repos. Let the repo constructor do that
+    if repository.looks_like_repo(path) and repository.has_pending_operations(path):
+        notice("The repository at %s has pending operations. Resuming..." % os.path.basename(path))
+        repo = repository.Repo(path)
+        notice("Pending operations completed.")
+    else:
+        repo = repository.Repo(path)
+    return repo
 
 def _connect_cmd(cmd):
     p = subprocess.Popen(cmd, 
                          shell = True, 
                          stdout = subprocess.PIPE, 
                          stdin = subprocess.PIPE, 
-                         stderr = open("output-server.txt", "w"))
+                         stderr = FakeFile())
     server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
                                  jsonrpc.TransportStream(p.stdout, p.stdin))
     assert server.front.ping() == "pong"
@@ -38,7 +72,6 @@ def connect_ssh(url):
     assert url_match, "Not a valid ssh Boar URL:" + url
     user, host, path = url_match.groups()
     cmd = "ssh '%s'@'%s' python hg/boar-contrib/server.py '%s'" % (user, host, path)
-    print user, host, path
     return _connect_cmd(cmd)
 
 def connect_nc(url):
