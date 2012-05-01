@@ -246,8 +246,6 @@ def cmd_info(args):
         print "   Session:", wd.sessionName, "/", wd.offset
         print "   Revision:", wd.revision
         
-    #env_front = get_repo_url()
-
 def cmd_mkrepo(args):
     if len(args) == 0:
         args = ["--help"]
@@ -748,19 +746,24 @@ def get_repo_url(repo_from_cmdline):
     if not repopath:
         raise UserError("You need to specify a repository to operate on. "+\
                             "Use the --repo option or set $REPO_PATH.")
-    if not (repopath.startswith("boar://") or repopath.startswith("boar+ssh://")):
+    if not re.match("boar\+([a-z]+)://.*", repopath):
         repopath = os.path.abspath(repopath)
         if not os.path.exists(repopath):
             raise UserError("Provided repository path does not exist: "+repopath)
     return repopath
 
 def connect_to_repo(repourl):
-    if repourl.startswith("boar://"):
-        front = client.connect(repourl)
-    if repourl.startswith("boar+ssh://"):
+    m = re.match("boar\+([a-z]+)://.*", repourl)
+    if not m:
+        return Front(workdir.user_friendly_open_repository(repourl))
+        
+    transporter = m.group(1)
+    if transporter == "ssh":
         front = client.connect_ssh(repourl)
+    elif transporter == "nc":
+        front = client.connect_nc(repourl)
     else:
-        front = Front(workdir.user_friendly_open_repository(repourl))
+        raise UserError("No such transporter: '%s'" % transporter)
     assert front
     return front    
     
