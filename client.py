@@ -19,6 +19,7 @@ import jsonrpc
 import base64
 import re
 import sys
+import tempfile
 
 import subprocess
 from front import Front
@@ -41,6 +42,8 @@ def connect(repourl):
         front = connect_ssh(repourl)
     elif transporter == "nc":
         front = connect_nc(repourl)
+    elif transporter == "local":
+        front = connect_local(repourl)
     else:
         raise UserError("No such transporter: '%s'" % transporter)
     assert front
@@ -57,11 +60,16 @@ def user_friendly_open_local_repository(path):
     return repo
 
 def _connect_cmd(cmd):
+    errorlog = tempfile.TemporaryFile()
     p = subprocess.Popen(cmd, 
                          shell = True, 
                          stdout = subprocess.PIPE, 
                          stdin = subprocess.PIPE, 
-                         stderr = FakeFile())
+                         stderr = errorlog)    
+    if p.poll():
+        errorlog.seek(0)
+        errorstr = errorlog.read().strip()
+        raise UserError("Transport command failed with error code %s: %s" % (p.returncode, errorstr))
     server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
                                  jsonrpc.TransportStream(p.stdout, p.stdin))
     assert server.front.ping() == "pong"
@@ -71,7 +79,7 @@ def connect_ssh(url):
     url_match = re.match("boar\+ssh://(.*)@([^/]+)(/.*)", url)
     assert url_match, "Not a valid ssh Boar URL:" + url
     user, host, path = url_match.groups()
-    cmd = "ssh '%s'@'%s' python hg/boar-contrib/server.py '%s'" % (user, host, path)
+    cmd = "ssh '%s'@'%s' boar-server.py '%s'" % (user, host, path)
     return _connect_cmd(cmd)
 
 def connect_nc(url):
@@ -79,5 +87,13 @@ def connect_nc(url):
     assert url_match, "Not a valid netcat Boar URL:" + url
     host, port = url_match.groups()
     cmd = "nc %s %s" % (host, port)
+    return _connect_cmd(cmd)
+
+def connect_local(url):
+    url_match = re.match("boar\+local://(.*)/?", url)
+    assert url_match, "Not a valid local Boar URL:" + url
+    repopath, = url_match.groups()
+    boarhome = os.path.dirname(os.path.abspath(__file__))
+    cmd = "'%s/boarserve.py' '%s'" % (boarhome, repopath)
     return _connect_cmd(cmd)
 
