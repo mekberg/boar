@@ -489,8 +489,6 @@ def unpack_header(header_str):
 class TransportStream:
 
     def __init__( self, s_in, s_out, logfunc=log_dummy ):
-        print "s_in =", s_in
-        print "s_out =", s_out
         self.s_in = s_in
         self.s_out = s_out
 
@@ -520,15 +518,11 @@ class TransportStream:
             while datasource.bytes_left() > 0:
                 self.s_out.write(datasource.read(2**14))
         self.s_out.flush()
-        self.log( "TransportSocket.Send() --> "+repr(string) )
         
     def recv( self ):
-        print "Waiting for read on", self.s_in
         header = self.s_in.read(HEADER_SIZE)
         datasize, binary_data_size = unpack_header(header)
-        print "Got header", [datasize, binary_data_size]
         data = self.s_in.read(datasize)
-        self.log( "TransportSocket.Recv() --> "+repr(data) )
         if binary_data_size != None:            
             return data, StreamDataSource(self.s_in, binary_data_size)
         else:
@@ -551,17 +545,13 @@ class TransportStream:
                     self.log("Connection was closed by other side")
                     break
                 datasize, binary_data_size = unpack_header(header)
-                self.log( "TransportSocket.Serve(): got a header: " + str([datasize, binary_data_size]))
                 data = self.s_in.read(datasize)
                 if binary_data_size:
                     incoming_data_source = StreamDataSource(self.s_in, binary_data_size)
                 else:
                     incoming_data_source = None
-                self.log( "TransportSocket.Serve(): Got a message: %s" % (repr(data)) )
                 result = handler(data, incoming_data_source)
-                self.log( "TransportSocket.Serve(): Message was handled ok" )
                 assert result != None
-                self.log( "TransportSocket.Serve(): Responding with %s" % (repr(result)) )  
                 if isinstance(result, DataSource):
                     dummy_result = jsonrpc20.dumps_response(None)
                     header = pack_header(len(dummy_result), result.bytes_left())
@@ -569,14 +559,12 @@ class TransportStream:
                     self.s_out.write( dummy_result )
                     while result.bytes_left() > 0:
                         piece = result.read(2**14)
-                        print "Sending", len(piece), "binary bytes"
                         self.s_out.write(piece)
                 else:
                     header = pack_header(len(result))
                     self.s_out.write( header )
                     self.s_out.write( result )
                 self.s_out.flush()
-                self.log( "TransportSocket.Serve(): Response sent" )
         finally:
             self.close()
 
