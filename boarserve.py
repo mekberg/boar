@@ -47,14 +47,12 @@ class StdioBoarServer:
 def main():
     repopath = unicode(sys.argv[1])
     server = StdioBoarServer(repopath)
-    print "Serving"
-    pid = server.serve()
-    print "Done serving"
+    server.serve()
 
 if __name__ == "__main__":
     try:
         main()
     except Exception, e:
-        open("/tmp/server-crash.txt", "a").write(repr(e))
+        #open("/tmp/server-crash.txt", "a").write(repr(e))
         raise
 
