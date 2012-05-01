@@ -700,10 +700,10 @@ def cmd_clone(args):
         raise UserError("Cloning requires local repositories")
     repopath1 = os.path.abspath(repopath1)
     repopath2 = os.path.abspath(repopath2)
-    repo1 = workdir.user_friendly_open_repository(repopath1)
+    repo1 = client.user_friendly_open_local_repository(repopath1)
     if not os.path.exists(repopath2):
         repository.create_repository(repopath2)
-    repo2 = workdir.user_friendly_open_repository(repopath2)
+    repo2 = client.user_friendly_open_local_repository(repopath2)
     if not repo2.isContinuation(repo1):
         raise UserError("The source repo is not a continuation of the destination repo. Cannot clone.")
     if options.replicate:
@@ -724,8 +724,8 @@ def cmd_diffrepo(args):
         raise UserError("Cloning requires local repositories")
     repopath1 = os.path.abspath(repopath1)
     repopath2 = os.path.abspath(repopath2)
-    repo1 = workdir.user_friendly_open_repository(repopath1)
-    repo2 = workdir.user_friendly_open_repository(repopath2)
+    repo1 = client.user_friendly_open_local_repository(repopath1)
+    repo2 = client.user_friendly_open_local_repository(repopath2)
     if repo1.isIdentical(repo2):
         assert repo2.isIdentical(repo1)
         print "Repositories are identical"
@@ -746,26 +746,12 @@ def get_repo_url(repo_from_cmdline):
     if not repopath:
         raise UserError("You need to specify a repository to operate on. "+\
                             "Use the --repo option or set $REPO_PATH.")
-    if not re.match("boar\+([a-z]+)://.*", repopath):
+    if not client.is_boar_url(repopath):
         repopath = os.path.abspath(repopath)
-        if not os.path.exists(repopath):
-            raise UserError("Provided repository path does not exist: "+repopath)
     return repopath
 
 def connect_to_repo(repourl):
-    m = re.match("boar\+([a-z]+)://.*", repourl)
-    if not m:
-        return Front(workdir.user_friendly_open_repository(repourl))
-        
-    transporter = m.group(1)
-    if transporter == "ssh":
-        front = client.connect_ssh(repourl)
-    elif transporter == "nc":
-        front = client.connect_nc(repourl)
-    else:
-        raise UserError("No such transporter: '%s'" % transporter)
-    assert front
-    return front    
+    return client.connect(repourl)
     
 def main():
     if len(sys.argv) <= 1:

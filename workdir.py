@@ -584,16 +584,7 @@ def load_meta_info(metapath):
     return info
 
 def create_front(repoUrl):
-    if repoUrl.startswith("boar://"):
-        front = client.connect(repoUrl)
-        front.isRemote = True
-    elif repoUrl.startswith("boar+ssh://"):
-        front = client.connect_ssh(repoUrl)
-        front.isRemote = True
-    else:
-        front = Front(user_friendly_open_repository(repoUrl))
-        front.isRemote = False
-    return front
+    return client.connect(repoUrl)
 
 def init_repo_from_meta(path):
     front = None
@@ -644,14 +635,6 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
     finally:
         if os.path.exists(tmpfile):
             os.remove(tmpfile)
-
-def user_friendly_open_repository(path):
-    if "://" not in path and repository.looks_like_repo(path) and repository.has_pending_operations(path):
-        notice("The repository at %s has pending operations. Resuming..." % os.path.basename(path))
-        repo = repository.Repo(path)
-        notice("Pending operations completed.")
-        return repo
-    return repository.Repo(path)
 
 def bloblist_to_dict(bloblist):
     d = {}
