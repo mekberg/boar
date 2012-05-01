@@ -72,14 +72,20 @@ def _connect_cmd(cmd):
         raise UserError("Transport command failed with error code %s: %s" % (p.returncode, errorstr))
     server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
                                  jsonrpc.TransportStream(p.stdout, p.stdin))
-    assert server.front.ping() == "pong"
+    try:
+        assert server.front.ping() == "pong"
+    except:
+        errorlog.seek(0)
+        for line in errorlog.readlines():
+            print line
+        raise UserError("An error occurred while executing the transport command")
     return server.front
 
 def connect_ssh(url):
     url_match = re.match("boar\+ssh://(.*)@([^/]+)(/.*)", url)
     assert url_match, "Not a valid ssh Boar URL:" + url
     user, host, path = url_match.groups()
-    cmd = "ssh '%s'@'%s' boar-server.py '%s'" % (user, host, path)
+    cmd = "ssh '%s'@'%s' boarserve.py '%s'" % (user, host, path)
     return _connect_cmd(cmd)
 
 def connect_nc(url):
