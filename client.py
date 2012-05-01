@@ -22,7 +22,7 @@ import sys
 
 import subprocess
 
-def connect_cmd(cmd):
+def _connect_cmd(cmd):
     p = subprocess.Popen(cmd, 
                          shell = True, 
                          stdout = subprocess.PIPE, 
@@ -35,11 +35,16 @@ def connect_cmd(cmd):
 
 def connect_ssh(url):
     url_match = re.match("boar\+ssh://(.*)@([^/]+)(/.*)", url)
-    assert url_match, "Not a valid Boar URL:" + url
+    assert url_match, "Not a valid ssh Boar URL:" + url
     user, host, path = url_match.groups()
     cmd = "ssh '%s'@'%s' python hg/boar-contrib/server.py '%s'" % (user, host, path)
     print user, host, path
-    return connect_cmd(cmd)
+    return _connect_cmd(cmd)
 
-
+def connect_nc(url):
+    url_match = re.match("boar\+nc://(.*):(\d+)/?", url)
+    assert url_match, "Not a valid netcat Boar URL:" + url
+    host, port = url_match.groups()
+    cmd = "nc %s %s" % (host, port)
+    return _connect_cmd(cmd)
 
