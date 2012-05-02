@@ -33,6 +33,9 @@ def is_boar_url(string):
     return re.match(BOAR_URL_PATTERN, string) != None
 
 def connect(repourl):
+    #m = re.match(BOAR_URL_PATTERN, repourl)
+    #if not m:
+    #    repourl="boar+local://" + repourl
     m = re.match(BOAR_URL_PATTERN, repourl)
     if not m:
         return Front(user_friendly_open_local_repository(repourl))
@@ -61,6 +64,7 @@ def user_friendly_open_local_repository(path):
 
 def _connect_cmd(cmd):
     errorlog = tempfile.TemporaryFile()
+    #errorlog = open("/tmp/errors.txt", "w")
     p = subprocess.Popen(cmd, 
                          shell = True, 
                          stdout = subprocess.PIPE, 
@@ -75,10 +79,11 @@ def _connect_cmd(cmd):
     try:
         assert server.front.ping() == "pong"
     except:
+        print "*** Transport command stderr output:"
         errorlog.seek(0)
-        for line in errorlog.readlines():
-            print line
-        raise UserError("An error occurred while executing the transport command")
+        print errorlog.read()
+        print "*** Local stack trace:"
+        raise
     return server.front
 
 def connect_ssh(url):
