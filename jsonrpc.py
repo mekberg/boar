@@ -27,8 +27,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
 #=========================================
 #import
 
-import sys
+import sys, os
 import struct
+from boar_exceptions import *
 
 #=========================================
 # errors
@@ -48,6 +49,8 @@ PROCEDURE_EXCEPTION    = -32000
 AUTHENTIFICATION_ERROR = -32001
 PERMISSION_DENIED      = -32002
 INVALID_PARAM_VALUES   = -32003
+
+BOAR_EXCEPTION   = -10001
 
 #human-readable messages
 ERROR_MESSAGE = {
@@ -414,6 +417,10 @@ class JsonRpc20:
                 raise RPCPermissionDenied(error_data)
             elif data["error"]["code"] == INVALID_PARAM_VALUES:
                 raise RPCInvalidParamValues(error_data)
+            elif data["error"]["code"] == BOAR_EXCEPTION:
+                exception = eval(data["error"]["data"])
+                assert isinstance(exception, BoarException)
+                raise exception
             else:
                 raise RPCFault(data["error"]["code"], data["error"]["message"], error_data)
         #result
@@ -460,26 +467,24 @@ def log_filedate( filename ):
 
 #----------------------
 
-HEADER_SIZE=17
+HEADER_SIZE=21
 HEADER_MAGIC=0x12345678
-HEADER_VERSION=1
+HEADER_VERSION=2
 """
 The header has 
 """
-def pack_header(payload_size, binary_payload_size = None):
-    has_binary_payload = True
-    if binary_payload_size == None:
-        has_binary_payload = False
-        binary_payload_size = 0
-    header_str = struct.pack("!III?I", HEADER_MAGIC, HEADER_VERSION, payload_size,\
-                                 has_binary_payload, binary_payload_size)
+def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L):
+    assert binary_payload_size >= 0
+    assert type(has_binary_payload) == bool
+    header_str = struct.pack("!III?Q", HEADER_MAGIC, HEADER_VERSION, payload_size,\
+                                 has_binary_payload, long(binary_payload_size))
     assert len(header_str) == HEADER_SIZE
     return header_str
 
 def unpack_header(header_str):
     assert len(header_str) == HEADER_SIZE
     magic, version, payload_size, has_binary_payload, binary_payload_size = \
-        struct.unpack("!III?I", header_str)
+        struct.unpack("!III?Q", header_str)
     assert magic == HEADER_MAGIC, "Unexpected header: " + header_str
     if not has_binary_payload:
         assert binary_payload_size == 0
@@ -499,7 +504,6 @@ class TransportStream:
         print s
 
     def close( self ):
-        print "Closing transport stream"
         if self.s_in is not None:
             self.s_in.close()
             self.s_out.close()
@@ -511,7 +515,7 @@ class TransportStream:
         bin_length = 0
         if datasource:
             bin_length = datasource.bytes_left()
-        header = pack_header(len(string), bin_length)
+        header = pack_header(len(string), datasource != None, bin_length)
         self.s_out.write(header)
         self.s_out.write(string)
         if datasource:
@@ -546,7 +550,7 @@ class TransportStream:
                     break
                 datasize, binary_data_size = unpack_header(header)
                 data = self.s_in.read(datasize)
-                if binary_data_size:
+                if binary_data_size != None:
                     incoming_data_source = StreamDataSource(self.s_in, binary_data_size)
                 else:
                     incoming_data_source = None
@@ -554,7 +558,7 @@ class TransportStream:
                 assert result != None
                 if isinstance(result, DataSource):
                     dummy_result = jsonrpc20.dumps_response(None)
-                    header = pack_header(len(dummy_result), result.bytes_left())
+                    header = pack_header(len(dummy_result), True, result.bytes_left())
                     self.s_out.write( header )
                     self.s_out.write( dummy_result )
                     while result.bytes_left() > 0:
@@ -744,7 +748,7 @@ class Server:
             return self.__data_serializer.dumps_error( err, id=None )
         except Exception, err:
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id=None )
+            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id=None )
 
         if method not in self.funcs:
             return self.__data_serializer.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND]), id )
@@ -764,9 +768,13 @@ class Server:
 
         except RPCFault, err:
             return self.__data_serializer.dumps_error( err, id=None )
+        except BoarException, err:
+            return self.__data_serializer.dumps_error( RPCFault(BOAR_EXCEPTION, "Boar exception", repr(err)), id )
         except Exception, err:
-            print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
+            #print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
+            #return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
+            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id )
+            
 
         try:
             return self.__data_serializer.dumps_response( result, id )
