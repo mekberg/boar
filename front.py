@@ -343,6 +343,12 @@ class Front:
                 scanner.scan_finish()
         return succeeded
 
+    def repo_get_highest_used_revision(self):
+        return self.repo.get_highest_used_revision()
+    
+    def repo_verify_snapshot(self, rev):
+        return self.repo.verify_snapshot(rev)
+
     def ping(self):
         return "pong"
 
