@@ -33,7 +33,7 @@ class StdioBoarServer:
         cmd_stdin = sys.stdin
         cmd_stdout = sys.stdout 
         sys.stdin = None
-        sys.stdout = FakeFile()
+        sys.stdout = sys.stderr
         self.server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
                                      jsonrpc.TransportStream(cmd_stdin, cmd_stdout))
 
