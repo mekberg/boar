@@ -115,13 +115,11 @@ def list_files(front, session_name, revision):
     for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
-def verify_repo(repo, verify_blobs = True):
+def verify_repo(front, verify_blobs = True):
     """Returns True if the repo was clean. Otherwise throws an
     exception."""
-    front = Front(repo)
-    print "Verifying repo", repo
-    for rev in range(1, repo.get_highest_used_revision() + 1):
-        repo.verify_snapshot(rev)
+    for rev in range(1, front.repo_get_highest_used_revision() + 1):
+        front.repo_verify_snapshot(rev)
     session_ids = front.get_session_ids()
     print "Verifying %s snapshots" % (len(session_ids))
     existing_blobs = set(front.get_all_blobs())
@@ -346,7 +344,7 @@ def cmd_verify(args):
                       help="Only check that the repository looks reasonably ok (skip blob checksumming)")
     (options, args) = parser.parse_args(args)
     front = connect_to_repo(get_repo_url(cmdline_repo))
-    verify_repo(front.repo, verify_blobs = not options.quick)
+    verify_repo(front, verify_blobs = not options.quick)
 
 def cmd_repair(args):
     parser = OptionParser(usage="usage: boar repair [options]")
@@ -361,7 +359,7 @@ def cmd_repair(args):
         try:
             front = connect_to_repo(get_repo_url(cmdline_repo))
             print "Verifying repo before repair..."
-            clean = verify_repo(front.repo)
+            clean = verify_repo(front)
         except repository.SoftCorruptionError, e:
             print "Repairable error found:", e
         except Exception, e:
@@ -662,12 +660,12 @@ def __clone_once(repo1, repo2):
         print "Repositories are already identical"
         return
     print "Quick verifying source repo"
-    verify_repo(repo1, verify_blobs = False)
+    verify_repo(Front(repo1), verify_blobs = False)
     print "Quick verifying destination repo"
-    verify_repo(repo2, verify_blobs = False)
+    verify_repo(Front(repo2), verify_blobs = False)
     repo2.pullFrom(repo1)
     print "Performing full verify on cloned repo"
-    verify_repo(repo2, verify_blobs = True)
+    verify_repo(Front(repo2), verify_blobs = True)
     print "Repos are in sync."
 
 def __clone_replicate(repo1, repo2):
@@ -678,12 +676,12 @@ def __clone_replicate(repo1, repo2):
             time.sleep(60)
             continue
         print "Incoming changes found. Cloning..."
-        verify_repo(repo1, verify_blobs = False)
+        verify_repo(Front(repo1), verify_blobs = False)
         print "Quick verifying destination repo"
-        verify_repo(repo2, verify_blobs = False)
+        verify_repo(Front(repo2), verify_blobs = False)
         repo2.pullFrom(repo1)
         print "Performing full verify on cloned repo"
-        verify_repo(repo2, verify_blobs = True)
+        verify_repo(Front(repo2), verify_blobs = True)
         print "Repos are in sync. Waiting for incoming changes..."
 
 def cmd_clone(args):
