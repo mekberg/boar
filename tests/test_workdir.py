@@ -40,7 +40,6 @@ import workdir
 from blobrepo import repository
 from common import get_tree, my_relpath, convert_win_path_to_unix, md5sum
 from boar_exceptions import UserError
-import server
 from front import Front
 
 class DevNull:
