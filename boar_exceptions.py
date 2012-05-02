@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-class UserError(Exception):
+class BoarException(Exception):
+    pass
+
+class UserError(BoarException):
     """This exception is thrown when an error has occured that is not
     caused by a malfunction in boar. For instance, trying to access a
     repository by the wrong path."""
@@ -28,17 +31,17 @@ class SessionNotFoundError(UserError):
     access a non-existing session."""
     pass
 
-class MisuseError(Exception):
+class MisuseError(BoarException):
     def __init__(self, msg):
         Exception.__init__(self, msg)
 
-class CorruptionError(Exception):
+class CorruptionError(BoarException):
     """A serious integrity problem of the repository that cannot be
     repaired automatically, if at all."""
     def __init__(self, msg):
         Exception.__init__(self, msg)
 
-class SoftCorruptionError(Exception):
+class SoftCorruptionError(BoarException):
     """A harmless integrity problem of the repository requiring
     rebuilding of derived information."""
     def __init__(self, msg):
