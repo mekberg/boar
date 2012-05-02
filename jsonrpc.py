@@ -418,6 +418,7 @@ class JsonRpc20:
             elif data["error"]["code"] == INVALID_PARAM_VALUES:
                 raise RPCInvalidParamValues(error_data)
             elif data["error"]["code"] == BOAR_EXCEPTION:
+                #print data["error"]["data"]
                 exception = eval(data["error"]["data"])
                 assert isinstance(exception, BoarException)
                 raise exception
@@ -482,7 +483,7 @@ def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 
     return header_str
 
 def unpack_header(header_str):
-    assert len(header_str) == HEADER_SIZE
+    assert len(header_str) == HEADER_SIZE, "Unexpected header size of " + str(len(header_str)) + " bytes"
     magic, version, payload_size, has_binary_payload, binary_payload_size = \
         struct.unpack("!III?Q", header_str)
     assert magic == HEADER_MAGIC, "Unexpected header: " + header_str
@@ -680,6 +681,7 @@ class Server:
         self.__data_serializer = data_serializer
         self.__transport = transport
         self.__transport.init_server()
+        self.dead = False
         self.logfile = logfile
         if self.logfile is not None:    #create logfile (or raise exception)
             f = codecs.open( self.logfile, 'a', encoding='utf-8' )
@@ -729,7 +731,7 @@ class Server:
             self.funcs[function.__name__] = function
         else:
             self.funcs[name] = function
-    
+
     def handle(self, rpcstr, incoming_data_source):
         """Handle a RPC-Request.
 
@@ -739,19 +741,23 @@ class Server:
         :Raises:  RPCFault (and maybe others)
         """
         #TODO: id
+        assert not self.dead, "An exception has already killed the server - go away"
         try:
             req = self.__data_serializer.loads_request( rpcstr )
             if len(req) == 2:
                 raise RPCFault("JsonRPC notifications not supported")
             method, params, id = req
         except RPCFault, err:
+            self.dead = True
             return self.__data_serializer.dumps_error( err, id=None )
         except Exception, err:
+            self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id=None )
 
         if method not in self.funcs:
-            return self.__data_serializer.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND]), id )
+            self.dead = True
+            return self.__data_serializer.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND], method), id )
 
         try:
             if isinstance(params, dict):
@@ -767,10 +773,13 @@ class Server:
                 return result
 
         except RPCFault, err:
+            self.dead = True
             return self.__data_serializer.dumps_error( err, id=None )
         except BoarException, err:
+            self.dead = True
             return self.__data_serializer.dumps_error( RPCFault(BOAR_EXCEPTION, "Boar exception", repr(err)), id )
         except Exception, err:
+            self.dead = True
             #print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             #return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id )
@@ -779,6 +788,7 @@ class Server:
         try:
             return self.__data_serializer.dumps_response( result, id )
         except Exception, err:
+            self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
