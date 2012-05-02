@@ -172,29 +172,6 @@ class DataSource:
         than specified if there are no more bytes to read."""
         raise NotImplementedError()
 
-class SocketDataSource(DataSource):
-    def __init__(self, socket, data_size):
-        self.socket = socket
-        self.remaining = data_size
-        if self.remaining == 0:
-            self.socket.close()
-
-    def bytes_left(self):
-        return self.remaining
-
-    def read(self, n):
-        if self.remaining == 0:
-            return ""
-        bytes_to_read = min(n, self.remaining)
-        data = RecvNBytes(self.socket, bytes_to_read)
-        self.remaining -= bytes_to_read
-        assert len(data) == bytes_to_read
-        assert len(data) <= n
-        assert self.remaining >= 0
-        if self.remaining == 0:
-            self.socket.close()
-        return data
-
 class StreamDataSource(DataSource):
     def __init__(self, stream, data_size):
         self.stream = stream
@@ -238,22 +215,6 @@ class FileDataSource(DataSource):
         if self.remaining == 0:
             self.fo.close()
         return data
-
-def RecvNBytes(socket, n, timeout = None):
-    data_parts = []
-    readsize = 0
-    while readsize < n:
-        ready_list = select.select((socket,), (), (), timeout)[0]
-        if not ready_list:
-            raise Exception("Communication timeout")
-        d = socket.recv( min(4096, n - readsize ))
-        if len(d) == 0:
-            raise Exception("Unexpected end of stream")
-        data_parts.append(d)
-        readsize += len(d)
-    assert readsize == n, "Protocol error. Expected %s bytes, got %s" % (n, readsize)
-    data = "".join(data_parts)
-    return data    
 
 #----------------------
 # JSON-RPC 2.0
