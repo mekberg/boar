@@ -22,6 +22,9 @@ import front
 import sys
 from common import FakeFile
 
+def ping():
+    return "pong"
+
 class StdioBoarServer:
     """This is a boar server that uses stdin/stdout to communicate
     with the client. When initialized, this server hides the real
@@ -33,14 +36,20 @@ class StdioBoarServer:
         cmd_stdin = sys.stdin
         cmd_stdout = sys.stdout 
         sys.stdin = None
+        sys.stderr = open("/tmp/server-output.txt", "w")
         sys.stdout = sys.stderr
+        
         self.server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
                                      jsonrpc.TransportStream(cmd_stdin, cmd_stdout))
+        self.server.register_function(ping, "ping")        
+        self.server.register_function(self.initialize, "initialize")
 
-    def serve(self):
+    def initialize(self):
         repo = repository.Repo(self.repopath)
         fr = front.Front(repo)
-        self.server.register_instance(fr, "front")        
+        self.server.register_instance(fr, "front")
+
+    def serve(self):
         self.server.serve()
 
 
@@ -52,7 +61,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+        print "Server finished nicely"
     except Exception, e:
-        #open("/tmp/server-crash.txt", "a").write(repr(e))
+        open("/tmp/server-crash.txt", "w").write(repr(e))
         raise
 

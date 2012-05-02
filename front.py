@@ -349,9 +349,6 @@ class Front:
     def repo_verify_snapshot(self, rev):
         return self.repo.verify_snapshot(rev)
 
-    def ping(self):
-        return "pong"
-
 class RevisionFront:
     """RevisionFront is a wrapper for the Front class that provides
     convenience methods to access some of the contents of a specific

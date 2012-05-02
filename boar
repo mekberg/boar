@@ -860,7 +860,7 @@ if __name__ == "__main__":
         print "ERROR: Operation cancelled by user"
         return_code = 1
     except UserError as e:
-        print "ERROR:", e.value
+        print "ERROR:", e
         return_code = 1
     except repository.MisuseError as e:
         print "REPO USAGE ERROR:", e
