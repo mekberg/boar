@@ -77,13 +77,14 @@ def _connect_cmd(cmd):
     server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
                                  jsonrpc.TransportStream(p.stdout, p.stdin))
     try:
-        assert server.front.ping() == "pong"
+        assert server.ping() == "pong"
     except:
         print "*** Transport command stderr output:"
         errorlog.seek(0)
         print errorlog.read()
         print "*** Local stack trace:"
         raise
+    server.initialize()
     return server.front
 
 def connect_ssh(url):
