@@ -5,20 +5,26 @@ $BOAR mksession --repo=TESTREPO TestSession || exit 1
 $BOAR --repo=TESTREPO co TestSession || exit 1
 
 echo "Rev 2" >TestSession/r2.txt || exit 1
-(cd TestSession && $BOAR ci -q) || exit 1
+(cd TestSession && $BOAR ci -q -m"Log message uno" ) || exit 1
 
 rm TestSession/r2.txt || exit 1
 echo "Rev 3" >TestSession/r3.txt || exit 1
-(cd TestSession && $BOAR ci -q) || exit 1
+(cd TestSession && $BOAR ci -q -m"Log message räksmörgås") || exit 1
 
 rm TestSession/r3.txt || exit 1
 echo "Rev 4" >TestSession/r4.txt || exit 1
-(cd TestSession && $BOAR ci -q) || exit 1
+(cd TestSession && $BOAR ci -q -m"Log message plain and simple" ) || exit 1
 
+$BOAR --repo=TESTREPO list TestSession |grep -v "Finished" >original_repo_log.txt || exit 1
+
+sleep 1 # Ensure that we'll notice if log times changes during clone
 
 $BOAR clone TESTREPO TESTREPO_clone || { echo "Cloning to new repo failed"; exit 1; }
 $BOAR clone TESTREPO TESTREPO_clone || { echo "Cloning between identical repos should succeed"; exit 1; }
 $BOAR clone TESTREPO_clone TESTREPO || { echo "Cloning between identical repos should succeed"; exit 1; }
+
+$BOAR --repo=TESTREPO_clone list TestSession |grep -v "Finished" >clone_repo_log.txt || exit 1
+txtmatch.py original_repo_log.txt clone_repo_log.txt || { echo "Clone log messages/time differs from original"; exit 1; }
 
 echo "New file" >TestSession/new_file.txt || exit 1
 (cd TestSession && $BOAR ci -q) || exit 1
