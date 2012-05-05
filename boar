@@ -25,6 +25,7 @@ from blobrepo import repository
 from blobrepo.sessions import bloblist_fingerprint
 from boar_exceptions import *
 import client
+import front
 
 if sys.version_info >= (2, 6):
     import json
@@ -655,17 +656,18 @@ def cmd_lostfiles(args):
             if restore_missing:
                 wd.fetch_file(bi['filename'], bi['md5sum'], overwrite = False)
 
-def __clone_once(repo1, repo2):
-    if repo1.isIdentical(repo2):
+def __clone_once(source_front, target_front):
+    if front.is_identical(source_front, target_front):
         print "Repositories are already identical"
         return
+
     print "Quick verifying source repo"
-    verify_repo(Front(repo1), verify_blobs = False)
+    verify_repo(source_front, verify_blobs = False)
     print "Quick verifying destination repo"
-    verify_repo(Front(repo2), verify_blobs = False)
-    repo2.pullFrom(repo1)
+    verify_repo(target_front, verify_blobs = False)
+    front.clone(source_front, target_front)
     print "Performing full verify on cloned repo"
-    verify_repo(Front(repo2), verify_blobs = True)
+    verify_repo(target_front, verify_blobs = True)
     print "Repos are in sync."
 
 def __clone_replicate(repo1, repo2):
@@ -694,20 +696,16 @@ def cmd_clone(args):
     if len(args) != 2:
         raise UserError("You must specify one source repository and one destination repository.")
     repopath1, repopath2 = args
-    if repopath1.startswith("boar://") or repopath2.startswith("boar://"):
-        raise UserError("Cloning requires local repositories")
-    repopath1 = os.path.abspath(repopath1)
-    repopath2 = os.path.abspath(repopath2)
-    repo1 = client.user_friendly_open_local_repository(repopath1)
-    if not os.path.exists(repopath2):
+    source_front = client.connect(repopath1)
+    if not client.is_boar_url(repopath2) and not os.path.exists(repopath2):
         repository.create_repository(repopath2)
-    repo2 = client.user_friendly_open_local_repository(repopath2)
-    if not repo2.isContinuation(repo1):
+    target_front = client.connect(repopath2)
+    if not front.is_continuation(base_front = target_front, cont_front = source_front):
         raise UserError("The source repo is not a continuation of the destination repo. Cannot clone.")
     if options.replicate:
-        __clone_replicate(repo1, repo2)
+        __clone_replicate(source_front, target_front)
     else:
-        __clone_once(repo1, repo2)
+        __clone_once(source_front, target_front)
 
 
 def cmd_diffrepo(args):
@@ -860,6 +858,10 @@ if __name__ == "__main__":
         print "ERROR: Operation cancelled by user"
         return_code = 1
     except UserError as e:
+        #import traceback
+        #print "-"*60
+        #traceback.print_exc(file=sys.stdout)
+        #print "-"*60
         print "ERROR:", e
         return_code = 1
     except repository.MisuseError as e:

@@ -32,10 +32,15 @@ BOAR_URL_PATTERN = "boar\+([a-z]+)://.*"
 def is_boar_url(string):
     return re.match(BOAR_URL_PATTERN, string) != None
 
+def localize(repourl):
+    m = re.match(BOAR_URL_PATTERN, repourl)
+    if not m:
+        repourl="boar+local://" + os.path.abspath(repourl)
+    return repourl
+
 def connect(repourl):
-    #m = re.match(BOAR_URL_PATTERN, repourl)
-    #if not m:
-    #    repourl="boar+local://" + repourl
+    repourl = localize(repourl)
+
     m = re.match(BOAR_URL_PATTERN, repourl)
     if not m:
         return Front(user_friendly_open_local_repository(repourl))
@@ -54,6 +59,7 @@ def connect(repourl):
 
 def user_friendly_open_local_repository(path):
     # This won't catch invalid/nonexisting repos. Let the repo constructor do that
+    path = os.path.abspath(path)
     if repository.looks_like_repo(path) and repository.has_pending_operations(path):
         notice("The repository at %s has pending operations. Resuming..." % os.path.basename(path))
         repo = repository.Repo(path)

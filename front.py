@@ -27,6 +27,7 @@ import sys
 from time import ctime, time
 from common import md5sum, is_md5sum, warn
 from blobrepo.sessions import bloblist_fingerprint
+import copy
 
 if sys.version_info >= (2, 6):
     import json
@@ -78,11 +79,101 @@ def set_file_contents(front, session_name, filename, contents):
 
 valid_session_props = set(["ignore", "include"])
 
+def clone(from_front, to_front):
+    # PullFrom
+    print "Pulling updates from %s into %s" % (from_front, to_front)
+    # Check that other repo is a continuation of this one
+    assert is_continuation(base_front = to_front, cont_front = from_front), \
+        "Cannot pull: %s is not a continuation of %s" % (from_front, to_front)
+
+    # Copy all new sessions
+    other_max_rev = from_front.get_highest_used_revision()
+    self_max_rev = to_front.get_highest_used_revision()
+    self = to_front
+    other_repo = from_front
+    assert other_max_rev >= self_max_rev 
+    snapshots_to_delete = [rev for rev in other_repo.get_deleted_snapshots() if rev <= self_max_rev]
+    sessions_to_clone = range(self_max_rev + 1, other_max_rev + 1)
+    count = 0
+    if snapshots_to_delete:
+        # It should not be possible to have incoming deleted snapshots
+        # without at least one new snapshot as well.
+        assert sessions_to_clone
+
+    for session_id in sessions_to_clone:
+        count += 1
+        print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_clone))
+        #reader = other_repo.get_session(session_id)
+        base_session = other_repo.get_base_id(session_id)
+        session_name = other_repo.get_session_info(session_id)['name']
+        #writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
+        self.create_session(session_name, base_session)
+        if snapshots_to_delete:
+            to_front.erase_snapshots(snapshots_to_delete)
+            snapshots_to_delete = None
+        #writer.commitClone(reader)
+        __clone_single_snapshot(from_front, to_front, session_id)
+        self.commit(session_name = session_name, session_must_exist = False)
+
+
+    if self.allows_permanent_erase():
+        removed_blobs_count = self.__erase_orphan_blobs()
+        print "Found and removed", removed_blobs_count," orphan blobs"
+        
+def __clone_single_snapshot(from_front, to_front, session_id):
+    """ This function requires that a new snapshot is underway in
+    to_front. It does not commit that snapshot. """
+    other_bloblist = from_front.get_session_bloblist(session_id)
+    other_raw_bloblist = from_front.get_session_raw_bloblist(session_id)
+    for blobinfo in other_raw_bloblist:
+        action = blobinfo.get("action", None)
+        if not action:
+            md5sum = blobinfo['md5sum']
+            if not (to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum)):
+                to_front.init_new_blob(md5sum, blobinfo['size'])
+                to_front.add_blob_data_streamed(md5sum, datasource = from_front.get_blob(md5sum))
+                to_front.blob_finished(md5sum)
+            to_front.add(blobinfo)
+        elif action == "remove":
+            to_front.remove(blobinfo['filename'])
+        else:
+            assert False, "Unexpected blobinfo action: " + str(action)
+
+def is_identical(front1, front2):
+    """ Returns True iff the other repo contains the same sessions
+    with the same fingerprints as this repo."""
+    if not is_continuation(base_front = front2, cont_front = front2):
+        return False
+    return set(front1.get_session_ids()) == set(front2.get_session_ids())
+
+def is_continuation(base_front, cont_front):
+    """ Returns True if the other repo is a continuation of this
+    one. That is, the other repo contains all the sessions of this
+    repo, and then zero of more additional sessions."""
+    if set(base_front.get_session_ids()) > set(cont_front.get_session_ids()):
+        # Not same sessions - cannot be successor
+        return False
+    other_deleted = cont_front.get_deleted_snapshots()
+    for session_id in base_front.get_session_ids():
+        if session_id in other_deleted:
+            continue
+        base_front_session_info = base_front.get_session_info(session_id)
+        cont_front_session_info = cont_front.get_session_info(session_id)
+        if base_front_session_info['name'] != cont_front_session_info['name']:
+            return False
+        if base_front.get_session_fingerprint(session_id) != cont_front.get_session_fingerprint(session_id):
+            return False
+    return True
+
+
 class Front:
     def __init__(self, repo):
         self.repo = repo
         self.new_session = None
         self.blobs_to_verify = []
+
+    def allows_permanent_erase(self):
+        return self.repo.allows_permanent_erase()
 
     def get_session_ids(self, session_name = None):
         sids = self.repo.get_all_sessions()
@@ -169,6 +260,10 @@ class Front:
             seen.add(b['filename'])
         return bloblist
 
+    def get_session_raw_bloblist(self, id):
+        session_reader = self.repo.get_session(id)
+        return copy.copy(session_reader.get_raw_bloblist())
+
     def create_session(self, session_name, base_session = None):
         """Creates a new snapshot for the given session. Commit() must
         be called when the construction of the new snapshot is
@@ -201,6 +296,10 @@ class Front:
 
     def truncate(self, session_name):
         return self.create_base_snapshot(session_name, truncate = True)
+
+    def erase_snapshots(self, snapshot_ids):
+        assert self.new_session, "erasing snapshots requires a new snapshot"
+        self.new_session.erase_snapshots(snapshot_ids)
 
     def cancel_snapshot(self):
         if not self.new_session:
@@ -292,12 +391,13 @@ class Front:
         finally:
             self.new_session = None
 
-    def commit(self, session_name, log_message = None):
+    def commit(self, session_name, log_message = None, session_must_exist = True):
         """Commit a snapshot started with create_snapshot(). The session must
         exist beforehand. Accepts an optional log message."""
         if log_message != None:
             assert type(log_message) == unicode, "Log message must be in unicode"
-        if self.find_last_revision(session_name) == None:
+        assert type(session_name) == unicode
+        if session_must_exist and self.find_last_revision(session_name) == None:
             raise UserError("Session '%s' does not seem to exist in the repo." % (session_name))
         return self.__commit(session_name, log_message)
 
