@@ -720,10 +720,10 @@ def cmd_diffrepo(args):
         raise UserError("Cloning requires local repositories")
     repopath1 = os.path.abspath(repopath1)
     repopath2 = os.path.abspath(repopath2)
-    repo1 = client.user_friendly_open_local_repository(repopath1)
-    repo2 = client.user_friendly_open_local_repository(repopath2)
-    if repo1.isIdentical(repo2):
-        assert repo2.isIdentical(repo1)
+    repo1 = Front(client.user_friendly_open_local_repository(repopath1))
+    repo2 = Front(client.user_friendly_open_local_repository(repopath2))
+    if front.is_identical(repo1, repo2):
+        assert front.is_identical(repo2, repo1)
         print "Repositories are identical"
         return_code = 0
     else:
