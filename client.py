@@ -39,7 +39,7 @@ def localize(repourl):
     return repourl
 
 def connect(repourl):
-    repourl = localize(repourl)
+    #repourl = localize(repourl)
 
     m = re.match(BOAR_URL_PATTERN, repourl)
     if not m:
