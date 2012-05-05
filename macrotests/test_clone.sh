@@ -27,8 +27,8 @@ txtmatch.py expected_original_repo_log.txt original_repo_log.txt  || { echo "Une
 sleep 1 # Ensure that we'll notice if log times changes during clone
 
 $BOAR clone TESTREPO TESTREPO_clone || { echo "Cloning to new repo failed"; exit 1; }
-$BOAR clone TESTREPO TESTREPO_clone || { echo "Cloning between identical repos should succeed"; exit 1; }
-$BOAR clone TESTREPO_clone TESTREPO || { echo "Cloning between identical repos should succeed"; exit 1; }
+$BOAR clone TESTREPO TESTREPO_clone || { echo "Cloning between identical repos should succeed (1)"; exit 1; }
+$BOAR clone TESTREPO_clone TESTREPO || { echo "Cloning between identical repos should succeed (2)"; exit 1; }
 
 $BOAR --repo=TESTREPO_clone list TestSession |grep -v "Finished" >clone_repo_log.txt || exit 1
 txtmatch.py original_repo_log.txt clone_repo_log.txt || { echo "Clone log messages/time differs from original"; exit 1; }
