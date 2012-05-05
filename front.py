@@ -105,7 +105,8 @@ def clone(from_front, to_front):
         print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_clone))
         #reader = other_repo.get_session(session_id)
         base_session = other_repo.get_base_id(session_id)
-        session_name = other_repo.get_session_info(session_id)['name']
+        session_info = other_repo.get_session_info(session_id)
+        session_name = session_info['name']
         #writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
         self.create_session(session_name, base_session)
         if snapshots_to_delete:
@@ -113,7 +114,10 @@ def clone(from_front, to_front):
             snapshots_to_delete = None
         #writer.commitClone(reader)
         __clone_single_snapshot(from_front, to_front, session_id)
-        self.commit(session_name = session_name, session_must_exist = False)
+        self.commit_raw(session_name = session_name,
+                        log_message = session_info.get("log_message", None), 
+                        timestamp = session_info['timestamp'],
+                        date = session_info['date'])
 
 
     if self.allows_permanent_erase():
@@ -367,7 +371,7 @@ class Front:
         if self.find_last_revision(session_name) != None:
             raise UserError("There already exists a session named '%s'" % (session_name))
         self.create_session(session_name = session_name)
-        return self.__commit(session_name)
+        return self.commit_raw(session_name, None, int(time()), ctime())
 
     def mksession(self, session_name):
         """Create a new session. Throws a UserError for invalid
@@ -376,14 +380,15 @@ class Front:
             raise UserError("Session names must not begin with double underscores.")
         return self.__mksession(session_name)
 
-    def __commit(self, session_name, log_message = None):
+    def commit_raw(self, session_name, log_message, timestamp, date):
         """Commit a snapshot. For internal use. The session does not
         need to exist beforehand."""
         assert self.new_session, "There is no active snapshot to commit"
+        assert type(timestamp) == int
         session_info = {}
         session_info["name"] = session_name
-        session_info["timestamp"] = int(time())
-        session_info["date"] = ctime()
+        session_info["timestamp"] = timestamp
+        session_info["date"] = date
         if log_message:
             session_info["log_message"] = log_message
         try:
@@ -391,15 +396,15 @@ class Front:
         finally:
             self.new_session = None
 
-    def commit(self, session_name, log_message = None, session_must_exist = True):
+    def commit(self, session_name, log_message = None):
         """Commit a snapshot started with create_snapshot(). The session must
         exist beforehand. Accepts an optional log message."""
         if log_message != None:
             assert type(log_message) == unicode, "Log message must be in unicode"
         assert type(session_name) == unicode
-        if session_must_exist and self.find_last_revision(session_name) == None:
+        if not self.find_last_revision(session_name):
             raise UserError("Session '%s' does not seem to exist in the repo." % (session_name))
-        return self.__commit(session_name, log_message)
+        return self.commit_raw(session_name, log_message, int(time()), ctime())
 
     def get_blob_size(self, sum):
         return self.repo.get_blob_size(sum)
