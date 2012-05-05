@@ -92,9 +92,12 @@ def clone(from_front, to_front):
     self = to_front
     other_repo = from_front
     assert other_max_rev >= self_max_rev 
-    snapshots_to_delete = [rev for rev in other_repo.get_deleted_snapshots() if rev <= self_max_rev]
     sessions_to_clone = range(self_max_rev + 1, other_max_rev + 1)
     count = 0
+    
+    all_deleted_snapshots = from_front.get_deleted_snapshots()
+    snapshots_to_delete = find_snapshots_to_delete(from_front, to_front)
+
     if snapshots_to_delete:
         # It should not be possible to have incoming deleted snapshots
         # without at least one new snapshot as well.
@@ -103,26 +106,53 @@ def clone(from_front, to_front):
     for session_id in sessions_to_clone:
         count += 1
         print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_clone))
-        #reader = other_repo.get_session(session_id)
-        base_session = other_repo.get_base_id(session_id)
-        session_info = other_repo.get_session_info(session_id)
-        session_name = session_info['name']
-        #writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
-        self.create_session(session_name, base_session)
-        if snapshots_to_delete:
-            to_front.erase_snapshots(snapshots_to_delete)
-            snapshots_to_delete = None
-        #writer.commitClone(reader)
-        __clone_single_snapshot(from_front, to_front, session_id)
-        self.commit_raw(session_name = session_name,
-                        log_message = session_info.get("log_message", None), 
-                        timestamp = session_info['timestamp'],
-                        date = session_info['date'])
+        if session_id in all_deleted_snapshots:
+            self.create_session(u"__deleted")
+            if snapshots_to_delete:
+                to_front.erase_snapshots(snapshots_to_delete)
+                snapshots_to_delete = None
+            print "Cloning a deleted snapshot:", session_id, type(session_id)
+            deleted_name, deleted_fingerprint = from_front.get_deleted_snapshot_info(session_id)
+            self.commit_deleted_snapshot(deleted_name, deleted_fingerprint)
+        else:
+            #reader = other_repo.get_session(session_id)
+            base_session = other_repo.get_base_id(session_id)
+            session_info = other_repo.get_session_info(session_id)
+            session_name = session_info['name']
+            #writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
+            self.create_session(session_name, base_session)
+            if snapshots_to_delete:
+                to_front.erase_snapshots(snapshots_to_delete)
+                snapshots_to_delete = None
+            #writer.commitClone(reader)
+            __clone_single_snapshot(from_front, to_front, session_id)
+            self.commit_raw(session_name = session_name,
+                            log_message = session_info.get("log_message", None), 
+                            timestamp = session_info.get('timestamp', None),
+                            date = session_info['date'])
 
 
     if self.allows_permanent_erase():
         removed_blobs_count = self.__erase_orphan_blobs()
         print "Found and removed", removed_blobs_count," orphan blobs"
+
+def find_snapshots_to_delete(from_front, to_front):
+    """ Find all snapshots in from_front that has been deleted, but
+    has not yet been deleted in the clone to_front. """
+    snapshots_to_delete = []
+    self_max_rev = to_front.get_highest_used_revision()
+    already_deleted_snapshots = set(to_front.get_deleted_snapshots())
+    for rev in from_front.get_deleted_snapshots():
+        if rev > self_max_rev:
+            continue
+        if rev in already_deleted_snapshots:
+            continue
+        deleted_name, deleted_fingerprint = from_front.get_deleted_snapshot_info(rev)
+        session_info = to_front.get_session_info(rev)
+        assert session_info['name'] == deleted_name
+        assert to_front.get_session_fingerprint(rev) == deleted_fingerprint
+        snapshots_to_delete.append(rev)
+    return snapshots_to_delete    
         
 def __clone_single_snapshot(from_front, to_front, session_id):
     """ This function requires that a new snapshot is underway in
@@ -193,6 +223,16 @@ class Front:
 
     def get_deleted_snapshots(self):
         return self.repo.get_deleted_snapshots()
+
+    def get_deleted_snapshot_info(self, rev):
+        """ Returns a tuple containing the snapshot deleted_name and
+        deleted_fingerprint. """
+        assert self.repo.has_snapshot(rev)
+        session_reader = self.repo.get_session(rev)
+        properties = session_reader.get_properties()
+        assert properties['client_data']['name'] == "__deleted", \
+            "Cannot get deleted snapshot info for not-deleted snapshots"
+        return properties.get('deleted_name', None), properties.get('deleted_fingerprint', None)
 
     def __set_session_property(self, session_name, property_name, new_value):
         assert property_name in valid_session_props
@@ -380,21 +420,27 @@ class Front:
             raise UserError("Session names must not begin with double underscores.")
         return self.__mksession(session_name)
 
+    def commit_deleted_snapshot(self, deleted_name, deleted_fingerprint):
+        self.new_session.deleted_snapshot(deleted_name, deleted_fingerprint)
+        rev = self.new_session.commit({'name': '__deleted'})
+        self.new_session = None
+        return rev
+
     def commit_raw(self, session_name, log_message, timestamp, date):
         """Commit a snapshot. For internal use. The session does not
         need to exist beforehand."""
         assert self.new_session, "There is no active snapshot to commit"
-        assert type(timestamp) == int
+        assert timestamp == None or type(timestamp) == int
         session_info = {}
         session_info["name"] = session_name
-        session_info["timestamp"] = timestamp
+        if timestamp:
+            session_info["timestamp"] = timestamp
         session_info["date"] = date
         if log_message:
             session_info["log_message"] = log_message
-        try:
-            return self.new_session.commit(session_info)
-        finally:
-            self.new_session = None
+        rev = self.new_session.commit(session_info)
+        self.new_session = None
+        return rev
 
     def commit(self, session_name, log_message = None):
         """Commit a snapshot started with create_snapshot(). The session must
