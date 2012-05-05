@@ -15,8 +15,15 @@ rm TestSession/r3.txt || exit 1
 echo "Rev 4" >TestSession/r4.txt || exit 1
 (cd TestSession && $BOAR ci -q -m"Log message plain and simple" ) || exit 1
 
-$BOAR --repo=TESTREPO list TestSession |grep -v "Finished" >original_repo_log.txt || exit 1
+cat > expected_original_repo_log.txt <<EOF
+!Revision id 1 \(.*\), 0 files, \(standalone\) Log: <not specified>
+!Revision id 2 \(.*\), 1 files, \(delta\) Log: Log message uno
+!Revision id 3 \(.*\), 1 files, \(delta\) Log: Log message räksmörgås
+!Revision id 4 \(.*\), 1 files, \(delta\) Log: Log message plain and simple
+EOF
 
+$BOAR --repo=TESTREPO list TestSession |grep -v "Finished" >original_repo_log.txt || exit 1
+txtmatch.py expected_original_repo_log.txt original_repo_log.txt  || { echo "Unexpected log contents before cloning"; exit 1; }
 sleep 1 # Ensure that we'll notice if log times changes during clone
 
 $BOAR clone TESTREPO TESTREPO_clone || { echo "Cloning to new repo failed"; exit 1; }
