@@ -280,39 +280,6 @@ class SessionWriter:
         self.metadatas[filename] = metadata
         del self.resulting_blobdict[metadata['filename']]
 
-    def commitClone(self, session):
-        assert not self.dead
-        other_bloblist = session.get_all_blob_infos()
-        if session.is_deleted():
-            # Allow for None as deleted_name and deleted_fingerprint.
-            self.writer.delete(deleted_session_name = session.properties.get('deleted_name', None), 
-                               deleted_fingerprint = session.properties.get('deleted_fingerprint', None))
-        self.resulting_blobdict = bloblist_to_dict(other_bloblist)
-        self.metadatas = bloblist_to_dict(session.get_raw_bloblist())
-        self.base_session = session.properties.get("base_session", None)
-        sessioninfo = session.properties.get("client_data")
-        added_blobs = set()
-        for metadata in self.metadatas.values():
-            if not 'md5sum' in metadata:
-                # Probably a deletion entry
-                continue
-            blobname = metadata['md5sum']
-            assert session.repo.has_raw_blob(blobname), "Other repo does not appear to have the blob we need"+\
-                "(Recipe? Cloning of recipes not yet supported)"
-            if not self.repo.has_blob(blobname) and blobname not in added_blobs:
-                size = session.repo.get_blob_size(blobname)
-                offset = 0
-                added_blobs.add(blobname)
-                self.init_new_blob(blobname, metadata['size'])
-                self.add_blob_data(blobname, "") # For zero length files
-                while offset < size:
-                    data = session.repo.get_blob(blobname, offset, 1000000)
-                    assert len(data) > 0
-                    offset += len(data)
-                    self.add_blob_data(blobname, data)
-                self.blob_finished(blobname)
-        return self.commit(sessioninfo)
-
     def commit(self, sessioninfo = {}):
         assert not self.dead
         try:

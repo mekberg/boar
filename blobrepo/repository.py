@@ -589,43 +589,6 @@ class Repo:
                 return False
         return True
 
-    def pullFrom(self, other_repo):
-        """Updates this repository with changes from the other
-        repo. The other repo must be a continuation of this repo."""
-        with self:
-            with other_repo:
-                self.__pullFrom(other_repo)
-
-    def __pullFrom(self, other_repo):
-        assert self.repo_mutex.is_locked()
-        misuse_assert(not self.readonly, "Cannot pull changes into a write protected repo")
-        print "Pulling updates from %s into %s" % (other_repo, self)
-        # Check that other repo is a continuation of this one
-        assert self.isContinuation(other_repo), \
-            "Cannot pull: %s is not a continuation of %s" % (other_repo, self)
-
-        # Copy all new sessions
-        other_max_rev = other_repo.get_highest_used_revision()
-        self_max_rev = self.get_highest_used_revision()
-        assert other_max_rev >= self_max_rev 
-        snapshots_to_delete = [rev for rev in other_repo.get_deleted_snapshots() if rev <= self_max_rev]
-        sessions_to_clone = range(self_max_rev + 1, other_max_rev + 1)
-        count = 0
-        self.__erase_snapshots(snapshots_to_delete)
-        for session_id in sessions_to_clone:
-            count += 1
-            # This cuts right through all ideas of layering. But
-            # progress info is nice.
-            # TODO: When a boar server is implemented, fix this.
-            print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_clone))
-            reader = other_repo.get_session(session_id)
-            base_session = reader.get_properties().get('base_session', None)
-            writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
-            writer.commitClone(reader)
-        if self.allows_permanent_erase():
-            removed_blobs_count = self.__erase_orphan_blobs()
-            print "Found and removed", removed_blobs_count," orphan blobs"
-
     def get_queued_session_id(self):
         path = os.path.join(self.repopath, QUEUE_DIR)
         files = os.listdir(path)
@@ -680,6 +643,7 @@ class Repo:
             return
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
+        misuse_assert(not self.readonly, "Cannot erase snapshots from a write protected repo")
         snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
         snapshot_ids.sort()
         snapshot_ids.reverse()
@@ -696,6 +660,7 @@ class Repo:
         # Carefully here... We must allow for a resumed operation 
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
+        misuse_assert(not self.readonly, "Cannot erase snapshots from a write protected repo")
         if self.get_referring_snapshots(rev):
             raise MisuseError("Erasing rev %s would create orphan snapshots" % rev)
         if rev in self.session_readers:
@@ -727,6 +692,7 @@ class Repo:
         assert self.repo_mutex.is_locked()
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
+        misuse_assert(not self.readonly, "Cannot erase blobs from a write protected repo")
         orphan_blobs = self.get_orphan_blobs()
         trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_blobs_", dir = self.get_path(TMP_DIR))
         for blob in orphan_blobs:
