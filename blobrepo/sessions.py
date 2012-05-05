@@ -223,6 +223,9 @@ class SessionWriter:
         self.dead = True
         self.session_mutex.release()
 
+    def deleted_snapshot(self, deleted_name, deleted_fingerprint):
+        self.writer.delete(deleted_name, deleted_fingerprint)
+
     def erase_snapshots(self, snapshot_ids):
         for sid in snapshot_ids:
             assert type(sid) == int and sid > 0
