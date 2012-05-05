@@ -563,32 +563,6 @@ class Repo:
             if self.has_recipe_blob(blob) and self.has_raw_blob(blob):
                 yield blob
 
-    def isIdentical(self, other_repo):
-        """ Returns True iff the other repo contains the same sessions
-        with the same fingerprints as this repo."""
-        if not other_repo.isContinuation(self):
-            return False
-        return set(self.get_all_sessions()) == set(other_repo.get_all_sessions())
-
-    def isContinuation(self, other_repo):
-        """ Returns True if the other repo is a continuation of this
-        one. That is, the other repo contains all the sessions of this
-        repo, and then zero of more additional sessions."""
-        if set(self.get_all_sessions()) > set(other_repo.get_all_sessions()):
-            # Not same sessions - cannot be successor
-            return False
-        other_deleted = other_repo.get_deleted_snapshots()
-        for session_id in self.get_all_sessions():
-            if session_id in other_deleted:
-                continue
-            self_session = self.get_session(session_id)
-            other_session = other_repo.get_session(session_id)
-            if self_session.get_name() != other_session.get_name():
-                return False
-            if self_session.get_fingerprint() != other_session.get_fingerprint():
-                return False
-        return True
-
     def get_queued_session_id(self):
         path = os.path.join(self.repopath, QUEUE_DIR)
         files = os.listdir(path)
