@@ -254,7 +254,7 @@ def cmd_mkrepo(args):
 
 
 def cmd_list(args):
-    parser = OptionParser(usage="usage: boar list [-a|--list-all] [session name [snapshot id]]")
+    parser = OptionParser(usage="usage: boar list [session name [snapshot id]]")
     parser.add_option("-m", "--show-meta", dest = "show_meta", action="store_true",
                       help="Show meta sessions (stores session properties, normally hidden)")
     parser.add_option("-d", "--dump", dest = "dump", action="store_true",
