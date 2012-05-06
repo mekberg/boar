@@ -662,7 +662,7 @@ class Repo:
         writer.commit()
         os.rename(delete_copy, os.path.join(trashdir, str(rev) + ".deleted"))
 
-    def __erase_orphan_blobs(self):
+    def erase_orphan_blobs(self):
         assert self.repo_mutex.is_locked()
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
@@ -746,7 +746,7 @@ class Repo:
             assert os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
             self.__erase_snapshots(snapshots_to_delete)
         if os.path.exists(os.path.join(queued_item, "delete.json")):
-            self.__erase_orphan_blobs()
+            self.erase_orphan_blobs()
             safe_delete_file(os.path.join(queued_item, "delete.json"))
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
