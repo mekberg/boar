@@ -89,8 +89,6 @@ def clone(from_front, to_front):
         to_front.release_repo_lock()
 
 def __clone(from_front, to_front):
-    # PullFrom
-    print "Pulling updates from %s into %s" % (from_front, to_front)
     # Check that other repo is a continuation of this one
     assert is_continuation(base_front = to_front, cont_front = from_front), \
         "Cannot pull: %s is not a continuation of %s" % (from_front, to_front)
@@ -120,20 +118,16 @@ def __clone(from_front, to_front):
             if snapshots_to_delete:
                 to_front.erase_snapshots(snapshots_to_delete)
                 snapshots_to_delete = None
-            print "Cloning a deleted snapshot:", session_id, type(session_id)
             deleted_name, deleted_fingerprint = from_front.get_deleted_snapshot_info(session_id)
             self.commit_deleted_snapshot(deleted_name, deleted_fingerprint)
         else:
-            #reader = other_repo.get_session(session_id)
             base_session = other_repo.get_base_id(session_id)
             session_info = other_repo.get_session_info(session_id)
             session_name = session_info['name']
-            #writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
             self.create_session(session_name, base_session)
             if snapshots_to_delete:
                 to_front.erase_snapshots(snapshots_to_delete)
                 snapshots_to_delete = None
-            #writer.commitClone(reader)
             __clone_single_snapshot(from_front, to_front, session_id)
             self.commit_raw(session_name = session_name,
                             log_message = session_info.get("log_message", None), 
