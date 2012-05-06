@@ -80,6 +80,15 @@ def set_file_contents(front, session_name, filename, contents):
 valid_session_props = set(["ignore", "include"])
 
 def clone(from_front, to_front):
+    from_front.acquire_repo_lock()
+    to_front.acquire_repo_lock()
+    try:
+        return __clone(from_front, to_front)
+    finally:
+        from_front.release_repo_lock()
+        to_front.release_repo_lock()
+
+def __clone(from_front, to_front):
     # PullFrom
     print "Pulling updates from %s into %s" % (from_front, to_front)
     # Check that other repo is a continuation of this one
@@ -131,9 +140,8 @@ def clone(from_front, to_front):
                             timestamp = session_info.get('timestamp', None),
                             date = session_info['date'])
 
-
     if self.allows_permanent_erase():
-        removed_blobs_count = self.__erase_orphan_blobs()
+        removed_blobs_count = self.erase_orphan_blobs()
         print "Found and removed", removed_blobs_count," orphan blobs"
 
 def find_snapshots_to_delete(from_front, to_front):
@@ -345,6 +353,10 @@ class Front:
         assert self.new_session, "erasing snapshots requires a new snapshot"
         self.new_session.erase_snapshots(snapshot_ids)
 
+    def erase_orphan_blobs(self):
+        with self.repo:
+            return self.repo.erase_orphan_blobs()
+
     def cancel_snapshot(self):
         if not self.new_session:
             warn("Tried to cancel non-active new snapshot")
@@ -499,6 +511,13 @@ class Front:
     
     def repo_verify_snapshot(self, rev):
         return self.repo.verify_snapshot(rev)
+
+    def acquire_repo_lock(self):
+        self.repo.repo_mutex.lock()
+
+    def release_repo_lock(self):
+        self.repo.repo_mutex.release()
+
 
 class RevisionFront:
     """RevisionFront is a wrapper for the Front class that provides
