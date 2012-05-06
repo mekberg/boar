@@ -458,6 +458,7 @@ class TransportStream:
     def __init__( self, s_in, s_out, logfunc=log_dummy ):
         self.s_in = s_in
         self.s_out = s_out
+        self.call_count = 0
 
     def connect( self ):
         pass
@@ -531,7 +532,9 @@ class TransportStream:
                     self.s_out.write( header )
                     self.s_out.write( result )
                 self.s_out.flush()
+                self.call_count += 1
         finally:
+            #open("/tmp/call_count.txt", "w").write(str(self.call_count) + " calls\n")
             self.close()
 
 
