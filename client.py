@@ -69,26 +69,18 @@ def user_friendly_open_local_repository(path):
     return repo
 
 def _connect_cmd(cmd):
-    errorlog = tempfile.TemporaryFile()
-    #errorlog = open("/tmp/errors.txt", "w")
     p = subprocess.Popen(cmd, 
                          shell = True, 
                          stdout = subprocess.PIPE, 
                          stdin = subprocess.PIPE, 
-                         stderr = errorlog)    
+                         stderr = None)    
     if p.poll():
-        errorlog.seek(0)
-        errorstr = errorlog.read().strip()
-        raise UserError("Transport command failed with error code %s: %s" % (p.returncode, errorstr))
+        raise UserError("Transport command failed with error code %s" % (p.returncode))
     server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
                                  jsonrpc.TransportStream(p.stdout, p.stdin))
     try:
         assert server.ping() == "pong"
     except:
-        print "*** Transport command stderr output:"
-        errorlog.seek(0)
-        print errorlog.read()
-        print "*** Local stack trace:"
         raise
     server.initialize()
     return server.front
