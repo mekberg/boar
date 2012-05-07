@@ -82,11 +82,12 @@ valid_session_props = set(["ignore", "include"])
 def clone(from_front, to_front):
     from_front.acquire_repo_lock()
     to_front.acquire_repo_lock()
-    try:
-        return __clone(from_front, to_front)
-    finally:
-        from_front.release_repo_lock()
-        to_front.release_repo_lock()
+    __clone(from_front, to_front) 
+    # Let's not attempt to clean up the locks here in case of an
+    # exception. It might cause problems over RPC and secondary
+    # exceptions. Let's just trust the automatic __del__ lock cleanup.
+    from_front.release_repo_lock()
+    to_front.release_repo_lock()
 
 def __clone(from_front, to_front):
     # Check that other repo is a continuation of this one
@@ -108,6 +109,8 @@ def __clone(from_front, to_front):
     if snapshots_to_delete:
         # It should not be possible to have incoming deleted snapshots
         # without at least one new snapshot as well.
+        if not to_front.allows_permanent_erase():
+            raise UserError("Source repo has deleted snapshots, but destination repo does not allow deletions")
         assert sessions_to_clone
 
     for session_id in sessions_to_clone:
@@ -129,10 +132,8 @@ def __clone(from_front, to_front):
                 to_front.erase_snapshots(snapshots_to_delete)
                 snapshots_to_delete = None
             __clone_single_snapshot(from_front, to_front, session_id)
-            self.commit_raw(session_name = session_name,
-                            log_message = session_info.get("log_message", None), 
-                            timestamp = session_info.get('timestamp', None),
-                            date = session_info['date'])
+            self.commit_raw(session_name = session_name, log_message = session_info.get("log_message", None), 
+                            timestamp = session_info.get('timestamp', None), date = session_info['date'])
 
     if self.allows_permanent_erase():
         removed_blobs_count = self.erase_orphan_blobs()
