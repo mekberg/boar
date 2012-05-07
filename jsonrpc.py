@@ -30,6 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
 import sys, os
 import struct
 from boar_exceptions import *
+import traceback
 
 #=========================================
 # errors
@@ -93,49 +94,49 @@ class RPCFault(RPCError):
     def __str__(self):
         return repr(self)
     def __repr__(self):
-        return( "<RPCFault %s: %s (%s)>" % (self.error_code, repr(self.error_message), repr(self.error_data)) )
+        return( "<RPCFault %s: %s (%s)>" % (self.error_code, self.error_message, repr(self.error_data)) )
 
 class RPCParseError(RPCFault):
     """Broken rpc-package. (PARSE_ERROR)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, PARSE_ERROR, ERROR_MESSAGE[PARSE_ERROR], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, PARSE_ERROR, message, error_data)
 
 class RPCInvalidRPC(RPCFault):
     """Invalid rpc-package. (INVALID_REQUEST)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, INVALID_REQUEST, ERROR_MESSAGE[INVALID_REQUEST], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, INVALID_REQUEST, message, error_data)
 
 class RPCMethodNotFound(RPCFault):
     """Method not found. (METHOD_NOT_FOUND)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, METHOD_NOT_FOUND, message, error_data)
 
 class RPCInvalidMethodParams(RPCFault):
     """Invalid method-parameters. (INVALID_METHOD_PARAMS)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, INVALID_METHOD_PARAMS, ERROR_MESSAGE[INVALID_METHOD_PARAMS], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, INVALID_METHOD_PARAMS, message, error_data)
 
 class RPCInternalError(RPCFault):
     """Internal error. (INTERNAL_ERROR)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, INTERNAL_ERROR, message, error_data)
 
 class RPCProcedureException(RPCFault):
     """Procedure exception. (PROCEDURE_EXCEPTION)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, PROCEDURE_EXCEPTION, ERROR_MESSAGE[PROCEDURE_EXCEPTION], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, PROCEDURE_EXCEPTION, message, error_data)
 class RPCAuthentificationError(RPCFault):
     """AUTHENTIFICATION_ERROR"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, AUTHENTIFICATION_ERROR, ERROR_MESSAGE[AUTHENTIFICATION_ERROR], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, AUTHENTIFICATION_ERROR, message, error_data)
 class RPCPermissionDenied(RPCFault):
     """PERMISSION_DENIED"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, PERMISSION_DENIED, ERROR_MESSAGE[PERMISSION_DENIED], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, PERMISSION_DENIED, message, error_data)
 class RPCInvalidParamValues(RPCFault):
     """INVALID_PARAM_VALUES"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, INVALID_PARAM_VALUES, ERROR_MESSAGE[INVALID_PARAM_VALUES], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, INVALID_PARAM_VALUES, message, error_data)
 
 
 #=========================================
@@ -360,24 +361,26 @@ class JsonRpc20:
                 raise RPCInvalidRPC("Invalid Response, invalid error-object.")
 
             error_data = data["error"]["data"]
+            message = data["error"]["message"]
+            
             if   data["error"]["code"] == PARSE_ERROR:
-                raise RPCParseError(error_data)
+                raise RPCParseError(message,error_data)
             elif data["error"]["code"] == INVALID_REQUEST:
-                raise RPCInvalidRPC(error_data)
+                raise RPCInvalidRPC(message,error_data)
             elif data["error"]["code"] == METHOD_NOT_FOUND:
-                raise RPCMethodNotFound(error_data)
+                raise RPCMethodNotFound(message,error_data)
             elif data["error"]["code"] == INVALID_METHOD_PARAMS:
-                raise RPCInvalidMethodParams(error_data)
+                raise RPCInvalidMethodParams(message,error_data)
             elif data["error"]["code"] == INTERNAL_ERROR:
-                raise RPCInternalError(error_data)
+                raise RPCInternalError(message,error_data)
             elif data["error"]["code"] == PROCEDURE_EXCEPTION:
-                raise RPCProcedureException(error_data)
+                raise RPCProcedureException(message,error_data)
             elif data["error"]["code"] == AUTHENTIFICATION_ERROR:
-                raise RPCAuthentificationError(error_data)
+                raise RPCAuthentificationError(message,error_data)
             elif data["error"]["code"] == PERMISSION_DENIED:
-                raise RPCPermissionDenied(error_data)
+                raise RPCPermissionDenied(message,error_data)
             elif data["error"]["code"] == INVALID_PARAM_VALUES:
-                raise RPCInvalidParamValues(error_data)
+                raise RPCInvalidParamValues(message,error_data)
             elif data["error"]["code"] == BOAR_EXCEPTION:
                 #print data["error"]["data"]
                 exception = eval(data["error"]["data"])
@@ -746,7 +749,7 @@ class Server:
             self.dead = True
             #print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             #return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id )
+            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, traceback.format_exc(), repr(err)), id )
             
 
         try:
