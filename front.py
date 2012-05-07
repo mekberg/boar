@@ -82,12 +82,11 @@ valid_session_props = set(["ignore", "include"])
 def clone(from_front, to_front):
     from_front.acquire_repo_lock()
     to_front.acquire_repo_lock()
-    __clone(from_front, to_front) 
-    # Let's not attempt to clean up the locks here in case of an
-    # exception. It might cause problems over RPC and secondary
-    # exceptions. Let's just trust the automatic __del__ lock cleanup.
-    from_front.release_repo_lock()
-    to_front.release_repo_lock()
+    try:
+        __clone(from_front, to_front) 
+    finally:
+        from_front.release_repo_lock()
+        to_front.release_repo_lock()
 
 def __clone(from_front, to_front):
     # Check that other repo is a continuation of this one
