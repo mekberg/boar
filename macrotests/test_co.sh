@@ -44,6 +44,7 @@ rm -r cosubdir || exit 1
 
 $BOAR co TestSessionCo/cosubdir/// || { echo "Co failed with spec with ending slashes"; exit 1; }
 test -e cosubdir || { echo "Workdir didn't get expected name with spec with ending slashes"; exit 1; }
+test -e cosubdir/subdir_file.txt || { echo "Offset workdir with slashes has missing file"; exit 1; }
 
 $BOAR co NonExistingSession && { echo "Co of non-existing session should fail"; exit 1; }
 $BOAR co NonExistingSession 2>&1 | grep "ERROR: No such session found: NonExistingSession" || \
