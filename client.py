@@ -39,7 +39,9 @@ def localize(repourl):
     return repourl
 
 def connect(repourl):
-    #repourl = localize(repourl)
+    if os.getenv("BOAR_TEST_REMOTE_REPO") == "1":
+        # Force boar to use the remote communication mechanism even for local repos.
+        repourl = localize(repourl)
 
     m = re.match(BOAR_URL_PATTERN, repourl)
     if not m:
