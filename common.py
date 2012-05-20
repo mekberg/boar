@@ -466,7 +466,8 @@ class FileMutex:
         is free, it will be acquired.
         """
         assert self.owner_thread.ident == current_thread().ident, "FileMutex does not support threading"
-        if self.is_locked() and os.path.exists(self.mutex_owner_file):
+        if self.is_locked():
+            assert os.path.exists(self.mutex_owner_file)
             # This thread already owns the lock
             self.lock_levels += 1
             return
@@ -477,6 +478,8 @@ class FileMutex:
         except OSError, e:
             if e.errno != 17: # errno 17 = directory already exists
                 raise
+            #lockpid = int(os.listdir(self.mutex_file)[0].split("-")[1])
+            #print "Lock already taken by", lockpid, "(not necessarily a local pid)"
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
 
     def lock_with_timeout(self, timeout):
