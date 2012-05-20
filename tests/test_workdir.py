@@ -152,11 +152,14 @@ class TestFront(unittest.TestCase, WorkdirHelper):
         self.assertEquals(got_list, ["ignore2"])
 
     def testSetIgnoreErrorDetect(self):
-        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+        expected_exception = AssertionError
+        if os.getenv("BOAR_TEST_REMOTE_REPO") == "1":
+            expected_exception = Exception
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
                           u"TestSession", "string must not be accepted")
-        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
                           u"TestSession", 19) # no numbers allowed
-        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
                           u"TestSession", None) # None not allowed
 
     def tearDown(self):
