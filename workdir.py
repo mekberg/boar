@@ -58,6 +58,7 @@ class Workdir:
         assert repoUrl == None or isinstance(repoUrl, unicode)
         assert isinstance(sessionName, unicode)
         assert isinstance(offset, unicode)
+        assert not offset.endswith("/") or offset.endswith("\\")
         assert revision == None or isinstance(revision, int)
         assert isinstance(root, unicode)
         assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
