@@ -71,7 +71,11 @@ tail -2 output.txt >output-tail.txt
 txtmatch.py expected_clone_error.txt output-tail.txt || exit 1
 
 touch TESTREPO_clone/ENABLE_PERMANENT_ERASE || exit 1
+
+ls TESTREPO_clone/tmp/mutex* && { echo "There is a forgotten mutex in TESTREPO_clone"; exit 1; }
+
 $BOAR clone TESTREPO_truncated TESTREPO_clone || { echo "Cloning deletions failed"; exit 1; }
+
 $BOAR --repo=TESTREPO_clone list -d >output.txt 2>&1 || { 
     cat output.txt; echo "Listing cloned repo with deletions failed"; exit 1; }
 txtmatch.py expected.txt output.txt || { echo "Unexpected list result for repo with cloned deletions"; exit 1; }
