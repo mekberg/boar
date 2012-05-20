@@ -544,6 +544,7 @@ def cmd_co(args):
         raise UserError("Too many arguments")
     co_spec = tounicode(args.pop(0))
     session_name, throwaway, offset = co_spec.partition("/")
+    offset = offset.rstrip("/")
     workdir_name = co_spec.rstrip("/").split("/").pop()
     workdir_path = os.path.abspath(workdir_name)
     if args:
