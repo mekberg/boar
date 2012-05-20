@@ -1,4 +1,10 @@
 # Test that the truncate command behaves as expected.
+
+if [ "$BOAR_TEST_REMOTE_REPO" == "1" ]; then
+    # This test requires code injection on the server side. Hard to do.
+    exit 0
+fi
+
 $BOAR mkrepo TESTREPO || exit 1
 $BOAR mksession --repo=TESTREPO TestSession || exit 1
 $BOAR --repo=TESTREPO co TestSession || exit 1
