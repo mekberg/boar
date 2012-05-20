@@ -259,7 +259,7 @@ class Front:
         return json.loads(value_string)
 
     def set_session_ignore_list(self, session_name, new_list):
-        assert isinstance(new_list, (tuple, list))
+        assert isinstance(new_list, (tuple, list)), new_list
         self.__set_session_property(session_name, "ignore", new_list)
         
     def get_session_ignore_list(self, session_name):        
@@ -269,7 +269,7 @@ class Front:
         return value
 
     def set_session_include_list(self, session_name, new_list):
-        assert isinstance(new_list, (tuple, list))
+        assert isinstance(new_list, (tuple, list)), new_list
         self.__set_session_property(session_name, "include", new_list)
         
     def get_session_include_list(self, session_name):        
