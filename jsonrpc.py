@@ -91,10 +91,12 @@ class RPCFault(RPCError):
         self.error_code   = error_code
         self.error_message = error_message
         self.error_data   = error_data
+        self.stack_trace = traceback.format_exc()
+
     def __str__(self):
         return repr(self)
     def __repr__(self):
-        return( "<RPCFault %s: %s (%s)>" % (self.error_code, self.error_message, repr(self.error_data)) )
+        return( "<RPCFault %s: %s (%s)>\nRPCFault Traceback:\n%s" % (self.error_code, repr(self.error_message), repr(self.error_data), self.stack_trace) )
 
 class RPCParseError(RPCFault):
     """Broken rpc-package. (PARSE_ERROR)"""
@@ -470,9 +472,8 @@ class TransportStream:
         print s
 
     def close( self ):
-        if self.s_in is not None:
-            self.s_in.close()
-            self.s_out.close()
+        self.s_in.close()
+        self.s_out.close()
 
     def __repr__(self):
         return "<TransportSocket, %s, %s>" % (self.s_in, self.s_out)
@@ -520,7 +521,7 @@ class TransportStream:
                     incoming_data_source = StreamDataSource(self.s_in, binary_data_size)
                 else:
                     incoming_data_source = None
-                result = handler(data, incoming_data_source)
+                result = handler.handle(data, incoming_data_source)
                 assert result != None
                 if isinstance(result, DataSource):
                     dummy_result = jsonrpc20.dumps_response(None)
@@ -536,6 +537,8 @@ class TransportStream:
                     self.s_out.write( result )
                 self.s_out.flush()
                 self.call_count += 1
+                if handler.dead:
+                    break
         finally:
             #open("/tmp/call_count.txt", "w").write(str(self.call_count) + " calls\n")
             self.close()
@@ -750,7 +753,6 @@ class Server:
             #print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             #return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
             return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, traceback.format_exc(), repr(err)), id )
-            
 
         try:
             return self.__data_serializer.dumps_response( result, id )
@@ -764,7 +766,7 @@ class Server:
         
         :See: Transport
         """
-        self.__transport.serve( self.handle, n )
+        self.__transport.serve( self, n )
 
 #=========================================
 

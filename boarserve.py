@@ -63,6 +63,6 @@ if __name__ == "__main__":
         main()
         print "Server finished nicely"
     except Exception, e:
-        open("/tmp/server-crash.txt", "w").write(repr(e))
+        #open("/tmp/server-crash.txt", "w").write(repr(e))
         raise
 
