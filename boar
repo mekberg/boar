@@ -543,6 +543,9 @@ def cmd_co(args):
     if len(args) > 2:
         raise UserError("Too many arguments")
     co_spec = tounicode(args.pop(0))
+    co_spec = co_spec.replace("\\", "/")
+    if co_spec.startswith("/"):
+        raise UserError("Checkout specification must not start with a slash")
     session_name, throwaway, offset = co_spec.partition("/")
     offset = offset.rstrip("/")
     workdir_name = co_spec.rstrip("/").split("/").pop()
