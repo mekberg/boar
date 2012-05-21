@@ -410,6 +410,10 @@ class Front:
         the session already exists. """
         if self.find_last_revision(session_name) != None:
             raise Exception("There already exists a session named '%s'" % (session_name))
+        if session_name.strip() != session_name:
+            raise UserError("Session names must not begin or end with whitespace.")
+        if session_name == "":
+            raise UserError("Session names must not be empty")
         if "/" in session_name:
             raise UserError("Session names must not contain slashes.")
         if "\\" in session_name:
