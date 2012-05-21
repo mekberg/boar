@@ -244,7 +244,7 @@ class Workdir:
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
-                    log_message = None, ignore_errors = False):
+                    log_message = None, ignore_errors = False, allow_empty = False):
         front = self.get_front()
         if dry_run:
             front = DryRunFront(front)
@@ -260,7 +260,14 @@ class Workdir:
 
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes(self.revision, ignore_errors = ignore_errors)
+
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
+
+        if not allow_empty and (len(new_files) + len(modified_files) + len(deleted_files) == 0):
+            if write_meta:
+                self.write_metadata()
+                self.__set_workdir_version(CURRENT_VERSION)
+            return None
 
         if fail_on_modifications and modified_files:
             raise UserError("This import would replace some existing files")
