@@ -378,6 +378,8 @@ def cmd_import(args):
                       help="An optional log message describing this import")
     parser.add_option("-n", "--dry-run", dest = "dry_run", action="store_true", default=False,
                       help="Don't actually do anything. Just show what will happen.")
+    parser.add_option("-e", "--allow-empty", dest = "allow_empty", action="store_true", default = False,
+                      help="Always check in a new revision, even if there are no changes to commit.")
     parser.add_option("-w", "--create-workdir", dest = "create_workdir", action="store_true", default=False,
                       help="Turn the imported directory into a workdir.")
     parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
@@ -414,8 +416,12 @@ def cmd_import(args):
         log_message = tounicode(options.message)
     session_id = wd.checkin(write_meta = options.create_workdir, 
                             fail_on_modifications = True, add_only = True, dry_run = options.dry_run,
-                            log_message = log_message, ignore_errors = options.ignore_errors)
-    print "Checked in session id", session_id
+                            log_message = log_message, ignore_errors = options.ignore_errors, 
+                            allow_empty = options.allow_empty)
+    if session_id:
+        print "Checked in session id", session_id
+    else:
+        notice("Didn't find any new or changed files to import.")
 
 def cmd_update(args):
     parser = OptionParser(usage="usage: boar update [options]")
@@ -466,6 +472,8 @@ def cmd_ci(args):
                       help="An optional log message describing this commit")
     parser.add_option("-a", "--add-only", dest = "addonly", action="store_true",
                       help="Only new files will be committed. Modified and deleted files will be ignored.")
+    parser.add_option("-e", "--allow-empty", dest = "allow_empty", action="store_true", default = False,
+                      help="Always check in a new revision, even if there are no changes to commit.")
     parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
                       help="Do not print any progress information")
     (options, args) = parser.parse_args(args)
@@ -478,8 +486,11 @@ def cmd_ci(args):
     log_message = None
     if options.message:
         log_message = tounicode(options.message)    
-    session_id = wd.checkin(add_only = options.addonly, log_message = log_message)
-    print "Checked in session id", session_id
+    session_id = wd.checkin(add_only = options.addonly, log_message = log_message, allow_empty = options.allow_empty)
+    if session_id:
+        print "Checked in session id", session_id
+    else:
+        notice("Didn't find any changes to check in.")
 
 """
 def cmd_relocate(args):

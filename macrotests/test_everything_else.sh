@@ -37,7 +37,7 @@ $BOAR --repo=$REPO list || { echo "Couldn't access repo by pre-cmd --repo= optio
 $BOAR list --repo=$REPO || { echo "Couldn't access repo by post-cmd --repo= option"; exit 1; }
 
 echo --- Test unchanged check-in
-(cd test_tree && $BOAR ci) || { echo "Couldn't check in tree"; exit 1; }
+(cd test_tree && $BOAR ci --allow-empty ) || { echo "Couldn't check in tree"; exit 1; }
 rm -r test_tree || { echo "Couldn't remove test tree after check-in"; exit 1; }
 REPO_PATH=$REPO $BOAR co MyTestSession test_tree || { echo "Couldn't check out tree"; exit 1; }
 md5sum -c test_tree.md5 || { echo "Test tree failed md5 after unmodified check-in"; exit 1; }
