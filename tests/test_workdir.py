@@ -475,7 +475,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
         wd.checkout()
         wd.checkin()
-        id = wd.checkin()
+        id = wd.checkin(allow_empty = True)
         # Need to change this test if we make non-changing commits become NOPs.
         self.assertEquals(id, 5) 
         wd = self.createWorkdir(self.repoUrl)
