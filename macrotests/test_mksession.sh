@@ -21,6 +21,18 @@ $BOAR mksession "Sim\\ple" && { echo "mksession for names containing backslash s
 $BOAR mksession "__Simple" && { echo "mksession for names starting with double underscore should fail"; exit 1; }
 $BOAR mksession "_Sim_ple_" || { echo "most session names with underscores are allowed"; exit 1; }
 
+$BOAR mksession "" >output.txt 2>&1 && { echo "Zero length session name should fail"; exit 1; }
+grep "ERROR: Session names must not be empty" output.txt || { echo "Unexpected error message for zero length name"; exit 1; }
+
+$BOAR mksession " " >output.txt 2>&1 && { echo "Zero length session name should fail"; exit 1; }
+grep "ERROR: Session names must not begin or end with whitespace" output.txt || { echo "Unexpected error message for zero length name"; exit 1; }
+
+$BOAR mksession " Tjo" >output.txt 2>&1 && { echo "Zero length session name should fail"; exit 1; }
+grep "ERROR: Session names must not begin or end with whitespace" output.txt || { echo "Unexpected error message for zero length name"; exit 1; }
+
+$BOAR mksession "Tjo " >output.txt 2>&1 && { echo "Zero length session name should fail"; exit 1; }
+grep "ERROR: Session names must not begin or end with whitespace" output.txt || { echo "Unexpected error message for zero length name"; exit 1; }
+
 cat >expected_ls_output.txt <<EOF
 #Räk smörgås (1 revs)
 _Sim_ple_ (1 revs)
