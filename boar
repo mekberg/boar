@@ -422,7 +422,7 @@ def cmd_import(args):
     if session_id:
         print "Checked in session id", session_id
     else:
-        notice("Didn't find any new or changed files to import.")
+        notice("Nothing was imported.", sys.stdout)
 
 def cmd_update(args):
     parser = OptionParser(usage="usage: boar update [options]")
@@ -491,7 +491,7 @@ def cmd_ci(args):
     if session_id:
         print "Checked in session id", session_id
     else:
-        notice("Didn't find any changes to check in.")
+        notice("Didn't find any changes to check in.", sys.stdout)
 
 """
 def cmd_relocate(args):

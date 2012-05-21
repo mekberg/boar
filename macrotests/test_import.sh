@@ -8,6 +8,19 @@ $BOAR mksession TestSession || exit 1
 mkdir Import || exit 1
 echo "Some data" >Import/file.txt || exit 1
 
+echo --- Test dry-run import
+cat >expected.txt <<EOF
+Sending file.txt
+NOTICE: Nothing was imported.
+!Finished in (.*) seconds
+EOF
+
+$BOAR import -nq Import TestSession >output.txt 2>&1 || exit 1
+
+txtmatch.py expected.txt output.txt || {
+    cat output.txt; echo "Dry-run import gave unexpected message"; exit 1; }
+rm output.txt || exit 1
+
 echo --- Test normal import
 cat >expected.txt <<EOF
 Sending file.txt
@@ -22,7 +35,7 @@ txtmatch.py expected.txt output.txt || {
 
 echo --- Test unchanged import
 cat >expected.txt <<EOF
-NOTICE: Didn't find any new or changed files to import.
+NOTICE: Nothing was imported.
 !Finished in (.*) seconds
 EOF
 
