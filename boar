@@ -401,7 +401,8 @@ def cmd_import(args):
             session_name, session_offset = args[1].split("/", 1)
         else:
             session_name = args[1]
-    session_offset = tounicode(session_offset)
+    session_offset = tounicode(session_offset.replace("\\", "/"))
+    session_offset = session_offset.rstrip("/")
     if not os.path.exists(path_to_ci):
         raise UserError("Path to check in does not exist: " + path_to_ci)
     repourl = get_repo_url(cmdline_repo)
@@ -554,6 +555,9 @@ def cmd_co(args):
     if len(args) > 2:
         raise UserError("Too many arguments")
     co_spec = tounicode(args.pop(0))
+    co_spec = co_spec.replace("\\", "/")
+    if co_spec.startswith("/"):
+        raise UserError("Checkout specification must not start with a slash")
     session_name, throwaway, offset = co_spec.partition("/")
     offset = offset.rstrip("/")
     workdir_name = co_spec.rstrip("/").split("/").pop()
@@ -760,8 +764,13 @@ def get_repo_url(repo_from_cmdline):
 
 def connect_to_repo(repourl):
     return client.connect(repourl)
+
+def json_bug_test():
+    if type(json.loads(json.dumps("abc"))) != unicode:
+        raise UserError("Your Python version seems to contain a known json decoding bug (http://bugs.python.org/issue10038). It affects Python 2.7 and 2.7.1. You should upgrade (or downgrade) your Python installation.")
     
 def main():
+    json_bug_test()
     if len(sys.argv) <= 1:
         print_help()
         return 1

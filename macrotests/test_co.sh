@@ -44,11 +44,17 @@ rm -r cosubdir || exit 1
 
 $BOAR co TestSessionCo/cosubdir/// || { echo "Co failed with spec with ending slashes"; exit 1; }
 test -e cosubdir || { echo "Workdir didn't get expected name with spec with ending slashes"; exit 1; }
+# Issue 74 - Files missing when checking out workdir with an offset ending with a slash
 test -e cosubdir/subdir_file.txt || { echo "Offset workdir with slashes has missing file"; exit 1; }
 
 $BOAR co NonExistingSession && { echo "Co of non-existing session should fail"; exit 1; }
 $BOAR co NonExistingSession 2>&1 | grep "ERROR: No such session found: NonExistingSession" || \
     { echo "Unexpected error message for missing session"; exit 1; }
+
+# Issue 73. If sessions are regarded as entries in a directory tree,
+# "/Session" should refer to the same entity as "Session".
+$BOAR co /NonExistingSession 2>&1 | grep "ERROR: Checkout specification must not start with a slash" || \
+    { echo "Unexpected error message for missing session with initial slash"; exit 1; }
 
 $BOAR co -r 6 TestSessionCo should_fail && { echo "Co of non-existing revision should fail"; exit 1; }
 $BOAR co -r 6 TestSessionCo should_fail 2>&1 | grep "ERROR: There is no such revision of the given session" || \
