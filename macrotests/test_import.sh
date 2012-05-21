@@ -50,5 +50,11 @@ diff status_no_timing.txt - <<EOF || { echo "Status gave unexpected output"; exi
   file.txt
 EOF
 
+# Issue 61: AssertionError when importing with an offset ending with a slash
+mkdir MoreImport || exit 1
+echo "More data" >MoreImport/another_file.txt || exit 1
+$BOAR import -q MoreImport TestSession/subpathwithslash/ || 
+{ echo "Error when importing to offset path with ending slash"; exit 1; }
+
 true
 
