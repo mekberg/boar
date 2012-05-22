@@ -34,7 +34,7 @@ echo "modified" >repo_modified.txt || exit 1
 rm repo_deleted.txt || exit 1
 $BOAR ci || exit 1
 cd ..
-(cd TestSession && $BOAR info | grep "Revision: 2") || { echo "Unexpected revision"; exit 1; }
+(cd TestSession && $BOAR info | grep "Snapshot id: 2") || { echo "Unexpected revision"; exit 1; }
 
 $BOAR --repo=TESTREPO truncate TestSession || exit 1
 
@@ -50,11 +50,10 @@ txtmatch.py expected.txt output.txt || { echo "Output mismatch at line $LINENO";
 
 
 cat >expected.txt <<EOF
-Using a work directory:
-!   Workdir root: .*/TestSession
-!   Repository: .*/TESTREPO
-   Session: TestSession / 
-   Revision: 2
+!Repository: .*/TESTREPO
+Session / Path: TestSession
+Snapshot id: 2
+!Workdir root: .*/TestSession
 !Finished in .* seconds
 EOF
 (cd TestSession && $BOAR info 2>&1) >output.txt || { echo "Info failed"; exit 1; }
@@ -102,7 +101,7 @@ M wd_modified.txt
 EOF
 (cd TestSession && $BOAR status -vq) >output.txt || { echo "Status failed"; exit 1; }
 txtmatch.py expected_workdir_status.txt output.txt || { echo "Unexpected workdir status after update"; exit 1; }
-(cd TestSession && $BOAR info | grep "Revision: 4") || { echo "Unexpected revision"; exit 1; }
+(cd TestSession && $BOAR info | grep "Snapshot id: 4") || { echo "Unexpected revision"; exit 1; }
 
 rm -r TestSession || exit 1 # To avoid mistakes in the rest of the code
 
@@ -117,7 +116,7 @@ EOF
 (cd TestSessionModify && grep . *.txt) >output.txt || exit 1
 txtmatch.py workdir_uptodate_contents.txt output.txt || { echo "Unexpected uptodate workdir initial contents"; exit 1; }
 
-(cd TestSessionModify && $BOAR info | grep "Revision: 3") || { echo "Unexpected revision"; exit 1; }
+(cd TestSessionModify && $BOAR info | grep "Snapshot id: 3") || { echo "Unexpected revision"; exit 1; }
 
 cat >expected_uptodate_status.txt <<EOF
 ERROR: The current snapshot has been deleted in the repository.
@@ -133,7 +132,7 @@ Workdir now at revision 4
 EOF
 (cd TestSessionModify && $BOAR update -q 2>&1 ) >output.txt || { echo "Status failed"; exit 1; }
 txtmatch.py expected_uptodate_update.txt output.txt || { echo "Unexpected uptodate workdir update output"; exit 1; }
-(cd TestSessionModify && $BOAR info | grep "Revision: 4") || { echo "Unexpected revision"; exit 1; }
+(cd TestSessionModify && $BOAR info | grep "Snapshot id: 4") || { echo "Unexpected revision"; exit 1; }
 
 
 exit 0 # All is well
