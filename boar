@@ -234,16 +234,19 @@ def cmd_info(args):
     if len(args) != 0:
         raise UserError("Info command does not accept any arguments.")
 
-    wd = workdir.init_workdir(ucwd)
+    wd = workdir.load_workdir_parameters()
     if not wd:
         raise UserError(not_a_workdir_msg)
 
+    offset = ""
+    if wd["offset"]:
+        offset = "/" + wd["offset"]
+
     if wd:
-        print "Using a work directory:"
-        print "   Workdir root:", wd.root
-        print "   Repository:", wd.repoUrl
-        print "   Session:", wd.sessionName, "/", wd.offset
-        print "   Revision:", wd.revision
+        print "Repository:", wd["repoUrl"]
+        print "Session / Path:", wd["sessionName"] + offset
+        print "Snapshot id:", wd["revision"]
+        print "Workdir root:", wd["root"]
         
 def cmd_mkrepo(args):
     if len(args) == 0:
