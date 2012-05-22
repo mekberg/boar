@@ -300,8 +300,8 @@ class Workdir:
             front.create_session(session_name = self.sessionName, base_session = base_snapshot)
         except FileMutex.MutexLocked, e:
             raise UserError("The session '%s' is in use (lockfile %s)" % (self.sessionName, e.mutex_file))
-
-        for sessionpath in files:
+        
+        for sessionpath in sorted(files):
             wd_path = strip_path_offset(self.offset, sessionpath)
             abspath = self.abspath(sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
