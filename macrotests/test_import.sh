@@ -69,5 +69,31 @@ echo "More data" >MoreImport/another_file.txt || exit 1
 $BOAR import -q MoreImport TestSession/subpathwithslash/ || 
 { echo "Error when importing to offset path with ending slash"; exit 1; }
 
+
+echo --- Test the order of imported files.
+# Issue 53:Import file order should be in some non-random order
+cat >expected.txt <<EOF
+Sending abc/aadvark.txt
+Sending abc/bumblebee.txt
+Sending abc/cobra.txt
+Sending abc/dodo.txt
+Sending abc/elephant.txt
+Checked in session id 5
+!Finished in (.*) seconds
+EOF
+
+mkdir Abc || exit 1
+
+date >Abc/cobra.txt
+date >Abc/dodo.txt
+date >Abc/elephant.txt
+date >Abc/aadvark.txt
+date >Abc/bumblebee.txt
+
+$BOAR import -q Abc TestSession/abc >output.txt 2>&1 || exit 1
+
+txtmatch.py expected.txt output.txt || {
+    cat output.txt; echo "Abc import gave unexpected message"; exit 1; }
+
 true
 
