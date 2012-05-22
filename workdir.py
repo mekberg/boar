@@ -560,18 +560,28 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
 def init_workdir(path):
     """ Tries to find a workdir root directory at the given path or
     above. Returns a workdir object if successful, or None if not. """
+    wdparams = load_workdir_parameters()
+    if wdparams == None:
+        return None
+    wd = Workdir(repoUrl = wdparams["repoUrl"],
+                 sessionName = wdparams["sessionName"],
+                 offset = wdparams["offset"],
+                 revision = wdparams["revision"],
+                 root = wdparams["root"]) 
+    return wd
+
+def load_workdir_parameters():
     metapath = find_meta(tounicode(os.getcwd()))
     if not metapath:
         return None
     info = load_meta_info(metapath)
     root = os.path.split(metapath)[0]
-    wd = Workdir(repoUrl=info['repo_path'], 
-                 sessionName=info['session_name'], 
-                 offset=info.get("offset", ""), 
-                 revision=info['session_id'],
-                 root=root) 
-    return wd
-
+    return {"repoUrl": info['repo_path'], 
+            "sessionName": info['session_name'], 
+            "offset": info.get("offset", ""), 
+            "revision": info['session_id'],
+            "root": root}
+    
 
 def find_meta(path):
     meta = os.path.join(path, METADIR)
