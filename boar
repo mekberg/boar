@@ -771,9 +771,6 @@ def json_bug_test():
     
 def main():
     json_bug_test()
-    if len(sys.argv) <= 1:
-        print_help()
-        return 1
 
     args = sys.argv[1:]
     global cmdline_repo
@@ -781,7 +778,7 @@ def main():
 
     # --EXEC is only intended for whitebox testing code that needs
     # invasive access. It should never be used in normal usage.
-    if args[0] == "--EXEC":
+    if args and args[0] == "--EXEC":
         execfile(args[1])
         args = args[2:]
 
@@ -807,6 +804,10 @@ def main():
         if args[i].startswith("--repo="):
             _, cmdline_repo = args.pop(i).split("=")
             break
+
+    if len(args) == 0:
+        print_help()
+        return 1
 
     if args[0] == "mkrepo":
         return cmd_mkrepo(args[1:])
