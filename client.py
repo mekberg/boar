@@ -82,6 +82,8 @@ def _connect_cmd(cmd):
                                  jsonrpc.TransportStream(p.stdout, p.stdin))
     try:
         assert server.ping() == "pong"
+    except ConnectionLost, e:
+        raise UserError("Could not connect to remote repository: %s" % e)
     except:
         raise
     server.initialize()
@@ -91,7 +93,8 @@ def connect_ssh(url):
     url_match = re.match("boar\+ssh://(.*)@([^/]+)(/.*)", url)
     assert url_match, "Not a valid ssh Boar URL:" + url
     user, host, path = url_match.groups()
-    cmd = "ssh '%s'@'%s' boarserve.py '%s'" % (user, host, path)
+    ssh_cmd = __get_ssh_command()
+    cmd = "%s '%s'@'%s' boarserve.py '%s'" % (ssh_cmd, user, host, path)
     return _connect_cmd(cmd)
 
 def connect_nc(url):
@@ -109,3 +112,22 @@ def connect_local(url):
     cmd = "'%s/boarserve.py' '%s'" % (boarhome, repopath)
     return _connect_cmd(cmd)
 
+
+def __get_ssh_command():
+    ssh_cmd = None
+    devnull = open(os.devnull, "w")
+    def cmd_exists(cmd):
+        try:
+            subprocess.call(cmd, stdout = devnull, stderr = devnull)
+            return True
+        except OSError:
+            return False
+
+    ssh_candidates = "ssh", "plink.exe", "ssh.exe"
+    for candidate in ssh_candidates:
+        if cmd_exists(candidate):
+            ssh_cmd = candidate
+            break
+    if not ssh_cmd:
+        raise UserError("No ssh command found (tried: %s)" % (", ".join(ssh_candidates)))
+    return ssh_cmd
