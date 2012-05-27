@@ -24,6 +24,9 @@ class UserError(BoarException):
     def __init__(self, msg):
         Exception.__init__(self, msg)
 
+class ConnectionLost(UserError):
+    pass
+
 class SessionNotFoundError(UserError):
     """This exception is thrown when an attempt has been made to
     access a non-existing session."""
@@ -44,3 +47,4 @@ class SoftCorruptionError(BoarException):
     rebuilding of derived information."""
     def __init__(self, msg):
         Exception.__init__(self, msg)
+
