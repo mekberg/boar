@@ -90,11 +90,19 @@ def _connect_cmd(cmd):
     return server.front
 
 def connect_ssh(url):
-    url_match = re.match("boar\+ssh://(.*)@([^/]+)(/.*)", url)
-    assert url_match, "Not a valid ssh Boar URL:" + url
-    user, host, path = url_match.groups()
+    url_with_user_match = re.match("boar\+ssh://(.*)@([^/]+)(/.*)", url)
+    url_without_user_match = re.match("boar\+ssh://([^@/]+)(/.*)", url)
+    if url_with_user_match:
+        user, host, path = url_with_user_match.groups()
+    elif url_without_user_match:
+        user = None
+        host, path = url_without_user_match.groups()
+    else:
+        raise UserError("Not a valid boar ssh URL: "+str(url))
     ssh_cmd = __get_ssh_command()
-    cmd = "%s '%s'@'%s' boarserve.py '%s'" % (ssh_cmd, user, host, path)
+    cmd = "%s '%s' boarserve.py '%s'" % (ssh_cmd, host, path)
+    if user:
+        cmd = "%s -l '%s' '%s' boarserve.py '%s'" % (ssh_cmd, user, host, path)
     return _connect_cmd(cmd)
 
 def connect_nc(url):
