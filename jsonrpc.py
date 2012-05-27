@@ -492,6 +492,8 @@ class TransportStream:
         
     def recv( self ):
         header = self.s_in.read(HEADER_SIZE)
+        if len(header) == 0:
+            raise ConnectionLost("Transport stream closed unexpectedly.")
         datasize, binary_data_size = unpack_header(header)
         data = self.s_in.read(datasize)
         if binary_data_size != None:            
