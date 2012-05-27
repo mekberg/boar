@@ -100,9 +100,9 @@ def connect_ssh(url):
     else:
         raise UserError("Not a valid boar ssh URL: "+str(url))
     ssh_cmd = __get_ssh_command()
-    cmd = "%s '%s' boarserve.py '%s'" % (ssh_cmd, host, path)
+    cmd = '%s "%s" boarserve.py "%s"' % (ssh_cmd, host, path)
     if user:
-        cmd = "%s -l '%s' '%s' boarserve.py '%s'" % (ssh_cmd, user, host, path)
+        cmd = '%s -l "%s" "%s" boarserve.py "%s"' % (ssh_cmd, user, host, path)
     return _connect_cmd(cmd)
 
 def connect_nc(url):
