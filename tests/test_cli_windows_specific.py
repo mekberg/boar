@@ -25,8 +25,6 @@ def call(cmd):
     returncode = p.poll()
     return stdout, returncode
 
-TMPDIR=tempfile.gettempdir()
-
 BOAR_HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if __name__ == '__main__':
     sys.path.insert(0, BOAR_HOME)
@@ -36,13 +34,15 @@ if os.name == "nt":
 else:
     BOAR = os.path.join(BOAR_HOME, "boar")
 
-
 class TestCliWindowsSpecific(unittest.TestCase):
     def setUp(self):
-        pass
+        self.testdir = tempfile.mkdtemp(prefix="boar_test_cli_")
+        os.chdir(self.testdir)
+        print self.testdir
     
     def tearDown(self):
-        pass
+        os.chdir(BOAR_HOME)
+        shutil.rmtree(self.testdir)
 
     #
     # Actual tests start here
@@ -52,6 +52,12 @@ class TestCliWindowsSpecific(unittest.TestCase):
         output, returncode = call([BOAR])
         assert "Usage: boar" in output
         assert returncode == 1
+
+    def testMkrepo(self):
+        assert not os.path.exists("TESTREPO")
+        output, returncode = call([BOAR, "mkrepo", "TESTREPO"])
+        assert returncode == 0
+        assert os.path.exists("TESTREPO")
 
     def testEmpty(self):
         pass
