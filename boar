@@ -396,16 +396,12 @@ def cmd_import(args):
     if len(args) != 2:
         raise UserError("Wrong number of arguments")
     path_to_ci = tounicode(os.path.abspath(args[0]))
-    session_name = os.path.basename(args[0]) #TODO: what happens when giving only one arg?
-    session_offset = ""
-    if len(args) > 1:
-        if "/" in args[1]:
-            # TODO: this won't work so well with windows paths
-            session_name, session_offset = args[1].split("/", 1)
-        else:
-            session_name = args[1]
-    session_offset = tounicode(session_offset.replace("\\", "/"))
-    session_offset = session_offset.rstrip("/")
+    import_spec = tounicode(args[1]).replace("\\", "/")
+    if "/" in import_spec:
+        session_name, session_offset = import_spec.split("/", 1)
+        session_offset = session_offset.rstrip("/")
+    else:
+        session_name, session_offset = import_spec, ""
     if not os.path.exists(path_to_ci):
         raise UserError("Path to check in does not exist: " + path_to_ci)
     repourl = get_repo_url(cmdline_repo)
