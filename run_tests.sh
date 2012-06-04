@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 
-python blobrepo/tests/test_repository.py || { echo "Blobrepo unittests failed"; exit 1; }
-python tests/test_workdir.py || { echo "Workdir unittests failed"; exit 1; }
-python tests/test_common.py || { echo "common unittests failed"; exit 1; }
-python tests/test_boar_common.py || { echo "boar_common unittests failed"; exit 1; }
+for unittest in tests/test_*.py blobrepo/tests/test_*.py; do
+    echo "Excuting $unittest"
+    python $unittest || { echo "Unittest $unittest failed"; exit 1; }
+done
 
 echo "Executing local macro tests"
 BOAR_TEST_REMOTE_REPO=0 macrotests/macrotest.sh || { echo "Macrotests (local) failed"; exit 1; }
