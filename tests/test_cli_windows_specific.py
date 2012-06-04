@@ -38,7 +38,6 @@ class TestCliWindowsSpecific(unittest.TestCase):
     def setUp(self):
         self.testdir = tempfile.mkdtemp(prefix="boar_test_cli_")
         os.chdir(self.testdir)
-        print self.testdir
     
     def tearDown(self):
         os.chdir(BOAR_HOME)
