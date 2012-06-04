@@ -401,7 +401,7 @@ def cmd_import(args):
         session_name, session_offset = import_spec.split("/", 1)
         session_offset = session_offset.rstrip("/")
     else:
-        session_name, session_offset = import_spec, ""
+        session_name, session_offset = import_spec, u""
     if not os.path.exists(path_to_ci):
         raise UserError("Path to check in does not exist: " + path_to_ci)
     repourl = get_repo_url(cmdline_repo)
