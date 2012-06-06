@@ -280,7 +280,7 @@ def cmd_list(args):
     else:
         raise UserError("Too many arguments")
 
-def print_changes(front, sid):
+def _print_changes(front, sid):
     current_bloblist = front.get_session_bloblist(sid)
     base_id = front.get_base_id(sid)
     base_bloblist = front.get_session_bloblist(base_id) if base_id else []
@@ -298,12 +298,24 @@ def print_changes(front, sid):
         elif comparer.is_modified(filename):
             print "M", filename    
 
+def _parse_range(s):
+    try:
+        return int(s), int(s)
+    except ValueError:
+        pass
+    m = re.match("^(\d*):(\d*)$", s)
+    if not m:
+        raise UserError("Ranges must be given as N:M where N and M may be an empty string or an integer > 0")
+    lower = int(m.group(1)) if m.group(1) else 1
+    upper = int(m.group(2)) if m.group(2) else VERY_LARGE_NUMBER
+    return lower, upper
+
 def cmd_log(args):
     parser = OptionParser(usage="usage: boar log [-v|--verbose] [-r|--revision <rev>] [<session name>[/path]]")
     parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
                       help="List detailed change information about each revision")
-    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
-                      help="Only show log information about the specified revision")
+    parser.add_option("-r", "--revision", action="store", dest = "revision_range",
+                      help='Only show the specified revision(s). Accepts a single revision, or a range on the form "N:M"')
     (options, args) = parser.parse_args(args)
     if len(args) > 1:
         raise UserError("Too many arguments")
@@ -313,10 +325,15 @@ def cmd_log(args):
         session, offset = parse_sessionpath(args[0])
 
     front = connect_to_repo(get_repo_url(cmdline_repo))
+    
+    if options.revision_range:
+        range_start, range_end = _parse_range(options.revision_range)
+    else:
+        range_start, range_end = 1, front.get_highest_used_revision()
 
     anything_printed = False
     for sid in reversed(front.get_session_ids(session)):
-        if options.revision and sid != options.revision:
+        if not (range_start <= sid <= range_end):
             continue
         anything_printed = True
         session_info = front.get_session_info(sid)
@@ -327,7 +344,7 @@ def cmd_log(args):
         print "r%s | %s | %s | %s log %s" % (sid, session_info['name'], 
                                              session_info['date'], linecount, line_s)
         if options.verbose:
-            print_changes(front, sid)
+            _print_changes(front, sid)
         print
         if log_message != "":
             print log_message
