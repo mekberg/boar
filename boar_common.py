@@ -20,6 +20,8 @@ import os
 
 from common import *
 
+from treecomp import TreeComparer
+
 def safe_delete_file(path):
     """This function behaves like os.remove(), except for filenames
     that looks like they may be part of vital session data. If such a
@@ -32,3 +34,16 @@ def safe_delete_file(path):
     assert not filename.endswith(".fingerprint"), "safe_delete prevented deletion of session fingerprint"
     assert not filename.endswith(".recipe"), "safe_delete prevented deletion of recipe data"
     os.remove(path)
+
+def treecompare_bloblists(from_bloblist, to_bloblist):
+    """Constructs and returns a TreeComparer instance using the
+    filenames and md5sums found in the given bloblist entries."""
+    def bloblist_to_dict(bloblist):
+        cmpdict = {}
+        for b in bloblist:
+            cmpdict[b['filename']] = b['md5sum']
+        return cmpdict
+
+    from_dict = bloblist_to_dict(from_bloblist)
+    to_dict = bloblist_to_dict(to_bloblist)
+    return TreeComparer(from_dict, to_dict)
