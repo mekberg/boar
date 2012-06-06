@@ -38,6 +38,22 @@ class TreeComparer:
     def as_tuple(self):
         return self.unchanged_files, self.new_files, self.modified_files, self.deleted_files        
 
+    def all_filenames(self):
+        return set(self.basetree.keys()).union(set(self.newtree.keys()))
+
+    def is_deleted(self, filename):
+        return filename in self.deleted_files
+
+    def is_modified(self, filename):
+        return filename in self.modified_files
+    
+    def is_new(self, filename):
+        return filename in self.new_files
+    
+    def is_unchanged(self, filename):
+        return filename in self.unchanged_files
+
+
 def __selftest():
     oldlist = {"deleted.txt": "deleted content",
                "modified.txt": "modified content1",
@@ -54,5 +70,26 @@ def __selftest():
     assert comp.unchanged_files == ("unchanged.txt",), comp.unchanged_files
     assert comp.new_files == ("new.txt",), comp.new_files
     assert comp.modified_files == ("modified.txt",), comp.modified_files
+
+    assert comp.is_modified("modified.txt")
+    assert not comp.is_deleted("modified.txt")
+    assert not comp.is_unchanged("modified.txt")
+    assert not comp.is_new("modified.txt")
+
+    assert not comp.is_modified("deleted.txt")
+    assert comp.is_deleted("deleted.txt")
+    assert not comp.is_unchanged("deleted.txt")
+    assert not comp.is_new("deleted.txt")
+
+    assert not comp.is_modified("unchanged.txt")
+    assert not comp.is_deleted("unchanged.txt")
+    assert comp.is_unchanged("unchanged.txt")
+    assert not comp.is_new("unchanged.txt")
+
+    assert not comp.is_modified("new.txt")
+    assert not comp.is_deleted("new.txt")
+    assert not comp.is_unchanged("new.txt")
+    assert comp.is_new("new.txt")
+
 
 __selftest()
