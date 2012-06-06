@@ -35,6 +35,7 @@ else:
 from front import Front, RevisionFront, set_file_contents
 import workdir
 from common import *
+from boar_common import *
 
 BOAR_VERSION = "<UNDEFINED>"
 
@@ -279,6 +280,24 @@ def cmd_list(args):
     else:
         raise UserError("Too many arguments")
 
+def print_changes(front, sid):
+    current_bloblist = front.get_session_bloblist(sid)
+    base_id = front.get_base_id(sid)
+    base_bloblist = front.get_session_bloblist(base_id) if base_id else []
+    comparer = treecompare_bloblists(base_bloblist, current_bloblist)
+    all_filenames = list(comparer.all_changed_filenames())
+    all_filenames.sort()
+    print "Changed paths:"
+    for filename in all_filenames:
+        if comparer.is_unchanged(filename):
+            continue
+        elif comparer.is_new(filename):
+            print "A", filename
+        elif comparer.is_deleted(filename):
+            print "D", filename
+        elif comparer.is_modified(filename):
+            print "M", filename    
+
 def cmd_log(args):
     parser = OptionParser(usage="usage: boar log [-v|--verbose] [-r|--revision <rev>] [<session name>[/path]]")
     parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
@@ -295,7 +314,11 @@ def cmd_log(args):
 
     front = connect_to_repo(get_repo_url(cmdline_repo))
 
+    anything_printed = False
     for sid in reversed(front.get_session_ids(session)):
+        if options.revision and sid != options.revision:
+            continue
+        anything_printed = True
         session_info = front.get_session_info(sid)
         log_message = session_info.get("log_message", "")
         linecount = len(log_message.splitlines())
@@ -303,10 +326,13 @@ def cmd_log(args):
         print "-" * 80
         print "r%s | %s | %s | %s log %s" % (sid, session_info['name'], 
                                              session_info['date'], linecount, line_s)
+        if options.verbose:
+            print_changes(front, sid)
         print
         if log_message != "":
             print log_message
-
+    if anything_printed:
+        print "-" * 80
 
 def cmd_ls(args):
     parser = OptionParser(usage="usage: boar ls <session name>[/path]")
