@@ -279,6 +279,34 @@ def cmd_list(args):
     else:
         raise UserError("Too many arguments")
 
+def cmd_log(args):
+    parser = OptionParser(usage="usage: boar log [-v|--verbose] [-r|--revision <rev>] [<session name>[/path]]")
+    parser.add_option("-v", "--verbose", dest = "verbose", action="store_true",
+                      help="List detailed change information about each revision")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="Only show log information about the specified revision")
+    (options, args) = parser.parse_args(args)
+    if len(args) > 1:
+        raise UserError("Too many arguments")
+
+    session, offset = None, None
+    if args:
+        session, offset = parse_sessionpath(args[0])
+
+    front = connect_to_repo(get_repo_url(cmdline_repo))
+
+    for sid in reversed(front.get_session_ids(session)):
+        session_info = front.get_session_info(sid)
+        log_message = session_info.get("log_message", "")
+        linecount = len(log_message.splitlines())
+        line_s = "lines" if linecount != 1 else "line"
+        print "-" * 80
+        print "r%s | %s | %s | %s log %s" % (sid, session_info['name'], 
+                                             session_info['date'], linecount, line_s)
+        print
+        if log_message != "":
+            print log_message
+
 
 def cmd_ls(args):
     parser = OptionParser(usage="usage: boar ls <session name>[/path]")
@@ -543,6 +571,15 @@ def cmd_truncate(args):
     front = connect_to_repo(get_repo_url(cmdline_repo))
     sid = front.truncate(session_name)
     print "Session %s has been truncated to revision %s" % (session_name, sid)    
+
+def parse_sessionpath(s):
+    s = tounicode(s)
+    s = s.replace("\\", "/")
+    if s.startswith("/"):
+        raise UserError("Session path must not start with a slash")
+    session_name, throwaway, offset = s.partition("/")
+    offset = offset.rstrip("/")
+    return session_name, offset
 
 def cmd_co(args): 
     parser = OptionParser(usage="usage: boar co [options] <session name>[/path/] [workdir name]")
@@ -812,8 +849,10 @@ def main():
         return cmd_mkrepo(args[1:])
     elif args[0] == "import":
         return cmd_import(args[1:])
-    elif args[0] == "list":        
+    elif args[0] == "list":
         return cmd_list(args[1:])
+    elif args[0] == "log":
+        return cmd_log(args[1:])
     elif args[0] == "ls":        
         return cmd_ls(args[1:])
     elif args[0] == "verify":
