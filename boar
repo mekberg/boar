@@ -342,7 +342,7 @@ def cmd_log(args):
         line_s = "lines" if linecount != 1 else "line"
         print "-" * 80
         print "r%s | %s | %s | %s log %s" % (sid, session_info['name'], 
-                                             session_info['date'], linecount, line_s)
+                                             session_info.get('date', "<no date>"), linecount, line_s)
         if options.verbose:
             _print_changes(front, sid)
         print
