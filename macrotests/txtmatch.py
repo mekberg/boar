@@ -32,7 +32,7 @@ def read_file(filename):
 def match_line(pattern, text, magic_string):
     if pattern.startswith(magic_string):
         repattern = pattern[len(magic_string):]
-        return (re.match(repattern, text) != None)
+        return (re.match("^" + repattern + "$", text) != None)
     else:
         return (pattern == text)
     
