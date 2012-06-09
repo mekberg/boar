@@ -298,13 +298,15 @@ class _ChangePrinter:
         return self.bloblists[sid]
         """
 
-
-    def print_changes(self, sid):
+    def get_comparer(self, sid):
         front = self.front
         current_bloblist = self.get_bloblist(sid)
         base_id = front.get_base_id(sid)
         base_bloblist = self.get_bloblist(base_id) if base_id else []
-        comparer = treecompare_bloblists(base_bloblist, current_bloblist)
+        return treecompare_bloblists(base_bloblist, current_bloblist)
+
+    def print_changes(self, sid):
+        comparer = self.get_comparer(sid)
         all_filenames = list(comparer.all_changed_filenames())
         all_filenames.sort()
         print "Changed paths:"
@@ -317,6 +319,16 @@ class _ChangePrinter:
                 print "D", filename
             elif comparer.is_modified(filename):
                 print "M", filename    
+
+    def is_affected(self, sid, path):
+        comparer = self.get_comparer(sid)
+        all_changed_filenames = comparer.all_changed_filenames()
+        affected = path in all_changed_filenames
+        if not affected:
+            for affected_filename in all_changed_filenames:
+                if is_child_path(path, affected_filename):
+                    return True
+        return affected
 
 def _parse_range(s):
     try:
@@ -355,6 +367,8 @@ def cmd_log(args):
     change_printer = _ChangePrinter(front)
     for sid in reversed(front.get_session_ids(session)):
         if not (range_start <= sid <= range_end):
+            continue
+        if offset and not change_printer.is_affected(sid, offset):
             continue
         anything_printed = True
         session_info = front.get_session_info(sid)
