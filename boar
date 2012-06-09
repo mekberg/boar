@@ -280,23 +280,43 @@ def cmd_list(args):
     else:
         raise UserError("Too many arguments")
 
-def _print_changes(front, sid):
-    current_bloblist = front.get_session_bloblist(sid)
-    base_id = front.get_base_id(sid)
-    base_bloblist = front.get_session_bloblist(base_id) if base_id else []
-    comparer = treecompare_bloblists(base_bloblist, current_bloblist)
-    all_filenames = list(comparer.all_changed_filenames())
-    all_filenames.sort()
-    print "Changed paths:"
-    for filename in all_filenames:
-        if comparer.is_unchanged(filename):
-            continue
-        elif comparer.is_new(filename):
-            print "A", filename
-        elif comparer.is_deleted(filename):
-            print "D", filename
-        elif comparer.is_modified(filename):
-            print "M", filename    
+class _ChangePrinter:
+    def __init__(self, front):
+        self.front = front
+        self.bloblists = {}
+        self.bloblists_order = []
+
+    def get_bloblist(self, sid):
+        return self.front.get_session_bloblist(sid)
+        """
+        # A simple cache mechanism
+        if sid not in self.bloblists:
+            self.bloblists[sid] = self.front.get_session_bloblist(sid)
+            self.bloblists_order.append(sid)
+            if len(self.bloblists_order) > 1:
+                del self.bloblists[self.bloblists_order.pop(0)]
+        return self.bloblists[sid]
+        """
+
+
+    def print_changes(self, sid):
+        front = self.front
+        current_bloblist = self.get_bloblist(sid)
+        base_id = front.get_base_id(sid)
+        base_bloblist = self.get_bloblist(base_id) if base_id else []
+        comparer = treecompare_bloblists(base_bloblist, current_bloblist)
+        all_filenames = list(comparer.all_changed_filenames())
+        all_filenames.sort()
+        print "Changed paths:"
+        for filename in all_filenames:
+            if comparer.is_unchanged(filename):
+                continue
+            elif comparer.is_new(filename):
+                print "A", filename
+            elif comparer.is_deleted(filename):
+                print "D", filename
+            elif comparer.is_modified(filename):
+                print "M", filename    
 
 def _parse_range(s):
     try:
@@ -332,6 +352,7 @@ def cmd_log(args):
         range_start, range_end = 1, front.get_highest_used_revision()
 
     anything_printed = False
+    change_printer = _ChangePrinter(front)
     for sid in reversed(front.get_session_ids(session)):
         if not (range_start <= sid <= range_end):
             continue
@@ -344,7 +365,7 @@ def cmd_log(args):
         print "r%s | %s | %s | %s log %s" % (sid, session_info['name'], 
                                              session_info.get('date', "<no date>"), linecount, line_s)
         if options.verbose:
-            _print_changes(front, sid)
+            change_printer.print_changes(sid)
         print
         if log_message != "":
             print log_message
