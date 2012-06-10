@@ -407,6 +407,14 @@ class Workdir:
         assert is_md5sum(md5)
         return md5
 
+    def wd_sessionpath(self, wdpath):
+        """Transforms a workdir path to a session path"""
+        assert not is_windows_path(wdpath)
+        normpath = posix_normpath(wdpath)
+        if normpath == ".":
+            return ""
+        return normpath
+
     def wd_abspath(self, wd_path):
         """Transforms the given workdir path into a system absolute
         path"""
