@@ -353,10 +353,22 @@ def cmd_log(args):
         raise UserError("Too many arguments")
 
     session, offset = None, None
-    if args:
-        session, offset = parse_sessionpath(args[0])
 
-    front = connect_to_repo(get_repo_url(cmdline_repo))
+    wd = workdir.init_workdir(ucwd)
+    if wd:
+        front = wd.front
+        if args and (args[0].startswith("/") or args[0].startswith("\\")):
+            raise UserError("Path must not be absolute")
+        workdir_cwd = strip_path_offset(wd.root, ucwd)
+        offset = u""
+        if args:
+            offset = wd.wd_sessionpath(workdir_cwd + "/" + args[0])
+        session = wd.sessionName
+        print session, offset
+    else:
+        if args:
+            session, offset = parse_sessionpath(args[0])
+        front = connect_to_repo(get_repo_url(cmdline_repo))
     
     if options.revision_range:
         range_start, range_end = _parse_range(options.revision_range)
@@ -657,6 +669,8 @@ def parse_sessionpath(s):
         raise UserError("Session path must not start with a slash")
     session_name, throwaway, offset = s.partition("/")
     offset = offset.rstrip("/")
+    assert isinstance(session_name, unicode)
+    assert isinstance(offset, unicode)
     return session_name, offset
 
 def cmd_co(args): 
