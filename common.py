@@ -591,6 +591,19 @@ class StreamEncoder:
 def dir_exists(path):
     return os.path.exists(path) and os.path.isdir(path)
 
+def posix_normpath(path):
+    """This function works similar to os.path.normpath(). The
+    difference is that the behaviour of this function is guaranteed to
+    be the same as os.path.normpath() on Linux, no matter what
+    platform it is currently executing on. The argument must be
+    unicode and must not contain backslash."""
+    assert not "\\" in path, "expected posix style paths, was: %s" % path
+    assert isinstance(path, unicode), "argument must be unicode"
+    result = tounicode(os.path.normpath(path).replace("\\", "/"))
+    assert not "\\" in result
+    assert isinstance(result, unicode)
+    return result
+
 def FakeFile():
     """ Behaves like a file object, but does not actually do anything."""
     return open(os.path.devnull, "w")
