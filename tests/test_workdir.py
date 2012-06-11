@@ -564,6 +564,31 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
                    
 
+    def testWdSessionpathSimple(self):
+        wd = self.createWorkdir(self.repoUrl, offset = u"")
+        self.assertEquals(u"", wd.wd_sessionpath(u"."))
+        self.assertEquals(u"file.txt", wd.wd_sessionpath(u"file.txt"))
+        self.assertEquals(u"file.txt", wd.wd_sessionpath(u"./file.txt"))
+        self.assertEquals(u"file.txt", wd.wd_sessionpath(u".//./file.txt"))
+        self.assertEquals(u"a/c.txt", wd.wd_sessionpath(u"./a/./b/../c.txt"))
+
+    def testWdSessionpathOffset(self):
+        wd = self.createWorkdir(self.repoUrl, offset = u"Räksmörgås/tjosan")
+        self.assertEquals(u"Räksmörgås/tjosan", wd.wd_sessionpath(u"."))
+        self.assertEquals(u"Räksmörgås/tjosan", wd.wd_sessionpath(u"./."))
+        self.assertEquals(u"Räksmörgås/tjosan/file.txt", wd.wd_sessionpath(u".//./file.txt"))
+        self.assertEquals(u"Räksmörgås/tjosan/a/file.txt", wd.wd_sessionpath(u".//./b/../a/file.txt"))
+
+    def testWdSessionpathOutsideOffset(self):
+        wd = self.createWorkdir(self.repoUrl, offset = u"Räksmörgås/tjosan")
+        self.assertEquals(u"Räksmörgås/a", wd.wd_sessionpath(u"../a"))
+        self.assertEquals(u"Räksmörgås", wd.wd_sessionpath(u"../"))
+        self.assertEquals(u"", wd.wd_sessionpath(u"../.."))
+        self.assertRaises(UserError, wd.wd_sessionpath, u"../../..")
+        self.assertRaises(UserError, wd.wd_sessionpath, u"../../../b")
+        self.assertRaises(UserError, wd.wd_sessionpath, u"/b")
+
+
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def setUp(self):
         self.remove_at_teardown = []
