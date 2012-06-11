@@ -305,6 +305,8 @@ def strip_path_offset(offset, p):
     # of my_relpath(). One should replace the other.
     if offset == "":
         return p
+    if offset == p:
+        return u""
     assert not offset.endswith("/"), "Offset must be given without ending slash. Was: "+offset
     assert p.startswith(offset), "'%s' does not begin with offset '%s'" % (p, offset)
     assert p[len(offset)] == "/", "Offset was: "+offset+" Path was: "+p
