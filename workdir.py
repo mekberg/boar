@@ -411,7 +411,7 @@ class Workdir:
         """Transforms a workdir path to a session path"""
         assert not is_windows_path(wdpath)
         if wdpath.startswith("/"):
-            raise UserError("Given workdir path must not start with a slash")
+            raise UserError("Given workdir subpath must not start with a slash")
         if self.offset != "":
             wdpath = self.offset + "/" + wdpath
         result = posix_normpath(wdpath)
@@ -419,7 +419,7 @@ class Workdir:
             result = u""
         parts = os.path.split(result)
         if ".." in parts:
-            raise UserError("Given workdir path points outside current session: '%s'" % wdpath)
+            raise UserError("Given workdir subpath points outside current session: '%s'" % wdpath)
         assert not "." in parts
         return result
 
