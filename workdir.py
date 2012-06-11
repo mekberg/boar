@@ -410,10 +410,18 @@ class Workdir:
     def wd_sessionpath(self, wdpath):
         """Transforms a workdir path to a session path"""
         assert not is_windows_path(wdpath)
-        normpath = posix_normpath(wdpath)
-        if normpath == ".":
-            return ""
-        return normpath
+        if wdpath.startswith("/"):
+            raise UserError("Given workdir path must not start with a slash")
+        if self.offset != "":
+            wdpath = self.offset + "/" + wdpath
+        result = posix_normpath(wdpath)
+        if result == ".":
+            result = u""
+        parts = os.path.split(result)
+        if ".." in parts:
+            raise UserError("Given workdir path points outside current session: '%s'" % wdpath)
+        assert not "." in parts
+        return result
 
     def wd_abspath(self, wd_path):
         """Transforms the given workdir path into a system absolute
