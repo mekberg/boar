@@ -108,6 +108,18 @@ class TestStrictFileWriterEnforcement(unittest.TestCase):
     def testWrongChecksum(self):
         self.assertRaises(common.ConstraintViolation, self.sfw.write, "avocato")
 
+class TestStripPathOffset(unittest.TestCase):
+    def testSimple(self):
+        self.assertEquals("b", common.strip_path_offset("/a", "/a/b"))
+        self.assertEquals("", common.strip_path_offset("/a", "/a"))
+
+    def testArgumentChecks(self):
+        # Offset must not end with slash.
+        self.assertRaises(AssertionError, common.strip_path_offset, "/a/", "/a/b/")
+        # The child path must start with the offset
+        self.assertRaises(AssertionError, common.strip_path_offset, "/b", "/a")
+
+
 if __name__ == '__main__':
     unittest.main()
 
