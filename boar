@@ -362,9 +362,8 @@ def cmd_log(args):
         workdir_cwd = strip_path_offset(wd.root, ucwd)
         offset = u""
         if args:
-            offset = wd.wd_sessionpath(workdir_cwd + "/" + args[0])
+            offset = wd.wd_sessionpath(os.path.join(workdir_cwd, args[0]))
         session = wd.sessionName
-        print session, offset
     else:
         if args:
             session, offset = parse_sessionpath(args[0])
