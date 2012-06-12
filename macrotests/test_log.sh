@@ -161,4 +161,12 @@ REPO_CMDLINE=`pwd`/REPO_CMDLINE
 ( cd WorkdirRepo; REPO_PATH=$REPO_ENV $BOAR --repo=$REPO_CMDLINE log | grep CmdlineRepo ) || { 
     echo "Cmdline should have priority for workdir+env+cmdline"; exit 1; }
 
+# 
+# 
+#
+
+REPO_PATH=REPO_ENV $BOAR log . && { echo "Log for '.' should fail for env repo"; exit 1; }
+$BOAR --repo=REPO_CMDLINE log . && { echo "Log for '.' should fail for cmdline repo"; exit 1; }
+( cd WorkdirRepo; $BOAR log . | grep WorkdirRepo ) || { echo "WorkdirRepo log for '.' failed"; exit 1; }
+
 exit 0 # All is well
