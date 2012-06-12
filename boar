@@ -359,7 +359,6 @@ def cmd_log(args):
     env_repo = get_repo_url_env()
     wd = workdir.init_workdir(ucwd)
 
-    print >>sys.stderr, cmdline_repo, wd, env_repo
     if cmdline_repo:
         if args:
             session, offset = parse_sessionpath(args[0])
@@ -387,6 +386,9 @@ def cmd_log(args):
 
     anything_printed = False
     change_printer = _ChangePrinter(front)
+    if session != None and not front.find_last_revision(session):
+        raise UserError("No such session: %s" % session)
+
     for sid in reversed(front.get_session_ids(session)):
         if not (range_start <= sid <= range_end):
             continue
