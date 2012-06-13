@@ -32,18 +32,15 @@ class SessionNotFoundError(UserError):
     pass
 
 class MisuseError(BoarException):
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
+    pass
 
 class CorruptionError(BoarException):
     """A serious integrity problem of the repository that cannot be
     repaired automatically, if at all."""
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
+    pass
 
 class SoftCorruptionError(BoarException):
     """A harmless integrity problem of the repository requiring
     rebuilding of derived information."""
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
+    pass
 
