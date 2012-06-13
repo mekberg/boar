@@ -255,7 +255,12 @@ def cmd_mkrepo(args):
         args = ["--help"]
     parser = OptionParser(usage="usage: boar mkrepo <new repo path>")
     (options, args) = parser.parse_args(args)
-    repository.create_repository(args[0])
+    if len(args) > 1:
+        raise UserError("Too many arguments")
+    repopath, = args
+    if os.path.exists(repopath):
+        raise UserError("File or directory already exists: %s" % repopath)
+    repository.create_repository(repopath)
 
 
 def cmd_list(args):
@@ -1042,16 +1047,16 @@ if __name__ == "__main__":
         #print "-"*60
         #traceback.print_exc(file=sys.stdout)
         #print "-"*60
-        print "ERROR:", e
+        print "ERROR:", unicode(e)
         return_code = 1
     except repository.MisuseError as e:
-        print "REPO USAGE ERROR:", e
+        print "REPO USAGE ERROR:", unicode(e)
         return_code = 1
     except repository.CorruptionError as e:
-        print "REPO CORRUPTION:", e
+        print "REPO CORRUPTION:", unicode(e)
         return_code = 13
     except repository.SoftCorruptionError as e:
-        print "SOFT REPO CORRUPTION:", e
+        print "SOFT REPO CORRUPTION:", unicode(e)
         print "No need to panic. This means that there are problems in some non-vital cache files in the repository."
         print "Execute a 'repair' command on the repository to fix this problem."
         return_code = 7
