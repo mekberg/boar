@@ -567,7 +567,11 @@ class StreamEncoder:
         assert not type(stream) == type(self), "Cannot nest StreamEncoders"
         self.errors = errors
         self.stream = stream
-        self.codec_name = locale.getpreferredencoding()
+        
+        if os.name == "nt":
+            self.codec_name = "cp437"
+        else:
+            self.codec_name = locale.getpreferredencoding()
 
     def write(self, s):
         if type(s) != unicode:
