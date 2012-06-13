@@ -34,9 +34,27 @@ if os.name == "nt":
 else:
     BOAR = os.path.join(BOAR_HOME, "boar")
 
-class TestCliWindowsSpecific(unittest.TestCase):
+class TestCli(unittest.TestCase):
     def setUp(self):
         self.testdir = tempfile.mkdtemp(prefix="boar_test_cli_")
+        os.chdir(self.testdir)
+
+    def tearDown(self):
+        os.chdir(BOAR_HOME)
+        shutil.rmtree(self.testdir)
+
+    def testMkrepo(self):
+        output, returncode = call([BOAR, "mkrepo", "TESTREPOåäö"])
+        assert returncode == 0
+        assert os.path.exists("TESTREPOåäö")
+        output, returncode = call([BOAR, "mkrepo", "TESTREPOåäö"])
+        assert returncode == 1
+        assert "ERROR: File or directory already exists" in output
+
+
+class TestCliWindowsSpecific(unittest.TestCase):
+    def setUp(self):
+        self.testdir = tempfile.mkdtemp(prefix="boar_test_cli_windows_")
         os.chdir(self.testdir)
     
     def tearDown(self):
