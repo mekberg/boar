@@ -70,4 +70,11 @@ $BOAR co -r 6 TestSessionCo should_fail 2>&1 | grep "ERROR: There is no such rev
     { echo "Unexpected error message for missing session"; exit 1; }
 test ! -e should_fail || { echo "Failed co should not create a workdir"; exit 1; }
 
+# Test existing dir
+$BOAR co TestSessionCo Räksmörgås || exit 1
+$BOAR co TestSessionCo Räksmörgås >collision_output.txt 2>&1 && { echo "Colliding checkout name should fail"; exit 1; }
+egrep "ERROR: Workdir path '.*Räksmörgås' already exists" collision_output.txt || { 
+    cat collision_output.txt; 
+    echo "Colliding checkout name gave unexpected message";
+    exit 1; }
 exit 0 # All is well
