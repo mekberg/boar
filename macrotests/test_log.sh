@@ -161,12 +161,81 @@ REPO_CMDLINE=`pwd`/REPO_CMDLINE
 ( cd WorkdirRepo; REPO_PATH=$REPO_ENV $BOAR --repo=$REPO_CMDLINE log | grep CmdlineRepo ) || { 
     echo "Cmdline should have priority for workdir+env+cmdline"; exit 1; }
 
-# 
-# 
-#
-
 REPO_PATH=REPO_ENV $BOAR log . && { echo "Log for '.' should fail for env repo"; exit 1; }
 $BOAR --repo=REPO_CMDLINE log . && { echo "Log for '.' should fail for cmdline repo"; exit 1; }
 ( cd WorkdirRepo; $BOAR log . | grep WorkdirRepo ) || { echo "WorkdirRepo log for '.' failed"; exit 1; }
+
+#
+# Test workdir log
+#
+
+cat >expected.txt <<EOF
+--------------------------------------------------------------------------------
+!r3 \| WorkdirRepo \| .* \| 1 log line
+Changed paths:
+A å/file2.txt
+
+Added file2.txt
+--------------------------------------------------------------------------------
+!r2 \| WorkdirRepo \| .* \| 1 log line
+Changed paths:
+A å/ä/ö/file1.txt
+
+Added a subdir and file1.txt
+--------------------------------------------------------------------------------
+!r1 \| WorkdirRepo \| .* \| 0 log lines
+Changed paths:
+
+--------------------------------------------------------------------------------
+!Finished in .* seconds
+EOF
+
+mkdir -p WorkdirRepo/å/ä/ö
+echo "Some contents 1" >WorkdirRepo/å/ä/ö/file1.txt
+(cd WorkdirRepo && $BOAR ci -q -m"Added a subdir and file1.txt") || exit 1
+echo "Some contents 2" >WorkdirRepo/å/file2.txt
+(cd WorkdirRepo && $BOAR ci -q -m"Added file2.txt") || exit 1
+(cd WorkdirRepo && $BOAR log -v .) | cat >output.txt || exit 1
+txtmatch.py expected.txt output.txt || { echo "Unexpected workdir log"; exit 1; }
+
+cat >expected.txt <<EOF
+!r3 \| WorkdirRepo \| .* \| 1 log line
+EOF
+
+(cd WorkdirRepo && $BOAR log å/file2.txt ) | grep log >output.txt || exit 1
+txtmatch.py expected.txt output.txt || { echo "Unexpected workdir log for file2"; exit 1; }
+
+cat >expected.txt <<EOF
+!r2 \| WorkdirRepo \| .* \| 1 log line
+EOF
+$BOAR --repo=REPO_WORKDIR co WorkdirRepo/å/ä/ö räksmörgås || exit 1
+(cd räksmörgås && $BOAR log . ) | grep log >output.txt || exit 1
+txtmatch.py expected.txt output.txt || { echo "Unexpected offset workdir log"; exit 1; }
+
+#
+
+cat >expected.txt <<EOF
+!r3 \| WorkdirRepo \| .* \| 1 log line
+!r2 \| WorkdirRepo \| .* \| 1 log line
+EOF
+$BOAR --repo=REPO_WORKDIR co WorkdirRepo/å räksmörgås2 || exit 1
+(cd räksmörgås2 && $BOAR log . ) | grep log >output.txt || exit 1
+txtmatch.py expected.txt output.txt || { echo "Unexpected offset 2 workdir log"; exit 1; }
+
+#
+
+cat >expected.txt <<EOF
+!r2 \| WorkdirRepo \| .* \| 1 log line
+EOF
+(cd räksmörgås2 && $BOAR log ä/ö/. ) | grep log >output.txt || exit 1
+txtmatch.py expected.txt output.txt || { echo "Unexpected offset + subpath workdir log"; exit 1; }
+
+cat >expected.txt <<EOF
+!r3 \| WorkdirRepo \| .* \| 1 log line
+!r2 \| WorkdirRepo \| .* \| 1 log line
+!r1 \| WorkdirRepo \| .* \| 0 log lines
+EOF
+(cd räksmörgås2 && $BOAR log ) | grep log >output.txt || exit 1
+txtmatch.py expected.txt output.txt || { echo "Unexpected offset workdir full log"; exit 1; }
 
 exit 0 # All is well
