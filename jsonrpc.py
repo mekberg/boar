@@ -30,6 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
 import sys, os
 import struct
 from boar_exceptions import *
+from common import *
 import traceback
 
 #=========================================
@@ -51,7 +52,7 @@ AUTHENTIFICATION_ERROR = -32001
 PERMISSION_DENIED      = -32002
 INVALID_PARAM_VALUES   = -32003
 
-BOAR_EXCEPTION   = -10001
+HANDLE_EXCEPTION   = -10002
 
 #human-readable messages
 ERROR_MESSAGE = {
@@ -383,10 +384,13 @@ class JsonRpc20:
                 raise RPCPermissionDenied(message,error_data)
             elif data["error"]["code"] == INVALID_PARAM_VALUES:
                 raise RPCInvalidParamValues(message,error_data)
-            elif data["error"]["code"] == BOAR_EXCEPTION:
+            elif data["error"]["code"] == HANDLE_EXCEPTION:
                 #print data["error"]["data"]
-                exception = eval(data["error"]["data"])
-                assert isinstance(exception, BoarException)
+                try:
+                    exception = eval(data["error"]["data"])
+                except NameError:
+                    raise Exception("Unknown remote exception: %s" % data["error"]["data"])
+                assert isinstance(exception, Exception)
                 raise exception
             else:
                 raise RPCFault(data["error"]["code"], data["error"]["message"], error_data)
@@ -747,14 +751,9 @@ class Server:
         except RPCFault, err:
             self.dead = True
             return self.__data_serializer.dumps_error( err, id=None )
-        except BoarException, err:
-            self.dead = True
-            return self.__data_serializer.dumps_error( RPCFault(BOAR_EXCEPTION, "Boar exception", repr(err)), id )
         except Exception, err:
             self.dead = True
-            #print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            #return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, traceback.format_exc(), repr(err)), id )
+            return self.__data_serializer.dumps_error( RPCFault(HANDLE_EXCEPTION, traceback.format_exc(), repr(err)), id )
 
         try:
             return self.__data_serializer.dumps_response( result, id )
