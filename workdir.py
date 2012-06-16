@@ -307,6 +307,8 @@ class Workdir:
             expected_md5sum = self.cached_md5sum(wd_path)
             try:
                 check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
+            except ContentViolation:
+                raise UserError("File changed during commit: %s" % wd_path)
             except EnvironmentError, e:
                 if ignore_errors:
                     warn("Ignoring unreadable file: %s" % abspath)
@@ -566,6 +568,7 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
     print >>log, "Sending", sessionpath
     if not front.has_blob(expected_md5sum) and not front.new_snapshot_has_blob(expected_md5sum):
         # File does not exist in repo or previously in this new snapshot. Upload it.
+        _send_file_hook(abspath) # whitebox testing
         with open_raw(abspath) as f:
             front.init_new_blob(expected_md5sum, blobinfo["size"])
             datasource = FileDataSource(f, os.path.getsize(abspath))
@@ -677,6 +680,9 @@ def bloblist_to_dict(bloblist):
     assert(len(d) == len(bloblist)), \
         "All filenames must be unique in the revision"
     return d
+
+def _send_file_hook(path):
+    pass
 
 class SingleTaskProgressPrinter:
     def __init__(self, start_msg = "Doing stuff...", end_msg = "done"):

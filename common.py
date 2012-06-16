@@ -647,10 +647,15 @@ def isWritable(path):
 class ConstraintViolation(Exception):
     """This exception is thrown when there is a violation of a usage
     contract."""
-    def __init__(self, value):
-        self.value = value
-    def __str__(self):
-        return repr(self.value)
+    pass
+
+class ContentViolation(ConstraintViolation):
+    """This exception is thrown when there is a violation of a usage
+    contract that indicates that the given files has a different
+    content than expected."""
+    pass
+
+
 
 class StrictFileWriter:
     """This class will work as a file object when created, but with
@@ -682,18 +687,18 @@ class StrictFileWriter:
 
     def write(self, buf):
         if self.written_bytes + len(buf) > self.expected_size:
-            raise ConstraintViolation("Violation of file contract (too big) detected: "+str(self.filename))
+            raise ContentViolation("Violation of file contract (too big) detected: "+str(self.filename))
         self.md5summer.update(buf)
         if self.written_bytes + len(buf) == self.expected_size:
             if self.md5summer.hexdigest() != self.expected_md5:
-                raise ConstraintViolation("Violation of file contract (checksum) detected: "+str(self.filename))
+                raise ContentViolation("Violation of file contract (checksum) detected: "+str(self.filename))
         self.f.write(buf)
         self.written_bytes += len(buf)
     
     def close(self):
         if self.written_bytes != self.expected_size:
-            raise ConstraintViolation("Violation of file contract (too small, %s < %s) detected: %s" %
-                                      (self.written_bytes, self.expected_size, self.filename))
+            raise ContentViolation("Violation of file contract (too small, %s < %s) detected: %s" %
+                                   (self.written_bytes, self.expected_size, self.filename))
         if self.f:
             self.f.close()
             self.f = None
