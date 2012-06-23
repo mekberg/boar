@@ -38,11 +38,6 @@ import fnmatch
 import sqlite3
 import atexit
 
-# shelve and dbhash are only imported as a workaround for py2exe,
-# which otherwise for some reason will forget to include a dbm implementation
-import shelve
-import dbhash
-
 if sys.version_info >= (2, 6):
     import json
 else:
