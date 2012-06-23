@@ -449,18 +449,13 @@ def cmd_ls(args):
             print subpath
 
     def info_comp(x, y):
-        if x['filename'] > y['filename']:
-            return 1
-        if x['filename'] < y['filename']:
-            return -1
-        return 0
+        return cmp(x['filename'], y['filename'])
 
     subdirs = set()
     anything_printed = False
 
     bloblist = get_cached_bloblist(front, revision)
-    bloblist.sort(info_comp)
-    for info in bloblist:
+    for info in sorted(bloblist, info_comp):
         if is_child_path(path, info['filename']) or path == info['filename']:
             print_info(info, path, subdirs)
             anything_printed = True
