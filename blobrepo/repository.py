@@ -341,6 +341,9 @@ class Repo:
 
     def get_path(self, subdir, *parts):
         return os.path.join(self.repopath, subdir, *parts)
+
+    def get_repo_identifier(self):
+        return md5sum(self.repopath)
         
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
