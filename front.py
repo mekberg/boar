@@ -516,6 +516,9 @@ class Front:
     def release_repo_lock(self):
         self.repo.repo_mutex.release()
 
+    def get_repo_identifier(self):
+        return self.repo.get_repo_identifier()
+
 
 class RevisionFront:
     """RevisionFront is a wrapper for the Front class that provides
