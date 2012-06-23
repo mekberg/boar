@@ -49,24 +49,29 @@ class BlobListCache:
         self.conn.execute("CREATE TABLE IF NOT EXISTS blcache (filename, md5sum, mtime INTEGER, ctime INTEGER, size INTEGER)")
         self.conn.execute("CREATE TABLE IF NOT EXISTS blcache_revs (revision INTEGER, blcache_rowid INTEGER, CONSTRAINT nodupes UNIQUE (revision, blcache_rowid))")
         self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blcache_index ON blcache (filename, md5sum, mtime, ctime, size)")
+        self.conn.commit()
         #conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blcache_revs_index ON blcache_revs (revision, blcache_rowid)")
+
+    def __store_bloblist(self, revision, bloblist):
+        conn = self.conn
+        for bi in bloblist: 
+            bparts = bi['filename'], bi['md5sum'], bi['mtime'], bi['ctime'], bi['size']
+            conn.execute("INSERT OR IGNORE INTO blcache (filename, md5sum, mtime, ctime, size) VALUES (?, ?, ?, ?, ?)", 
+                         bparts)
+            cursor = conn.execute('SELECT rowid from blcache WHERE filename=? AND md5sum=? AND mtime=? AND ctime=? AND size=?', 
+                      bparts)
+            rowid = cursor.fetchone()[0]
+            conn.execute("INSERT OR IGNORE INTO blcache_revs (revision, blcache_rowid) VALUES (?, ?)", 
+                         [revision, rowid])
+
 
     def get_bloblist(self, revision):
         conn = self.conn
         conn.execute("BEGIN")
-        cursor = conn.execute('SELECT blcache.* from blcache, blcache_revs WHERE blcache_revs.blcache_rowid = blcache.rowid AND blcache_revs.revision = ?', [revision])
-        bloblist = cursor.fetchall()
+        bloblist = list(conn.execute('SELECT blcache.* from blcache, blcache_revs WHERE blcache_revs.blcache_rowid = blcache.rowid AND blcache_revs.revision = ?', [revision]))
         if not bloblist:
             bloblist = self.front.get_session_bloblist(revision)
-            for bi in bloblist: 
-                bparts = bi['filename'], bi['md5sum'], bi['mtime'], bi['ctime'], bi['size']
-                conn.execute("INSERT OR IGNORE INTO blcache (filename, md5sum, mtime, ctime, size) VALUES (?, ?, ?, ?, ?)", 
-                             bparts)
-                cursor = conn.execute('SELECT rowid from blcache WHERE filename=? AND md5sum=? AND mtime=? AND ctime=? AND size=?', 
-                          bparts)
-                rowid = cursor.fetchone()[0]
-                conn.execute("INSERT OR IGNORE INTO blcache_revs (revision, blcache_rowid) VALUES (?, ?)", 
-                             [revision, rowid])
+            self.__store_bloblist(revision, bloblist)
         conn.commit()
         return bloblist
 
