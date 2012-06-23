@@ -24,6 +24,7 @@ from boar_exceptions import *
 import front
 from common import *
 from boar_common import *
+from blobrepo.sessions import bloblist_fingerprint
 
 class AnonymousRepository(Exception):
     """This exception indicates that the given repository can not be
@@ -37,6 +38,12 @@ class DummyCache:
 
     def get_bloblist(self, revision):
         return self.front.get_session_bloblist(revision)
+
+def assert_valid_bloblist(front, revision, bloblist):
+    actual_fingerprint = bloblist_fingerprint(bloblist)
+    expected_fingerprint = front.get_session_fingerprint(revision)
+    assert is_md5sum(expected_fingerprint)
+    assert actual_fingerprint == expected_fingerprint
 
 class BlobListCache:
     def __init__(self, front):
@@ -53,6 +60,7 @@ class BlobListCache:
         #conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blcache_revs_index ON blcache_revs (revision, blcache_rowid)")
 
     def __store_bloblist(self, revision, bloblist):
+        assert_valid_bloblist(self.front, revision, bloblist)
         conn = self.conn
         for bi in bloblist: 
             bparts = bi['filename'], bi['md5sum'], bi['mtime'], bi['ctime'], bi['size']
@@ -73,6 +81,7 @@ class BlobListCache:
             bloblist = self.front.get_session_bloblist(revision)
             self.__store_bloblist(revision, bloblist)
         conn.commit()
+        assert_valid_bloblist(self.front, revision, bloblist)
         return bloblist
 
 __caches = {}
