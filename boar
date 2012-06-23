@@ -20,6 +20,7 @@ import sys
 import os
 import time
 import cProfile
+
 from optparse import OptionParser, SUPPRESS_HELP
 from blobrepo import repository
 from blobrepo.sessions import bloblist_fingerprint
@@ -36,6 +37,7 @@ from front import Front, RevisionFront, set_file_contents
 import workdir
 from common import *
 from boar_common import *
+import blcache
 
 BOAR_VERSION = "<UNDEFINED>"
 
@@ -292,23 +294,11 @@ class _ChangePrinter:
         self.bloblists = {}
         self.bloblists_order = []
 
-    def get_bloblist(self, sid):
-        return self.front.get_session_bloblist(sid)
-        """
-        # A simple cache mechanism
-        if sid not in self.bloblists:
-            self.bloblists[sid] = self.front.get_session_bloblist(sid)
-            self.bloblists_order.append(sid)
-            if len(self.bloblists_order) > 1:
-                del self.bloblists[self.bloblists_order.pop(0)]
-        return self.bloblists[sid]
-        """
-
     def get_comparer(self, sid):
         front = self.front
-        current_bloblist = self.get_bloblist(sid)
+        current_bloblist = get_cached_bloblist(front, sid)
         base_id = front.get_base_id(sid)
-        base_bloblist = self.get_bloblist(base_id) if base_id else []
+        base_bloblist = get_cached_bloblist(front, base_id) if base_id else []
         return treecompare_bloblists(base_bloblist, current_bloblist)
 
     def print_changes(self, sid):
@@ -467,15 +457,19 @@ def cmd_ls(args):
 
     subdirs = set()
     anything_printed = False
-    bloblist = front.get_session_bloblist(revision)
-    bloblist.sort(info_comp)
 
+    bloblist = get_cached_bloblist(front, revision)
+    bloblist.sort(info_comp)
     for info in bloblist:
         if is_child_path(path, info['filename']) or path == info['filename']:
             print_info(info, path, subdirs)
             anything_printed = True
     if path != "" and not anything_printed:
         raise UserError("No such file or directory found in session: "+path)        
+
+def get_cached_bloblist(front, revision):
+    cache = blcache.get_cache(front)
+    return cache.get_bloblist(revision)    
     
 def cmd_verify(args):
     parser = OptionParser(usage="usage: boar verify [options]")
