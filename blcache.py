@@ -36,7 +36,7 @@ class DummyCache:
     def __init__(self, front):
         self.front = front
 
-    def get_bloblist(self, revision):
+    def get_bloblist(self, revision, skip_verification = False):
         return self.front.get_session_bloblist(revision)
 
 def assert_valid_bloblist(front, revision, bloblist):
@@ -57,7 +57,6 @@ class BlobListCache:
         self.conn.execute("CREATE TABLE IF NOT EXISTS blcache_revs (revision INTEGER, blcache_rowid INTEGER, CONSTRAINT nodupes UNIQUE (revision, blcache_rowid))")
         self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blcache_index ON blcache (filename, md5sum, mtime, ctime, size)")
         self.conn.commit()
-        #conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blcache_revs_index ON blcache_revs (revision, blcache_rowid)")
 
     def __store_bloblist(self, revision, bloblist):
         assert_valid_bloblist(self.front, revision, bloblist)
@@ -73,7 +72,7 @@ class BlobListCache:
                          [revision, rowid])
 
 
-    def get_bloblist(self, revision):
+    def get_bloblist(self, revision, skip_verification = False):
         conn = self.conn
         conn.execute("BEGIN")
         bloblist = list(conn.execute('SELECT blcache.* from blcache, blcache_revs WHERE blcache_revs.blcache_rowid = blcache.rowid AND blcache_revs.revision = ?', [revision]))
@@ -81,7 +80,8 @@ class BlobListCache:
             bloblist = self.front.get_session_bloblist(revision)
             self.__store_bloblist(revision, bloblist)
         conn.commit()
-        assert_valid_bloblist(self.front, revision, bloblist)
+        if not skip_verification:
+            assert_valid_bloblist(self.front, revision, bloblist)
         return bloblist
 
 __caches = {}
