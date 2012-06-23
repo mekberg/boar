@@ -17,8 +17,10 @@
 from __future__ import with_statement
 import sys, os
 import sqlite3
+import zlib
 import tempfile
 import getpass
+import math
 
 from boar_exceptions import *
 import front
@@ -51,16 +53,17 @@ class BlobListCache:
         if not identifier:
             raise AnonymousRepository()
         self.front = front
-        self.conn = sqlite3.connect(os.path.join(tempfile.gettempdir(), "boarcache-%s-%s.db" % (identifier, getpass.getuser())), check_same_thread = False)
+        self.conn = sqlite3.connect(os.path.join(tempfile.gettempdir(), "boarcache-v3-%s-%s.db" % (identifier, getpass.getuser())), check_same_thread = False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("CREATE TABLE IF NOT EXISTS blcache (filename, md5sum, mtime INTEGER, ctime INTEGER, size INTEGER)")
-        self.conn.execute("CREATE TABLE IF NOT EXISTS blcache_revs (revision INTEGER, blcache_rowid INTEGER, CONSTRAINT nodupes UNIQUE (revision, blcache_rowid))")
+        self.conn.execute("CREATE TABLE IF NOT EXISTS revisions (revision INTEGER, blobinfos BLOB, CONSTRAINT nodupes UNIQUE (revision))")
         self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blcache_index ON blcache (filename, md5sum, mtime, ctime, size)")
         self.conn.commit()
 
     def __store_bloblist(self, revision, bloblist):
         assert_valid_bloblist(self.front, revision, bloblist)
         conn = self.conn
+        birows = []
         for bi in bloblist: 
             bparts = bi['filename'], bi['md5sum'], bi['mtime'], bi['ctime'], bi['size']
             conn.execute("INSERT OR IGNORE INTO blcache (filename, md5sum, mtime, ctime, size) VALUES (?, ?, ?, ?, ?)", 
@@ -68,15 +71,23 @@ class BlobListCache:
             cursor = conn.execute('SELECT rowid from blcache WHERE filename=? AND md5sum=? AND mtime=? AND ctime=? AND size=?', 
                       bparts)
             rowid = cursor.fetchone()[0]
-            conn.execute("INSERT OR IGNORE INTO blcache_revs (revision, blcache_rowid) VALUES (?, ?)", 
-                         [revision, rowid])
+            birows.append(rowid) 
+        bf = BitField()
+        bf.set_multiple_bits(birows)
+        conn.execute("INSERT INTO revisions (revision, blobinfos) VALUES (?, ?)", 
+                     [revision, sqlite3.Binary(bf.serialize())])
 
 
     def get_bloblist(self, revision, skip_verification = False):
         conn = self.conn
         conn.execute("BEGIN")
-        bloblist = list(conn.execute('SELECT blcache.* from blcache, blcache_revs WHERE blcache_revs.blcache_rowid = blcache.rowid AND blcache_revs.revision = ?', [revision]))
-        if not bloblist:
+        cursor = conn.execute('SELECT revisions.blobinfos FROM revisions WHERE revision = ?', [revision])
+        row = cursor.fetchone()
+        if row:
+            bf = BitField.deserialize(row[0])
+            rows = ",".join(map(str,bf.get_ones_indices()))
+            bloblist = list(conn.execute('SELECT blcache.* from blcache WHERE rowid IN (%s)' % rows))
+        else:
             bloblist = self.front.get_session_bloblist(revision)
             self.__store_bloblist(revision, bloblist)
         conn.commit()
@@ -95,3 +106,34 @@ def get_cache(front):
             __caches[front] = DummyCache(front)
     return __caches[front]
 
+
+class BitField:
+    def __init__(self, value=0):
+        self.value = value
+
+    def __getitem__(self, index):
+        return (self.value >> index) & 1 
+
+    def __setitem__(self, index, value):
+        value = (value & 1) << index
+        mask = 1 << index
+        self.value = (self.value & ~mask) | value
+
+    def set_multiple_bits(self, lst):
+        bitfield = 0
+        for n in lst:
+            bitfield |= (1 << n)
+        self.value |= bitfield
+
+    def get_ones_indices(self):
+        bitstr = bin(self.value)[2:]
+        result = [len(bitstr)-x[0]-1 for x in enumerate(bitstr) if x[1] == "1"]
+        result.reverse()
+        return result
+
+    def serialize(self):
+        return zlib.compress(bin(self.value))
+
+    @staticmethod
+    def deserialize(s):
+        return BitField(int(zlib.decompress(s), 2))
