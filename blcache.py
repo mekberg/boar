@@ -86,7 +86,7 @@ class BlobListCache:
         if row:
             bf = BitField.deserialize(row[0])
             rows = ",".join(map(str,bf.get_ones_indices()))
-            bloblist = list(conn.execute('SELECT blcache.* from blcache WHERE rowid IN (%s)' % rows))
+            bloblist = list(conn.execute('SELECT blcache.* from blcache WHERE rowid IN (%s) ORDER BY filename' % rows))
         else:
             bloblist = self.front.get_session_bloblist(revision)
             self.__store_bloblist(revision, bloblist)
