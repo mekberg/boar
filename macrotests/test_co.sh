@@ -1,6 +1,6 @@
 # Test that the co command behaves as expected.
 
-export REPO_PATH=TESTREPO
+export REPO_PATH=`pwd`/TESTREPO
 $BOAR mkrepo $REPO_PATH || exit 1
 $BOAR mksession --repo=$REPO_PATH TestSessionCo || exit 1
 $BOAR co TestSessionCo || exit 1
@@ -17,6 +17,9 @@ echo "Rev 3" >TestSessionCo/r3.txt || exit 1
 rm TestSessionCo/r3.txt || exit 1
 echo "Rev 4" >TestSessionCo/r4.txt || exit 1
 (cd TestSessionCo && $BOAR ci -q) || exit 1
+
+# Test checkout for specific revision without explicit workdir name
+(mkdir tmp1 && cd tmp && $BOAR co -r 3 TestSessionCo && test -e TestSessionCo) || exit 1
 
 for rev in 2 3 4; do
     # Test -r flag
