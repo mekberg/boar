@@ -391,6 +391,8 @@ def cmd_log(args):
             continue
         anything_printed = True
         session_info = front.get_session_info(sid)
+        if session_info['name'] == "__deleted":
+            continue
         log_message = session_info.get("log_message", "")
         linecount = len(log_message.splitlines())
         line_s = "lines" if linecount != 1 else "line"
