@@ -49,8 +49,9 @@ verify_assert() # This module uses assert to check for external conditions.
 
 def write_json(filename, obj):
     assert not os.path.exists(filename), "File already exists: " + filename
-    with open(filename, "wb") as f:
-        json.dump(obj, f, indent = 4)
+    data = json.dumps(obj, indent = 4)
+    with StrictFileWriter(filename, md5sum(data), len(data)) as f:
+        f.write(data)
 
 def read_json(filename):
     with safe_open(filename, "rb") as f:
@@ -177,21 +178,6 @@ def checksum_file(f, checksum_names, start = 0, end = None):
             return checksum_fileobj(fobj, checksum_names, start, end)
     return checksum_fileobj(f, checksum_names, start, end)
 
-def copy_file(source, destination, start = 0, end = None, expected_md5sum = None):
-    assert os.path.exists(source), "Source doesn't exist"
-    assert not os.path.exists(destination), "Destination already exist"
-    m = hashlib.md5()
-    with safe_open(source, "rb") as sobj:
-        reader = file_reader(sobj, start, end)
-        with open(destination, "wb") as dobj:
-            for block in reader:
-                if expected_md5sum:
-                    m.update(block)
-                dobj.write(block)
-    if expected_md5sum:
-        assert m.hexdigest() == expected_md5sum, \
-            "Copied file did not have expected md5sum"
-
 def move_file(source, destination, mkdirs = False):
     assert not os.path.exists(destination)
     dirname = os.path.dirname(destination)
@@ -207,7 +193,7 @@ def create_file(destination, content, tmp_suffix = ".tmp"):
     exist and will in that case be overwritten and lost."""
     assert not os.path.exists(destination)
     tmpfile = destination + tmp_suffix
-    with open(tmpfile, "w") as f:
+    with StrictFileWriter(tmpfile, md5sum(content), len(content)) as f:
         f.write(content)
     os.rename(tmpfile, destination)
 
@@ -220,7 +206,7 @@ def replace_file(destination, content, tmp_suffix = ".tmp"):
     atomic, the destination file may just be deleted if the operation
     fails half-way."""
     tmpfile = destination + tmp_suffix
-    with open(tmpfile, "w") as f:
+    with StrictFileWriter(tmpfile, md5sum(content), len(content)) as f:
         f.write(content)
     if os.path.exists(destination):
         os.remove(destination)
@@ -645,17 +631,14 @@ def isWritable(path):
     return True
 
 class ConstraintViolation(Exception):
-    """This exception is thrown when there is a violation of a usage
-    contract."""
+    """This exception is thrown by a StrictFileWriter when there is a
+    violation of a usage contract."""
     pass
 
 class ContentViolation(ConstraintViolation):
-    """This exception is thrown when there is a violation of a usage
-    contract that indicates that the given files has a different
-    content than expected."""
+    """This exception is thrown by a StrictFileWriter when the written
+    file has a different content than expected."""
     pass
-
-
 
 class StrictFileWriter:
     """This class will work as a file object when created, but with
