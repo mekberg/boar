@@ -137,3 +137,28 @@ class BitField:
     @staticmethod
     def deserialize(s):
         return BitField(int(zlib.decompress(s), 2))
+
+
+def self_test1():
+    bf1 = BitField()
+    bf1.set_multiple_bits([0, 50, 1000])
+    assert bf1.get_ones_indices() == [0, 50, 1000]
+    bf2 = BitField.deserialize(bf1.serialize())
+    assert bf2.get_ones_indices() == [0, 50, 1000]
+
+def self_test2():
+    bf1 = BitField()
+    bf2 = BitField.deserialize(bf1.serialize())
+    assert bf2.get_ones_indices() == []
+
+def self_test3():
+    bf1 = BitField()
+    bf1[17] = 1
+    bf1[170] = 1
+    bf1[170] = 0
+    bf2 = BitField.deserialize(bf1.serialize())
+    assert bf2.get_ones_indices() == [17]
+    
+self_test1()
+self_test2()
+self_test3()
