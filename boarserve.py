@@ -38,15 +38,15 @@ class StdioBoarServer:
         sys.stdin = None
         #sys.stderr = open("/tmp/server-output.txt", "w")
         sys.stdout = sys.stderr
-        
-        self.server = jsonrpc.Server(jsonrpc.BoarMessageServer(cmd_stdin, cmd_stdout))
-        self.server.register_function(ping, "ping")        
-        self.server.register_function(self.initialize, "initialize")
+        self.handler = jsonrpc.RpcHandler()
+        self.handler.register_function(ping, "ping")        
+        self.handler.register_function(self.initialize, "initialize")
+        self.server = jsonrpc.BoarMessageServer(cmd_stdin, cmd_stdout, handler)
 
     def initialize(self):
         repo = repository.Repo(self.repopath)
         fr = front.Front(repo)
-        self.server.register_instance(fr, "front")
+        self.handler.register_instance(fr, "front")
 
     def serve(self):
         self.server.serve()
