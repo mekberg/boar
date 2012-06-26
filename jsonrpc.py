@@ -143,12 +143,11 @@ class RPCInvalidParamValues(RPCFault):
 
 
 #=========================================
-# data structure / serializer
 
 if sys.version_info >= (2, 6):
-    import json as simplejson
+    import json
 else:
-    import simplejson
+    import simplejson as json
 
 #----------------------
 #
@@ -225,12 +224,8 @@ class FileDataSource(DataSource):
 
 class JsonRpc20:
     """BOAR-JSON-RPC V2.0"""
-    def __init__(self):
-        self.dumps = simplejson.dumps
-        self.loads = simplejson.loads
-
-
-    def dumps_request( self, method, params=(), id=0 ):
+    @staticmethod
+    def dumps_request( method, params=(), id=0 ):
         """ Serialize a JSON-RPC-Request. Accepts a method name and parameters.
         """
         if not isinstance(method, (str, unicode)):
@@ -241,27 +236,30 @@ class JsonRpc20:
                 "method": method,
                 "params": params,
                 "id": id }
-        return self.dumps(obj)
+        return json.dumps(obj)
 
-    def dumps_response( self, result, id=None ):
+    @staticmethod
+    def dumps_response( result, id=None ):
         """Serialize a JSON-RPC-Response. The 'result' argument may be
         any serializable object."""
         obj = { "jsonrpc": "2.0",
                 "result": result,
                 "id": id }
-        return self.dumps(obj)
+        return json.dumps(obj)
 
 
-    def dumps_error( self, error, id=None ):
+    @staticmethod
+    def dumps_error( error, id=None ):
         """serialize a JSON-RPC-Response-error, typically a RPCError instance."""
         obj = { "jsonrpc": "2.0",
                 "error": {"code": error.error_code,
                           "message": error.error_message,
                           "data": error.error_data},
                 "id": id }
-        return self.dumps(obj)
+        return json.dumps(obj)
 
-    def loads_request( self, string ):
+    @staticmethod
+    def loads_request( string ):
         """de-serialize a JSON-RPC Request/Notification
 
         :Returns:   | [method_name, params, id] or [method_name, params]
@@ -270,7 +268,7 @@ class JsonRpc20:
         :Raises:    RPCParseError, RPCInvalidRPC, RPCInvalidMethodParams
         """
         try:
-            data = self.loads(string)
+            data = json.loads(string)
         except ValueError, err:
             raise RPCParseError("No valid JSON. (%s)" % str(err))
         if not isinstance(data, dict):  raise RPCInvalidRPC("No valid RPC-package.")
@@ -296,14 +294,15 @@ class JsonRpc20:
         assert "id" in data, "JsonRPC notifications not supported"
         return data["method"], data["params"], data["id"]
 
-    def loads_response( self, string ):
+    @staticmethod
+    def loads_response( string ):
         """de-serialize a JSON-RPC Response/error
 
         :Returns: | [result, id] for Responses
         :Raises:  | RPCFault+derivates for error-packages/faults, RPCParseError, RPCInvalidRPC
         """
         try:
-            data = self.loads(string)
+            data = json.loads(string)
         except ValueError, err:
             raise RPCParseError("No valid JSON. (%s)" % str(err))
         if not isinstance(data, dict):  raise RPCInvalidRPC("No valid RPC-package.")
@@ -472,25 +471,34 @@ class JsonrpcClient:
         return self.__recv()
 
 
-class JsonrpcServer:
-
+class BoarMessageServer:
+    """This class is the server end of a connection capable of passing
+    opaque message strings and streamed data. It is the responsibility
+    of the given 'handler' object to make sense of the received
+    messages and compose suitable replies.
+    
+    The 'handler' object must have a method named "handle" accepting
+    two parameters. The first is the received message as a string, the
+    other is a DataSource instance. The DataSource instance is only
+    given if the message contains streamed data, otherwise it is
+    None. The "handle" method must return either a string or a
+    DataSource instance, which will be sent to the client.
+    """
     def __init__( self, s_in, s_out, logfunc=log_dummy ):
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
-
-    def connect( self ):
-        pass
+        #self.handler = handler
 
     def log(self, s):
-        print s
+        pass
 
     def close( self ):
         self.s_in.close()
         self.s_out.close()
 
     def __repr__(self):
-        return "<JsonrpcServer, %s, %s>" % (self.s_in, self.s_out)
+        return "<BoarMessageServer, %s, %s>" % (self.s_in, self.s_out)
     
     def init_server(self):
         pass
@@ -511,9 +519,9 @@ class JsonrpcServer:
             self.s_out.write( result )
         self.s_out.flush()
 
-    def serve(self, handler, n=None):
+    def serve(self, handler):
         try:
-            self.log( "TransportSocket.Serve(): connected")
+            self.log( "BoarMessageServer.Serve(): connected")
             while 1:
                 header = self.s_in.read(HEADER_SIZE)
                 if not header:
@@ -543,8 +551,6 @@ class ServerProxy:
 
     A logical connection to a RPC server.
 
-    It works with different data/serializers and different transports.
-
     Notifications and id-handling/multicall are not yet implemented.
 
     :Example:
@@ -552,20 +558,18 @@ class ServerProxy:
 
     :TODO: verbose/logging?
     """
-    def __init__( self, data_serializer, transport ):
+    def __init__( self, transport ):
         """
         :Parameters:
-            - data_serializer: a data_structure+serializer-instance
             - transport: a Transport instance
         """
         #TODO: check parameters
-        self.__data_serializer = data_serializer
         self.__transport = transport
 
     def __str__(self):
         return repr(self)
     def __repr__(self):
-        return "<ServerProxy for %s, with serializer %s>" % (self.__transport, self.__data_serializer)
+        return "<ServerProxy for %s>" % (self.__transport)
 
     def __req( self, methodname, args=None, kwargs=None, id=0 ):
         # JSON-RPC 2.0: only args OR kwargs allowed!
@@ -579,14 +583,14 @@ class ServerProxy:
         if len(args) > 0 and len(kwargs) > 0:
             raise ValueError("Only positional or named parameters are allowed!")
         if len(kwargs) == 0:
-            req_str  = self.__data_serializer.dumps_request( methodname, args, id )
+            req_str  = JsonRpc20.dumps_request( methodname, args, id )
         else:
-            req_str  = self.__data_serializer.dumps_request( methodname, kwargs, id )
+            req_str  = JsonRpc20.dumps_request( methodname, kwargs, id )
 
         resp_str, result_data_source = self.__transport.sendrecv( req_str, datasource)
         if result_data_source:
             return result_data_source
-        resp = self.__data_serializer.loads_response( resp_str )
+        resp = JsonRpc20.loads_response( resp_str )
         return resp[0]
 
     def __getattr__(self, name):
@@ -621,9 +625,6 @@ class _method:
 class Server:
     """RPC-server.
 
-    It works with different data/serializers and 
-    with different transports.
-
     :Example:
         see module-docstring
 
@@ -631,17 +632,14 @@ class Server:
         - mixed JSON-RPC 1.0/2.0 server?
         - logging/loglevels?
     """
-    def __init__( self, data_serializer, transport, logfile=None ):
+    def __init__( self, transport, logfile=None ):
         """
         :Parameters:
-            - data_serializer: a data_structure+serializer-instance
             - transport: a Transport instance
             - logfile: file to log ("unexpected") errors to
         """
         #TODO: check parameters
-        self.__data_serializer = data_serializer
         self.__transport = transport
-        self.__transport.init_server()
         self.dead = False
         self.logfile = logfile
         if self.logfile is not None:    #create logfile (or raise exception)
@@ -651,7 +649,7 @@ class Server:
         self.funcs = {}
 
     def __repr__(self):
-        return "<Server for %s, with serializer %s>" % (self.__transport, self.__data_serializer)
+        return "<Server for %s>" % (self.__transport)
 
     def log(self, message):
         """write a message to the logfile (in utf-8)"""
@@ -704,21 +702,21 @@ class Server:
         #TODO: id
         assert not self.dead, "An exception has already killed the server - go away"
         try:
-            req = self.__data_serializer.loads_request( rpcstr )
+            req = JsonRpc20.loads_request( rpcstr )
             if len(req) == 2:
                 raise RPCFault("JsonRPC notifications not supported")
             method, params, id = req
         except RPCFault, err:
             self.dead = True
-            return self.__data_serializer.dumps_error( err, id=None )
+            return JsonRpc20.dumps_error( err, id=None )
         except Exception, err:
             self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id=None )
+            return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id=None )
 
         if method not in self.funcs:
             self.dead = True
-            return self.__data_serializer.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND], method), id )
+            return JsonRpc20.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND], method), id )
 
         try:
             if isinstance(params, dict):
@@ -735,24 +733,20 @@ class Server:
 
         except RPCFault, err:
             self.dead = True
-            return self.__data_serializer.dumps_error( err, id=None )
+            return JsonRpc20.dumps_error( err, id=None )
         except Exception, err:
             self.dead = True
-            return self.__data_serializer.dumps_error( RPCFault(HANDLE_EXCEPTION, traceback.format_exc(), repr(err)), id )
+            return JsonRpc20.dumps_error( RPCFault(HANDLE_EXCEPTION, traceback.format_exc(), repr(err)), id )
 
         try:
-            return self.__data_serializer.dumps_response( result, id )
+            return JsonRpc20.dumps_response( result, id )
         except Exception, err:
             self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
+            return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
-    def serve(self, n=None):
-        """serve (forever or for n communicaions).
-        
-        :See: Transport
-        """
-        self.__transport.serve( self, n )
+    def serve(self):
+        self.__transport.serve( self )
 
 #=========================================
 
