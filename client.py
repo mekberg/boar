@@ -38,10 +38,19 @@ def localize(repourl):
         repourl="boar+local://" + os.path.abspath(repourl)
     return repourl
 
+def ssh_localize(repourl):
+    m = re.match(BOAR_URL_PATTERN, repourl)
+    if not m:
+        repourl="boar+ssh://localhost" + os.path.abspath(repourl)
+    return repourl
+
 def connect(repourl):
     if os.getenv("BOAR_TEST_REMOTE_REPO") == "1":
         # Force boar to use the remote communication mechanism even for local repos.
         repourl = localize(repourl)
+    elif os.getenv("BOAR_TEST_REMOTE_REPO") == "2":
+        # Force boar to use the remote communication mechanism over ssh 
+        repourl = ssh_localize(repourl)
 
     m = re.match(BOAR_URL_PATTERN, repourl)
     if not m:
@@ -78,8 +87,7 @@ def _connect_cmd(cmd):
                          stderr = None)    
     if p.poll():
         raise UserError("Transport command failed with error code %s" % (p.returncode))
-    server = jsonrpc.ServerProxy(jsonrpc.JsonRpc20(), 
-                                 jsonrpc.JsonrpcClient(p.stdout, p.stdin))
+    server = jsonrpc.ServerProxy(jsonrpc.JsonrpcClient(p.stdout, p.stdin))
     try:
         assert server.ping() == "pong"
     except ConnectionLost, e:
