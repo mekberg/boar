@@ -513,6 +513,24 @@ class TransportStream:
     def init_server(self):
         pass
 
+    
+    def send_result(self, result):
+        assert result != None
+        if isinstance(result, DataSource):
+            dummy_result = jsonrpc20.dumps_response(None)
+            header = pack_header(len(dummy_result), True, result.bytes_left())
+            self.s_out.write( header )
+            self.s_out.write( dummy_result )
+            while result.bytes_left() > 0:
+                piece = result.read(2**14)
+                self.s_out.write(piece)
+        else:
+            header = pack_header(len(result))
+            self.s_out.write( header )
+            self.s_out.write( result )
+        self.s_out.flush()
+
+
     def serve(self, handler, n=None):
         try:
             self.log( "TransportSocket.Serve(): connected")
@@ -528,20 +546,7 @@ class TransportStream:
                 else:
                     incoming_data_source = None
                 result = handler.handle(data, incoming_data_source)
-                assert result != None
-                if isinstance(result, DataSource):
-                    dummy_result = jsonrpc20.dumps_response(None)
-                    header = pack_header(len(dummy_result), True, result.bytes_left())
-                    self.s_out.write( header )
-                    self.s_out.write( dummy_result )
-                    while result.bytes_left() > 0:
-                        piece = result.read(2**14)
-                        self.s_out.write(piece)
-                else:
-                    header = pack_header(len(result))
-                    self.s_out.write( header )
-                    self.s_out.write( result )
-                self.s_out.flush()
+                self.send_result(result)
                 self.call_count += 1
                 if handler.dead:
                     break
