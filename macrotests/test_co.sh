@@ -19,7 +19,7 @@ echo "Rev 4" >TestSessionCo/r4.txt || exit 1
 (cd TestSessionCo && $BOAR ci -q) || exit 1
 
 # Test checkout for specific revision without explicit workdir name
-(mkdir tmp1 && cd tmp && $BOAR co -r 3 TestSessionCo && test -e TestSessionCo) || exit 1
+(mkdir tmp && cd tmp && $BOAR co -r 3 TestSessionCo && test -e TestSessionCo) || exit 1
 
 for rev in 2 3 4; do
     # Test -r flag
