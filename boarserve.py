@@ -36,11 +36,10 @@ class StdioBoarServer:
         cmd_stdin = sys.stdin
         cmd_stdout = sys.stdout 
         sys.stdin = None
-        sys.stderr = open("/tmp/server-output.txt", "w")
+        #sys.stderr = open("/tmp/server-output.txt", "w")
         sys.stdout = sys.stderr
         
-        self.server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
-                                     jsonrpc.JsonrpcServer(cmd_stdin, cmd_stdout))
+        self.server = jsonrpc.Server(jsonrpc.BoarMessageServer(cmd_stdin, cmd_stdout))
         self.server.register_function(ping, "ping")        
         self.server.register_function(self.initialize, "initialize")
 
@@ -61,8 +60,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-        print "Server finished nicely"
     except Exception, e:
-        #open("/tmp/server-crash.txt", "w").write(repr(e))
+        print "*** Server encountered an exception ***"
         raise
 
