@@ -40,7 +40,7 @@ class StdioBoarServer:
         sys.stdout = sys.stderr
         
         self.server = jsonrpc.Server(jsonrpc.JsonRpc20(), 
-                                     jsonrpc.TransportStream(cmd_stdin, cmd_stdout))
+                                     jsonrpc.JsonrpcServer(cmd_stdin, cmd_stdout))
         self.server.register_function(ping, "ping")        
         self.server.register_function(self.initialize, "initialize")
 
