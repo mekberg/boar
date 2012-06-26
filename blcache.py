@@ -48,12 +48,13 @@ def assert_valid_bloblist(front, revision, bloblist):
     assert actual_fingerprint == expected_fingerprint
 
 class BlobListCache:
-    def __init__(self, front):
+    def __init__(self, front, cachedir):
         identifier = front.get_repo_identifier()
         if not identifier:
             raise AnonymousRepository()
         self.front = front
-        self.conn = sqlite3.connect(os.path.join(tempfile.gettempdir(), "boarcache-v3-%s-%s.db" % (identifier, getpass.getuser())), check_same_thread = False)
+        assert os.path.exists(cachedir) and os.path.isdir(cachedir)
+        self.conn = sqlite3.connect(os.path.join(cachedir, "boarcache-v3-%s-%s.db" % (identifier, getpass.getuser())), check_same_thread = False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("CREATE TABLE IF NOT EXISTS blcache (filename, md5sum, mtime INTEGER, ctime INTEGER, size INTEGER)")
         self.conn.execute("CREATE TABLE IF NOT EXISTS revisions (revision INTEGER, blobinfos BLOB, CONSTRAINT nodupes UNIQUE (revision))")
@@ -101,7 +102,8 @@ def get_cache(front):
     global __caches
     if front not in __caches:
         try:
-            __caches[front] = BlobListCache(front)
+            cachedir = tempfile.gettempdir()
+            __caches[front] = BlobListCache(front, cachedir)
         except AnonymousRepository:
             __caches[front] = DummyCache(front)
     return __caches[front]
