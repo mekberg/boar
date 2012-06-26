@@ -425,8 +425,10 @@ def unpack_header(header_str):
         binary_payload_size = None
     return payload_size, binary_payload_size
 
-class JsonrpcClient:
-
+class BoarMessageClient:
+    """This class is the client end of a connection capable of passing
+    opaque message strings and streamed data. 
+    """
     def __init__( self, s_in, s_out, logfunc=log_dummy ):
         self.s_in = s_in
         self.s_out = s_out
@@ -484,11 +486,11 @@ class BoarMessageServer:
     None. The "handle" method must return either a string or a
     DataSource instance, which will be sent to the client.
     """
-    def __init__( self, s_in, s_out, logfunc=log_dummy ):
+    def __init__( self, s_in, s_out, handler, logfunc=log_dummy ):
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
-        #self.handler = handler
+        self.handler = handler
 
     def log(self, s):
         pass
@@ -519,7 +521,7 @@ class BoarMessageServer:
             self.s_out.write( result )
         self.s_out.flush()
 
-    def serve(self, handler):
+    def serve(self):
         try:
             self.log( "BoarMessageServer.Serve(): connected")
             while 1:
@@ -533,10 +535,10 @@ class BoarMessageServer:
                     incoming_data_source = StreamDataSource(self.s_in, binary_data_size)
                 else:
                     incoming_data_source = None
-                result = handler.handle(data, incoming_data_source)
+                result = self.handler.handle(data, incoming_data_source)
                 self.__send_result(result)
                 self.call_count += 1
-                if handler.dead:
+                if self.handler.dead:
                     break
         finally:
             #open("/tmp/call_count.txt", "w").write(str(self.call_count) + " calls\n")
@@ -622,24 +624,13 @@ class _method:
 #=========================================
 # server side: Server
 
-class Server:
-    """RPC-server.
-
-    :Example:
-        see module-docstring
-
-    :TODO:
-        - mixed JSON-RPC 1.0/2.0 server?
-        - logging/loglevels?
-    """
-    def __init__( self, transport, logfile=None ):
+class RpcHandler:
+    def __init__( self, logfile=None ):
         """
         :Parameters:
-            - transport: a Transport instance
             - logfile: file to log ("unexpected") errors to
         """
         #TODO: check parameters
-        self.__transport = transport
         self.dead = False
         self.logfile = logfile
         if self.logfile is not None:    #create logfile (or raise exception)
@@ -647,9 +638,6 @@ class Server:
             f.close()
 
         self.funcs = {}
-
-    def __repr__(self):
-        return "<Server for %s>" % (self.__transport)
 
     def log(self, message):
         """write a message to the logfile (in utf-8)"""
@@ -745,8 +733,5 @@ class Server:
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
-    def serve(self):
-        self.__transport.serve( self )
 
-#=========================================
 
