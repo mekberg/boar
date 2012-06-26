@@ -462,7 +462,53 @@ def unpack_header(header_str):
         binary_payload_size = None
     return payload_size, binary_payload_size
 
-class TransportStream:
+class JsonrpcClient:
+
+    def __init__( self, s_in, s_out, logfunc=log_dummy ):
+        self.s_in = s_in
+        self.s_out = s_out
+        self.call_count = 0
+
+    def log(self, s):
+        print s
+
+    def close( self ):
+        self.s_in.close()
+        self.s_out.close()
+
+    def __repr__(self):
+        return "<JsonrpcClient, %s, %s>" % (self.s_in, self.s_out)
+    
+    def __send( self, string, datasource = None ):
+        bin_length = 0
+        if datasource:
+            bin_length = datasource.bytes_left()
+        header = pack_header(len(string), datasource != None, bin_length)
+        self.s_out.write(header)
+        self.s_out.write(string)
+        if datasource:
+            while datasource.bytes_left() > 0:
+                self.s_out.write(datasource.read(2**14))
+        self.s_out.flush()
+        
+    def __recv( self ):
+        header = self.s_in.read(HEADER_SIZE)
+        if len(header) == 0:
+            raise ConnectionLost("Transport stream closed unexpectedly.")
+        datasize, binary_data_size = unpack_header(header)
+        data = self.s_in.read(datasize)
+        if binary_data_size != None:            
+            return data, StreamDataSource(self.s_in, binary_data_size)
+        else:
+            return data, None
+
+    def sendrecv( self, string, data_source = None ):
+        """send data + receive data + close"""
+        self.__send( string, data_source )
+        return self.__recv()
+
+
+class JsonrpcServer:
 
     def __init__( self, s_in, s_out, logfunc=log_dummy ):
         self.s_in = s_in
@@ -480,41 +526,12 @@ class TransportStream:
         self.s_out.close()
 
     def __repr__(self):
-        return "<TransportSocket, %s, %s>" % (self.s_in, self.s_out)
+        return "<JsonrpcServer, %s, %s>" % (self.s_in, self.s_out)
     
-    def send( self, string, datasource = None ):
-        bin_length = 0
-        if datasource:
-            bin_length = datasource.bytes_left()
-        header = pack_header(len(string), datasource != None, bin_length)
-        self.s_out.write(header)
-        self.s_out.write(string)
-        if datasource:
-            while datasource.bytes_left() > 0:
-                self.s_out.write(datasource.read(2**14))
-        self.s_out.flush()
-        
-    def recv( self ):
-        header = self.s_in.read(HEADER_SIZE)
-        if len(header) == 0:
-            raise ConnectionLost("Transport stream closed unexpectedly.")
-        datasize, binary_data_size = unpack_header(header)
-        data = self.s_in.read(datasize)
-        if binary_data_size != None:            
-            return data, StreamDataSource(self.s_in, binary_data_size)
-        else:
-            return data, None
-
-    def sendrecv( self, string, data_source = None ):
-        """send data + receive data + close"""
-        self.send( string, data_source )
-        return self.recv()
-
     def init_server(self):
         pass
-
     
-    def send_result(self, result):
+    def __send_result(self, result):
         assert result != None
         if isinstance(result, DataSource):
             dummy_result = jsonrpc20.dumps_response(None)
@@ -529,7 +546,6 @@ class TransportStream:
             self.s_out.write( header )
             self.s_out.write( result )
         self.s_out.flush()
-
 
     def serve(self, handler, n=None):
         try:
@@ -546,7 +562,7 @@ class TransportStream:
                 else:
                     incoming_data_source = None
                 result = handler.handle(data, incoming_data_source)
-                self.send_result(result)
+                self.__send_result(result)
                 self.call_count += 1
                 if handler.dead:
                     break
