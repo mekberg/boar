@@ -1,6 +1,6 @@
 # Test that the truncate command behaves as expected.
 
-if [ "$BOAR_TEST_REMOTE_REPO" == "1" ]; then
+if [[ "$BOAR_TEST_REMOTE_REPO" == "1" || "$BOAR_TEST_REMOTE_REPO" == "2" ]]; then
     # This test requires code injection on the server side. Hard to do.
     exit 0
 fi
