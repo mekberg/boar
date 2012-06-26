@@ -439,7 +439,7 @@ def log_filedate( filename ):
 #----------------------
 
 HEADER_SIZE=21
-HEADER_MAGIC=0x12345678
+HEADER_MAGIC=0x626f6172 # "boar"
 HEADER_VERSION=2
 """
 The header has 
