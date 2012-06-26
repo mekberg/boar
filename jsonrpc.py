@@ -224,78 +224,42 @@ class FileDataSource(DataSource):
 # JSON-RPC 2.0
 
 class JsonRpc20:
-    """JSON-RPC V2.0 data-structure / serializer
-
-    :SeeAlso:   JSON-RPC 2.0 specification
-    :TODO:      catch simpeljson.dumps not-serializable-exceptions
-    """
-    def __init__(self, dumps=simplejson.dumps, loads=simplejson.loads):
-        """init: set serializer to use
-
-        :Parameters:
-            - dumps: json-encoder-function
-            - loads: json-decoder-function
-        :Note: The dumps_* functions of this class already directly create
-               the invariant parts of the resulting json-object themselves,
-               without using the given json-encoder-function.
-        """
+    """BOAR-JSON-RPC V2.0"""
+    def __init__(self):
         self.dumps = simplejson.dumps
         self.loads = simplejson.loads
 
 
     def dumps_request( self, method, params=(), id=0 ):
-        """serialize JSON-RPC-Request
-
-        :Parameters:
-            - method: the method-name (str/unicode)
-            - params: the parameters (list/tuple/dict)
-            - id:     the id (should not be None)
-        :Returns:   | {"jsonrpc": "2.0", "method": "...", "params": ..., "id": ...}
-                    | "jsonrpc", "method", "params" and "id" are always in this order.
-                    | "params" is omitted if empty
-        :Raises:    TypeError if method/params is of wrong type or 
-                    not JSON-serializable
+        """ Serialize a JSON-RPC-Request. Accepts a method name and parameters.
         """
         if not isinstance(method, (str, unicode)):
             raise TypeError('"method" must be a string (or unicode string).')
         if not isinstance(params, (tuple, list, dict)):
             raise TypeError("params must be a tuple/list/dict or None.")
-
-        if params:
-            return '{"jsonrpc": "2.0", "method": %s, "params": %s, "id": %s}' % \
-                    (self.dumps(method), self.dumps(params), self.dumps(id))
-        else:
-            return '{"jsonrpc": "2.0", "method": %s, "id": %s}' % \
-                    (self.dumps(method), self.dumps(id))
+        obj = { "jsonrpc": "2.0",
+                "method": method,
+                "params": params,
+                "id": id }
+        return self.dumps(obj)
 
     def dumps_response( self, result, id=None ):
-        """serialize a JSON-RPC-Response (without error)
+        """Serialize a JSON-RPC-Response. The 'result' argument may be
+        any serializable object."""
+        obj = { "jsonrpc": "2.0",
+                "result": result,
+                "id": id }
+        return self.dumps(obj)
 
-        :Returns:   | {"jsonrpc": "2.0", "result": ..., "id": ...}
-                    | "jsonrpc", "result", and "id" are always in this order.
-        :Raises:    TypeError if not JSON-serializable
-        """
-        return '{"jsonrpc": "2.0", "result": %s, "id": %s}' % \
-                (self.dumps(result), self.dumps(id))
 
     def dumps_error( self, error, id=None ):
-        """serialize a JSON-RPC-Response-error
-      
-        :Parameters:
-            - error: a RPCFault instance
-        :Returns:   | {"jsonrpc": "2.0", "error": {"code": error_code, "message": error_message, "data": error_data}, "id": ...}
-                    | "jsonrpc", "result", "error" and "id" are always in this order, data is omitted if None.
-        :Raises:    ValueError if error is not a RPCFault instance,
-                    TypeError if not JSON-serializable
-        """
-        if not isinstance(error, RPCFault):
-            raise ValueError("""error must be a RPCFault-instance.""")
-        if error.error_data is None:
-            return '{"jsonrpc": "2.0", "error": {"code":%s, "message": %s}, "id": %s}' % \
-                    (self.dumps(error.error_code), self.dumps(error.error_message), self.dumps(id))
-        else:
-            return '{"jsonrpc": "2.0", "error": {"code":%s, "message": %s, "data": %s}, "id": %s}' % \
-                    (self.dumps(error.error_code), self.dumps(error.error_message), self.dumps(error.error_data), self.dumps(id))
+        """serialize a JSON-RPC-Response-error, typically a RPCError instance."""
+        obj = { "jsonrpc": "2.0",
+                "error": {"code": error.error_code,
+                          "message": error.error_message,
+                          "data": error.error_data},
+                "id": id }
+        return self.dumps(obj)
 
     def loads_request( self, string ):
         """de-serialize a JSON-RPC Request/Notification
