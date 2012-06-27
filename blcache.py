@@ -52,14 +52,14 @@ class FailSafeCache:
         try:
             return self.realcache.get_bloblist(revision, skip_verification)
         except Exception, e:
-            warn("Bloblist cache failed. Things may be slow. (error message: %s). " % e)
+            warn("Bloblist cache failed (error message: %s), some operations may be slow" % e)
             return self.front.get_session_bloblist(revision)    
 
 def assert_valid_bloblist(front, revision, bloblist):
     actual_fingerprint = bloblist_fingerprint(bloblist)
     expected_fingerprint = front.get_session_fingerprint(revision)
     assert is_md5sum(expected_fingerprint)
-    assert actual_fingerprint == expected_fingerprint
+    assert actual_fingerprint == expected_fingerprint, "Local cache corrupt"
 
 class BlobListCache:
     def __init__(self, front, cachedir):
