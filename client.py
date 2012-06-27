@@ -87,7 +87,7 @@ def _connect_cmd(cmd):
                          stderr = None)    
     if p.poll():
         raise UserError("Transport command failed with error code %s" % (p.returncode))
-    server = jsonrpc.ServerProxy(jsonrpc.JsonrpcClient(p.stdout, p.stdin))
+    server = jsonrpc.ServerProxy(jsonrpc.BoarMessageClient(p.stdout, p.stdin))
     try:
         assert server.ping() == "pong"
     except ConnectionLost, e:
