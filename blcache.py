@@ -52,7 +52,7 @@ class FailSafeCache:
         try:
             return self.realcache.get_bloblist(revision, skip_verification)
         except Exception, e:
-            warning("Bloblist cache failed. Things may be slow. (error message: %s). " % e)
+            warn("Bloblist cache failed. Things may be slow. (error message: %s). " % e)
             return self.front.get_session_bloblist(revision)    
 
 def assert_valid_bloblist(front, revision, bloblist):
@@ -100,7 +100,7 @@ class BlobListCache:
         if row:
             bf = BitField.deserialize(row[0])
             rows = ",".join(map(str,bf.get_ones_indices()))
-            bloblist = list(conn.execute('SELECT blcache.* from blcache WHERE rowid IN (%s) ORDER BY filename' % rows))
+            bloblist = map(dict, (conn.execute('SELECT blcache.* from blcache WHERE rowid IN (%s) ORDER BY filename' % rows)))
         else:
             bloblist = self.front.get_session_bloblist(revision)
             self.__store_bloblist(revision, bloblist)
@@ -108,8 +108,6 @@ class BlobListCache:
         if not skip_verification:
             assert_valid_bloblist(self.front, revision, bloblist)
         return bloblist
-
-__caches = {}
 
 def __get_or_create_cache_dir():
     cachedir = os.path.join(os.path.expanduser("~"), ".boarcache")
@@ -122,21 +120,21 @@ def __get_or_create_cache_dir():
     return cachedir
 
 def get_cache(front):
-    global __caches
-    if front in __caches:
-        return __caches[front]    
-
     cachedir = __get_or_create_cache_dir()
     if not cachedir:
         return DummyCache(front)
-
     try:
-        __caches[front] = FailSafeCache(front, BlobListCache(front, cachedir))
+        return FailSafeCache(front, BlobListCache(front, cachedir))
     except AnonymousRepository:
-        notice("Couldn't use bloblist cache, some operations may be slow.")
+        notice("Bloblist cache disabled (anonymous repository), some operations may be slow.")
+        return DummyCache(front)
+    except Exception, e:
+        warn("Couldn't init bloblist cache (error: %s), some operations may be slow." % e)
         return DummyCache(front)
 
-    return __caches[front]
+def get_bloblist(front, revision):
+    """Convenience method to make this common operation a bit more legible"""
+    return get_cache(front).get_bloblist(revision)
 
 class BitField:
     def __init__(self, value=0):
