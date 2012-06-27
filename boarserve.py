@@ -41,7 +41,7 @@ class StdioBoarServer:
         self.handler = jsonrpc.RpcHandler()
         self.handler.register_function(ping, "ping")        
         self.handler.register_function(self.initialize, "initialize")
-        self.server = jsonrpc.BoarMessageServer(cmd_stdin, cmd_stdout, handler)
+        self.server = jsonrpc.BoarMessageServer(cmd_stdin, cmd_stdout, self.handler)
 
     def initialize(self):
         repo = repository.Repo(self.repopath)
