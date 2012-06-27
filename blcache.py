@@ -110,12 +110,14 @@ class BlobListCache:
         return bloblist
 
 def __get_or_create_cache_dir():
-    cachedir = os.path.join(os.path.expanduser("~"), ".boarcache")
+    cachedir = os.getenv("BOAR_CACHEDIR")
+    if not cachedir:
+        cachedir = os.path.join(os.path.expanduser("~"), ".boarcache")
     if not os.path.exists(cachedir):
         try:
             os.mkdir(cachedir)
         except OSError:
-            notice("Couldn't create bloblist cache dir (%s), some operations may be slow." % cachedir)
+            notice("Couldn't create cache directory (%s), some operations may be slow." % cachedir)
             return None
     return cachedir
 
