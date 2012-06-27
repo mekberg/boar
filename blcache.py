@@ -41,6 +41,20 @@ class DummyCache:
     def get_bloblist(self, revision, skip_verification = False):
         return self.front.get_session_bloblist(revision)
 
+class FailSafeCache:
+    def __init__(self, front, realcache):
+        assert front
+        assert realcache and realcache.get_bloblist
+        self.realcache = realcache
+        self.front = front
+        
+    def get_bloblist(self, revision, skip_verification = False):
+        try:
+            return self.realcache.get_bloblist(revision, skip_verification)
+        except Exception, e:
+            warning("Bloblist cache failed. Things may be slow. (error message: %s). " % e)
+            return self.front.get_session_bloblist(revision)    
+
 def assert_valid_bloblist(front, revision, bloblist):
     actual_fingerprint = bloblist_fingerprint(bloblist)
     expected_fingerprint = front.get_session_fingerprint(revision)
@@ -78,7 +92,6 @@ class BlobListCache:
         conn.execute("INSERT INTO revisions (revision, blobinfos) VALUES (?, ?)", 
                      [revision, sqlite3.Binary(bf.serialize())])
 
-
     def get_bloblist(self, revision, skip_verification = False):
         conn = self.conn
         conn.execute("BEGIN")
@@ -98,16 +111,32 @@ class BlobListCache:
 
 __caches = {}
 
+def __get_or_create_cache_dir():
+    cachedir = os.path.join(os.path.expanduser("~"), ".boarcache")
+    if not os.path.exists(cachedir):
+        try:
+            os.mkdir(cachedir)
+        except OSError:
+            notice("Couldn't create bloblist cache dir (%s), some operations may be slow." % cachedir)
+            return None
+    return cachedir
+
 def get_cache(front):
     global __caches
-    if front not in __caches:
-        try:
-            cachedir = tempfile.gettempdir()
-            __caches[front] = BlobListCache(front, cachedir)
-        except AnonymousRepository:
-            __caches[front] = DummyCache(front)
-    return __caches[front]
+    if front in __caches:
+        return __caches[front]    
 
+    cachedir = __get_or_create_cache_dir()
+    if not cachedir:
+        return DummyCache(front)
+
+    try:
+        __caches[front] = FailSafeCache(front, BlobListCache(front, cachedir))
+    except AnonymousRepository:
+        notice("Couldn't use bloblist cache, some operations may be slow.")
+        return DummyCache(front)
+
+    return __caches[front]
 
 class BitField:
     def __init__(self, value=0):
