@@ -18,9 +18,7 @@ from __future__ import with_statement
 import sys, os
 import sqlite3
 import zlib
-import tempfile
 import getpass
-import math
 
 from boar_exceptions import *
 import front
