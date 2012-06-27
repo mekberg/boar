@@ -544,7 +544,6 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         full_tree_filenames = set(read_tree(wd.root).keys())
         expected_filenames = set([u'file.txt', 
                                   u'.boar/info', 
-                                  u'.boar/bloblistcache2.bin',
                                   u'.boar/wd_version.txt'])
 
         self.assertEquals(expected_filenames, full_tree_filenames)
