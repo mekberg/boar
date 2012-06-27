@@ -520,66 +520,6 @@ class Front:
         return self.repo.get_repo_identifier()
 
 
-class RevisionFront:
-    """RevisionFront is a wrapper for the Front class that provides
-    convenience methods to access some of the contents of a specific
-    revision. 
-
-    The bloblist_cache_fn is an optional callback that must accept an
-    revision and return the bloblist for that revision (thus providing
-    a clean way for client code to cache the bloblist). The resulting
-    bloblist will be verified against session fingerprint. The
-    function may return None, which is the same as not giving any
-    cache function. That is, the full bloblist will be fetched from
-    the repo. When a bloblist is loaded from the repo,
-    save_bloblist_cache_fn() will be called with the revision and the
-    bloblist as arguments."""
-
-    def __init__(self, front, revision,
-                 load_bloblist_cache_fn = None,
-                 save_bloblist_cache_fn = None):
-        assert type(revision) == int
-        self.front = front
-        self.revision = revision
-        self.blobinfos = None
-        self.load_bloblist_cache_fn = load_bloblist_cache_fn
-        self.save_bloblist_cache_fn = save_bloblist_cache_fn
-
-    def get_bloblist(self):
-        if self.blobinfos == None:
-            expected_fingerprint = self.front.get_session_fingerprint(self.revision)
-            if self.load_bloblist_cache_fn:
-                self.blobinfos = self.load_bloblist_cache_fn(self.revision)
-                if self.blobinfos:
-                    calc_fingerprint = bloblist_fingerprint(self.blobinfos)
-                    assert calc_fingerprint == expected_fingerprint, \
-                        "Cached bloblist did not match repo fingerprint"
-            if self.blobinfos == None:
-                self.blobinfos = self.front.get_session_bloblist(self.revision)
-                self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
-                calc_fingerprint = bloblist_fingerprint(self.blobinfos)
-                assert calc_fingerprint == expected_fingerprint, \
-                    "Bloblist from repo did not match repo fingerprint? Repo corruption?"
-                if self.save_bloblist_cache_fn:
-                    self.save_bloblist_cache_fn(self.revision, self.blobinfos)
-            self.bloblist_csums = set([b['md5sum'] for b in self.blobinfos])
-        return self.blobinfos
-
-    def exists_in_session(self, csum):
-        """ Returns true if a file with the given checksum exists in this revision. """
-        assert is_md5sum(csum)
-        self.get_bloblist() # make sure self.bloblist_csums is loaded
-        return csum in self.bloblist_csums
-
-    def get_filesnames(self, csum):
-        assert is_md5sum(csum)
-        bloblist = self.get_bloblist()
-        for b in bloblist:
-            if b['md5sum'] == csum:
-                yield b['filename']
-
-
-
 class DryRunFront:
 
     def __init__(self, front):

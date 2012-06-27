@@ -17,8 +17,9 @@
 from __future__ import with_statement
 
 import os
-from front import Front, DryRunFront, RevisionFront
+from front import Front, DryRunFront
 import blobrepo.repository as repository
+import blcache
 from treecomp import TreeComparer
 from common import *
 from boar_exceptions import *
@@ -146,7 +147,7 @@ class Workdir:
         assert not os.path.exists("md5sum.txt")
         front = self.get_front()
         with StreamEncoder(open("md5sum.txt", "w"), errors = "strict") as f:
-            for info in front.get_session_bloblist(self.revision):
+            for info in self.get_bloblist(self.revision):
                 f.write(info['md5sum'] +" *" + info['filename'] + "\n")
 
     def checkout(self, write_meta = True):
@@ -157,7 +158,7 @@ class Workdir:
         if write_meta:
             self.write_metadata()
             self.__set_workdir_version(CURRENT_VERSION)
-        for info in front.get_session_bloblist(self.revision):
+        for info in self.get_bloblist(self.revision):
             if not is_child_path(self.offset, info['filename']):
                 continue
             self.fetch_file(info['filename'], info['md5sum'], overwrite = False)
@@ -202,7 +203,7 @@ class Workdir:
         if not front.has_snapshot(self.sessionName, new_revision):
             raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
         old_bloblist = self.get_bloblist(old_revision)
-        new_bloblist = front.get_session_bloblist(new_revision)
+        new_bloblist = self.get_bloblist(new_revision)
         new_bloblist_dict = bloblist_to_dict(new_bloblist)
         for b in new_bloblist:
             if not is_child_path(self.offset, b['filename']):
@@ -325,36 +326,9 @@ class Workdir:
         self.front = create_front(self.repoUrl)
         return self.front
 
-    def get_revision_front(self, revision):
-        front = self.get_front()
-        if revision not in self.revision_fronts:
-             # Only save the latest used revision. A trivial MRU cache.
-            self.revision_fronts.clear()
-            self.revision_fronts[revision] = RevisionFront(front, revision, 
-                                                           self.__load_cached_bloblist, 
-                                                           self.__save_cached_bloblist)
-        return self.revision_fronts[revision]
-
-    def __load_cached_bloblist(self, revision):
-        assert type(revision) == int and revision > 0
-        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
-        if os.path.exists(bloblist_file):
-            try:
-                return cPickle.load(safe_open(bloblist_file, "rb"))
-            except: 
-                warn("Exception while accessing bloblist cache - ignoring")
-                return None
-        return None
-
-    def __save_cached_bloblist(self, revision, bloblist):
-        assert type(revision) == int and revision > 0
-        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
-        if os.path.exists(self.metadir):
-            cPickle.dump(bloblist, open(bloblist_file, "wb"))        
-
     def get_bloblist(self, revision):
         assert type(revision) == int, "Revision was '%s'" % revision
-        return self.get_revision_front(revision).get_bloblist()
+        return blcache.get_bloblist(self.front, revision)
 
     def exists_in_workdir(self, csum):
         """ Returns true if at least one file with the given checksum exists
