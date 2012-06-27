@@ -47,3 +47,13 @@ def treecompare_bloblists(from_bloblist, to_bloblist):
     from_dict = bloblist_to_dict(from_bloblist)
     to_dict = bloblist_to_dict(to_bloblist)
     return TreeComparer(from_dict, to_dict)
+
+def invert_bloblist(bloblist):
+    """ Returns a dictionary on the form md5sum -> [blobinfo,
+    blobinfo, ...] """    
+    result = {}
+    for bi in bloblist:
+        if bi['md5sum'] not in result:
+            result[bi['md5sum']] = []
+        result[bi['md5sum']].append(bi)
+    return result
