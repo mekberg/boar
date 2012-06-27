@@ -19,6 +19,8 @@ cd $TESTDIR
 
 unset REPO_PATH # Don't harm any innocent repos
 
+#export COVERAGE_FILE="$TESTDIR/boar.coverage"
+#export BOAR="coverage run -a $TESTDIR/../boar"
 export BOAR="$TESTDIR/../boar"
 export BOARMOUNT="$TESTDIR/../boarmount"
 export BOARTESTHOME=`pwd`

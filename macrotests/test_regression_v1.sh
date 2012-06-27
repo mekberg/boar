@@ -64,4 +64,4 @@ echo "--- Test repo cloning"
 tar xzf $BOARTESTHOME/regression-v1.tar.gz || exit 1
 $BOAR clone $REPO clone || { echo "Couldn't clone"; exit 1; }
 
-$BOARTESTHOME/excercise_repo.sh $BOAR $REPO || { echo "Excercise of v1 repo failed"; exit 1; }
+$BOARTESTHOME/excercise_repo.sh "$BOAR" $REPO || { echo "Excercise of v1 repo failed"; exit 1; }
