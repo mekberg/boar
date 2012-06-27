@@ -115,4 +115,4 @@ echo "--- Test legal missing snapshot"
 # snapshot. This should be legal.
 tar xzf $BOARTESTHOME/regression-boar-daily.11-Jul-2011.tar.gz || exit 1
 rm -r $REPO/sessions/4 || exit 1
-$BOARTESTHOME/excercise_repo.sh $BOAR $REPO || { echo "Excercise of repo with legal missing snapshots failed"; exit 1; }
+$BOARTESTHOME/excercise_repo.sh "$BOAR" $REPO || { echo "Excercise of repo with legal missing snapshots failed"; exit 1; }
