@@ -191,7 +191,7 @@ def create_file(destination, content, tmp_suffix = ".tmp"):
     a temporary file in the destination directory, with the given
     suffix, and then moved to its destination. The suffix file may
     exist and will in that case be overwritten and lost."""
-    assert not os.path.exists(destination)
+    assert not os.path.exists(destination), "File already exists: %s" % destination
     tmpfile = destination + tmp_suffix
     with StrictFileWriter(tmpfile, md5sum(content), len(content)) as f:
         f.write(content)
