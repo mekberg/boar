@@ -27,6 +27,7 @@ import shutil
 import sessions
 import sys
 import tempfile
+import random, time
 
 from common import *
 from boar_common import *
@@ -34,7 +35,8 @@ from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
 from boar_exceptions import *
 
-LATEST_REPO_FORMAT = 3
+LATEST_REPO_FORMAT = 4
+REPOID_FILE = "repoid.txt"
 VERSION_FILE = "version.txt"
 RECOVERYTEXT_FILE = "recovery.txt"
 QUEUE_DIR = "queue"
@@ -52,6 +54,8 @@ REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
 REPO_DIRS_V2 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
 REPO_DIRS_V3 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR)
+REPO_DIRS_V4 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
 
 recoverytext = """Repository format v%s
@@ -134,6 +138,7 @@ def create_repository(repopath):
     for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR:
         os.mkdir(os.path.join(repopath, d))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
+    create_file(os.path.join(repopath, REPOID_FILE), generate_random_repoid())
 
 def is_recipe_filename(filename):
     filename_parts = filename.split(".")
@@ -144,7 +149,7 @@ def is_recipe_filename(filename):
 def looks_like_repo(repo_path):
     """Superficial check to see if the given path contains anything
     resembling a repo of any version."""
-    assert LATEST_REPO_FORMAT == 3 # Look through this function when updating format
+    assert LATEST_REPO_FORMAT == 4 # Look through this function when updating format
     for dirname in (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR):
         dirpath = os.path.join(repo_path, dirname)
         if not (os.path.exists(dirpath) and os.path.isdir(dirpath)):
@@ -176,7 +181,7 @@ class Repo:
         if not isWritable(os.path.join(repopath, TMP_DIR)):
             if self.get_queued_session_id() != None:
                 raise UserError("Repo is write protected with pending changes. Cannot continue.")
-            if self.__get_repo_version() not in (0, 1, 2, 3):
+            if self.__get_repo_version() not in (0, 1, 2, 3, 4):
                 # Intentional explicit counting so that we'll remember to check compatability with future versions
                 raise UserError("Repo is write protected and from an unsupported older version of boar. Cannot continue.")
             notice("Repo is write protected - only read operations can be performed")
@@ -209,12 +214,14 @@ class Repo:
         exception if an error is found."""
         repo_version = self.__get_repo_version()
         assert repo_version, "Repo format obsolete. Upgrade failed?"
-        integrity_assert(repo_version == LATEST_REPO_FORMAT,
-                         ("Repo version %s can not be handled by this version of boar" % repo_version))
+        if repo_version != LATEST_REPO_FORMAT:
+            raise UserError("Repo version %s can not be handled by this version of boar" % repo_version)
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        assert LATEST_REPO_FORMAT == 3 # Check below must be updated when repo format changes
-        for directory in REPO_DIRS_V3:
+        assert LATEST_REPO_FORMAT == 4 # Check below must be updated when repo format changes
+        for directory in REPO_DIRS_V4:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
+        integrity_assert(os.path.exists(os.path.join(self.repopath, REPOID_FILE)), 
+                         "Repository at %s does not have an identity file." % self.repopath)
 
     def allows_permanent_erase(self):
         return os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
@@ -237,6 +244,9 @@ class Repo:
         if self.__get_repo_version() == 2:
             self.__upgrade_repo_v2()
             assert self.__get_repo_version() == 3
+        if self.__get_repo_version() == 3:
+            self.__upgrade_repo_v3()
+            assert self.__get_repo_version() == 4
 
         try:
             self.__quick_check()
@@ -339,11 +349,46 @@ class Repo:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
 
+
+    def __upgrade_repo_v3(self):
+        """ This upgrade will perform the following actions:
+        * Update "version.txt" to 4
+        * Write a random identity string to "repoid.txt"
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
+        version = self.__get_repo_version()
+        assert version == 3
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        for directory in REPO_DIRS_V3:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                 "Repository says it is v3 format but is missing %s" % directory)
+        try:
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            repoid = generate_random_repoid()
+            if not os.path.exists(os.path.join(self.repopath, REPOID_FILE)):
+                create_file(os.path.join(self.repopath, REPOID_FILE), repoid)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "4")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+
     def get_path(self, subdir, *parts):
         return os.path.join(self.repopath, subdir, *parts)
 
     def get_repo_identifier(self):
-        return md5sum(self.repopath)
+        """Returns the identifier for the repo, or None if the
+        repository has no identifier. The latter scenarion will
+        happen when accessing write-protected old (v3 or earlier)
+        repositories."""
+        idfile = os.path.join(self.repopath, REPOID_FILE)
+        if not os.path.exists(idfile):
+            return None
+        lines = read_file(idfile).splitlines()
+        assert len(lines) == 1, "%s must contain exactly one line" % REPOID_FILE
+        identifier = lines[0].strip()
+        assert re.match("^[a-zA-Z0-9_-]+$", identifier), "illegal characters in repo identifier '%s'" % identifier
+        return identifier
         
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
@@ -773,3 +818,7 @@ def _snapshot_delete_test_hook(rev):
     """ This method is intended to be replaced during testing to
     simulate an interrupted operation."""
     pass
+
+def generate_random_repoid():
+    # Nothing fancy here, just a reasonably unique string.
+    return "repo_" + md5sum(str(random.random()) + "!" + str(time.time()))
