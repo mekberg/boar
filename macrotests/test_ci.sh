@@ -15,7 +15,7 @@ Checked in session id 2
 !Finished in (.*) seconds
 EOF
 
-(cd Test; $BOAR ci -q) >output.txt 2>&1 || exit 1
+(cd Test; $BOAR ci -q) >output.txt 2>&1 || { cat output.txt; exit 1; }
 
 txtmatch.py expected.txt output.txt || {
     echo "Ci gave unexpected message"; exit 1; }
