@@ -105,7 +105,7 @@ class Workdir:
             files = os.listdir(self.metadir)
             for fn in files:
                 if re.match("^bloblistcache\d+\.bin$", fn):
-                    safe_delete(fn)
+                    safe_delete_file(os.path.join(self.metadir, fn))
             self.__set_workdir_version(3)
 
     def __reload_tree(self):
