@@ -91,7 +91,7 @@ class Workdir:
         if not os.path.exists(self.metadir):
             return
         version = self.__get_workdir_version()
-        if version > 2:
+        if version > 3:
             raise UserError("This workdir is created by a future version of boar.")
         if version == 0 or version == 1:
             notice("Upgrading file checksum cache - rescan necessary, next operation will take longer than usual.")
@@ -100,6 +100,13 @@ class Workdir:
             if os.path.exists(self.metadir + "/" + CCACHE_FILE):
                 safe_delete_file(self.metadir + "/" + CCACHE_FILE)
             self.__set_workdir_version(2)
+        del version
+        if self.__get_workdir_version() == 2:
+            files = os.listdir(self.metadir)
+            for fn in files:
+                if re.match("^bloblistcache\d+\.bin$", fn):
+                    safe_delete(fn)
+            self.__set_workdir_version(3)
 
     def __reload_tree(self):
         progress = self.ScanProgressPrinter()
