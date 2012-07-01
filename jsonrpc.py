@@ -430,6 +430,7 @@ class BoarMessageClient:
     opaque message strings and streamed data. 
     """
     def __init__( self, s_in, s_out, logfunc=log_dummy ):
+        assert s_in and s_out
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
@@ -487,6 +488,7 @@ class BoarMessageServer:
     DataSource instance, which will be sent to the client.
     """
     def __init__( self, s_in, s_out, handler, logfunc=log_dummy ):
+        assert s_in and s_out
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
