@@ -20,6 +20,7 @@ import base64
 import re
 import sys
 import tempfile
+import socket
 
 import subprocess
 from front import Front
@@ -63,6 +64,8 @@ def connect(repourl):
         front = connect_nc(repourl)
     elif transporter == "local":
         front = connect_local(repourl)
+    elif transporter == "tcp":
+        front = connect_tcp(repourl)
     else:
         raise UserError("No such transporter: '%s'" % transporter)
     assert front
@@ -79,6 +82,25 @@ def user_friendly_open_local_repository(path):
         repo = repository.Repo(path)
     return repo
 
+def create_boar_proxy(from_server, to_server):
+    server = jsonrpc.ServerProxy(jsonrpc.BoarMessageClient(from_server, to_server))
+    try:
+        assert server.ping() == "pong"
+    except ConnectionLost, e:
+        raise UserError("Could not connect to remote repository: %s" % e)
+    except:
+        raise
+    server.initialize()
+    return server
+
+def _connect_tcp(host, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    to_server = s.makefile(mode="wb")
+    from_server = s.makefile(mode="rb")
+    server = create_boar_proxy(to_server, from_server)
+    return server.front
+
 def _connect_cmd(cmd):
     p = subprocess.Popen(cmd, 
                          shell = True, 
@@ -87,14 +109,7 @@ def _connect_cmd(cmd):
                          stderr = None)    
     if p.poll():
         raise UserError("Transport command failed with error code %s" % (p.returncode))
-    server = jsonrpc.ServerProxy(jsonrpc.BoarMessageClient(p.stdout, p.stdin))
-    try:
-        assert server.ping() == "pong"
-    except ConnectionLost, e:
-        raise UserError("Could not connect to remote repository: %s" % e)
-    except:
-        raise
-    server.initialize()
+    server = create_boar_proxy(p.stdout, p.stdin)
     return server.front
 
 def connect_ssh(url):
@@ -119,6 +134,13 @@ def connect_nc(url):
     host, port = url_match.groups()
     cmd = "nc %s %s" % (host, port)
     return _connect_cmd(cmd)
+
+def connect_tcp(url):
+    url_match = re.match("boar\+tcp://(.*):(\d+)/?", url)
+    assert url_match, "Not a valid netcat Boar URL:" + url
+    host, port = url_match.groups()
+    port = int(port)
+    return _connect_tcp(host, port)
 
 def connect_local(url):
     url_match = re.match("boar\+local://(.*)/?", url)
