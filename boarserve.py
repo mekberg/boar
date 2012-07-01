@@ -25,23 +25,13 @@ from common import FakeFile
 def ping():
     return "pong"
 
-class StdioBoarServer:
-    """This is a boar server that uses stdin/stdout to communicate
-    with the client. When initialized, this server hides the real
-    sys.stdin and sys.stdout so that print commands can not
-    accidentially corrupt the communication."""
-
-    def __init__(self, repopath):
+class PipedBoarServer:
+    def __init__(self, repopath, from_client, to_client):
         self.repopath = repopath
-        cmd_stdin = sys.stdin
-        cmd_stdout = sys.stdout 
-        sys.stdin = None
-        #sys.stderr = open("/tmp/server-output.txt", "w")
-        sys.stdout = sys.stderr
         self.handler = jsonrpc.RpcHandler()
         self.handler.register_function(ping, "ping")        
         self.handler.register_function(self.initialize, "initialize")
-        self.server = jsonrpc.BoarMessageServer(cmd_stdin, cmd_stdout, self.handler)
+        self.server = jsonrpc.BoarMessageServer(from_client, to_client, self.handler)
 
     def initialize(self):
         repo = repository.Repo(self.repopath)
@@ -51,10 +41,20 @@ class StdioBoarServer:
     def serve(self):
         self.server.serve()
 
+def init_stdio_server(repopath):
+    """This creates a boar server that uses sys.stdin/sys.stdout to
+    communicate with the client. The function also hides the real
+    sys.stdin and sys.stdout to prevent any print commands from
+    accidentially corrupting the communication. (sys.stdout is
+    directed to sys.stderr, sys.stdin is set to None)"""
+    server = PipedBoarServer(repopath, sys.stdin, sys.stdout)
+    sys.stdin = None
+    sys.stdout = sys.stderr
+    return server
 
 def main():
     repopath = unicode(sys.argv[1])
-    server = StdioBoarServer(repopath)
+    server = init_stdio_server(repopath)
     server.serve()
 
 if __name__ == "__main__":
