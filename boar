@@ -61,6 +61,7 @@ ls        Show the contents of a specific sub directory of a snapshot
 mkrepo    Create a new repository
 mksession Create a new session
 setprop   Set session properties, such as file ignore lists
+serve     Make a repository accessible over the network
 status    List any changes in the current work directory
 update    Update the current work directory from the repository
 verify    Verify the integrity of the repository
@@ -660,26 +661,40 @@ def cmd_mkstandalone(args):
     print "New standalone snapshot %s created for session %s" % (sid, session_name)
 
 def cmd_serve(args):
-    parser = OptionParser(usage="usage: boar serve [options] <repository path>")
-    parser.add_option("-S", "--stdio-server", dest = "use_stdio", action="store_true",
-                      help="Start a server that uses stdin/stdout as communication channels.")
-    parser.add_option("-T", "--tcp-server", dest = "use_tcp", action="store_true",
-                      help="Start a network server.")
-    parser.add_option("-p", "--port", action="store", dest = "port", type="int", default=10001, metavar = "PORT",
+    parser = OptionParser(usage=
+    """usage: boar serve [options] <repository path>
+
+    WARNING: This Boar server has no authentication or encryption. 
+             Your repository will be open for reading and writing to
+             anyone who is able to connect to the address and port you 
+             specify.""")
+    parser.add_option("-p", "--port", action="store", dest = "port", type="int", default=None, metavar = "PORT",
                       help="The port that the network server will listen to (default: 10001)")
-    parser.add_option("-a", "--address", dest = "address", metavar = "ADDR", default="",
+    parser.add_option("-a", "--address", dest = "address", metavar = "ADDR", default=None,
                       help="The address that the network server will listen on (default: all interfaces)")
+    parser.add_option("-S", "--stdio-server", dest = "use_stdio", action="store_true",
+                      help=SUPPRESS_HELP)
     if len(args) == 0:
         args = ["--help"]
+
     (options, args) = parser.parse_args(args)
-    if len(args) != 1:
-        raise UserError("Wrong number of arguments")
-    repopath = unicode(args[0])
-    if options.use_tcp:
+
+    if len(args) == 0:
+        raise UserError("You must specify a repository to serve.")
+    elif len(args) > 1:
+        raise UserError("Too many arguments.")
+
+    repopath = unicode(args.pop())
+    if options.use_stdio and (options.port != None or options.address != None):
+        raise UserError("Stdio server (-S) does not accept --port or --address options.")
+
+    if options.port == None:    options.port = 10001
+    if options.address == None: options.address = ""
+    
+    if options.use_stdio:
+        boarserve.init_stdio_server(repopath).serve()
+    else:
         boarserve.run_socketserver(repopath, options.address, options.port)
-    elif options.use_stdio:
-        server = boarserve.init_stdio_server(repopath)
-        server.serve()
 
 def cmd_truncate(args):
     if len(args) == 0:
