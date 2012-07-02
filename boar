@@ -684,7 +684,7 @@ def cmd_serve(args):
     elif len(args) > 1:
         raise UserError("Too many arguments.")
 
-    repopath = unicode(args.pop())
+    repopath = unicode(os.path.abspath(args.pop()))
     if options.use_stdio and (options.port != None or options.address != None):
         raise UserError("Stdio server (-S) does not accept --port or --address options.")
 
