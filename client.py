@@ -131,7 +131,10 @@ def connect_tcp(url):
     assert url_match, "Not a valid tcp Boar URL:" + url
     host, port = url_match.groups()
     port = int(port)
-    return _connect_tcp(host, port)
+    try:
+        return _connect_tcp(host, port)
+    except socket.error, e:
+        raise UserError("Network error: %s" % e)
 
 def connect_local(url):
     url_match = re.match("boar\+local://(.*)/?", url)
