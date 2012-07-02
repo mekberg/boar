@@ -22,7 +22,10 @@ import front
 import sys
 import socket
 
+from boar_exceptions import *
+
 from common import FakeFile
+from optparse import OptionParser
 
 def ping():
     return "pong"
@@ -42,14 +45,6 @@ class PipedBoarServer:
 
     def serve(self):
         self.server.serve()
-
-class TcpBoarServer:
-    def __init__(self, repopath, port):
-        self.repopath = repopath
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind((socket.gethostname(), port))
-        
-    
         
 def init_stdio_server(repopath):
     """This creates a boar server that uses sys.stdin/sys.stdout to
@@ -62,31 +57,54 @@ def init_stdio_server(repopath):
     sys.stdout = sys.stderr
     return server
 
-def run_tcp_server(repopath, port):
+def run_tcp_server(repopath, address, port):
     listensocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    hostname = ""
-    print "Hostname:", hostname
-    listensocket.bind((hostname, port))
+    listensocket.bind((address, port))
+    repository.Repo(repopath) # Just check if the repo path is valid
+    ip = listensocket.getsockname()[0]
+    if ip == "0.0.0.0":
+        ip = socket.gethostname()
+    print "Serving repository %s as boar+tcp://%s:%s/" % (repopath, ip, port)
     listensocket.listen(1)
     while True:
         connection, client_address = listensocket.accept()
         if not os.fork():
             # Child - serve the request
+            print "Serving request from", client_address
             to_client = connection.makefile(mode="wb")
             from_client = connection.makefile(mode="rb")
             server = PipedBoarServer(repopath, from_client, to_client)
             server.serve()
+            print "Finished serving request from", client_address
             return
         else:
             # Parent - clean up
             connection.close()
 
 def main():
-    repopath = unicode(sys.argv[1])
-    server = init_stdio_server(repopath)
-    server.serve()
-    #run_tcp_server(repopath, 10005)
-
+    args = sys.argv[1:]
+    parser = OptionParser(usage="usage: boarserver.py [options] <repository path>")
+    parser.add_option("-S", "--stdio-server", dest = "use_stdio", action="store_true",
+                      help="Start a server that uses stdin/stdout as communication channels.")
+    parser.add_option("-T", "--tcp-server", dest = "use_tcp", action="store_true",
+                      help="Start a network server.")
+    parser.add_option("-p", "--port", action="store", dest = "port", type="int", default=10001, metavar = "PORT",
+                      help="The port that the network server will listen to (default: 10001)")
+    parser.add_option("-a", "--address", dest = "address", metavar = "ADDR", default="",
+                      help="The address that the network server will listen on (default: all interfaces)")
+    if len(args) == 0:
+        args = ["--help"]
+    (options, args) = parser.parse_args(args)
+    if len(args) != 1:
+        raise UserError("Wrong number of arguments")
+    repopath = unicode(args[0])
+    if options.use_tcp:
+        run_tcp_server(repopath, options.address, options.port)
+    elif options.use_stdio:
+        server = init_stdio_server(repopath)
+        server.serve()
+    
+        
 if __name__ == "__main__":
     try:
         main()
