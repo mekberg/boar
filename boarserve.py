@@ -57,6 +57,15 @@ def init_stdio_server(repopath):
     sys.stdout = sys.stderr
     return server
 
+def run_socketserver(repopath, address, port):
+    import SocketServer
+    repository.Repo(repopath) # Just check if the repo path is valid
+    class BoarTCPHandler(SocketServer.StreamRequestHandler, SocketServer.ForkingMixIn):
+        def handle(self):
+            PipedBoarServer(repopath, self.rfile, self.wfile).serve()
+    server = SocketServer.TCPServer((address, port), BoarTCPHandler)
+    server.serve_forever()
+        
 def run_tcp_server(repopath, address, port):
     listensocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listensocket.bind((address, port))
@@ -100,6 +109,7 @@ def main():
     repopath = unicode(args[0])
     if options.use_tcp:
         run_tcp_server(repopath, options.address, options.port)
+        #run_socketserver(repopath, options.address, options.port)
     elif options.use_stdio:
         server = init_stdio_server(repopath)
         server.serve()
