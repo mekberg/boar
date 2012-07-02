@@ -20,6 +20,8 @@ import jsonrpc
 import os, time, threading
 import front
 import sys
+import socket
+
 from common import FakeFile
 
 def ping():
@@ -41,6 +43,14 @@ class PipedBoarServer:
     def serve(self):
         self.server.serve()
 
+class TcpBoarServer:
+    def __init__(self, repopath, port):
+        self.repopath = repopath
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.bind((socket.gethostname(), port))
+        
+    
+        
 def init_stdio_server(repopath):
     """This creates a boar server that uses sys.stdin/sys.stdout to
     communicate with the client. The function also hides the real
@@ -52,10 +62,30 @@ def init_stdio_server(repopath):
     sys.stdout = sys.stderr
     return server
 
+def run_tcp_server(repopath, port):
+    listensocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    hostname = ""
+    print "Hostname:", hostname
+    listensocket.bind((hostname, port))
+    listensocket.listen(1)
+    while True:
+        connection, client_address = listensocket.accept()
+        if not os.fork():
+            # Child - serve the request
+            to_client = connection.makefile(mode="wb")
+            from_client = connection.makefile(mode="rb")
+            server = PipedBoarServer(repopath, from_client, to_client)
+            server.serve()
+            return
+        else:
+            # Parent - clean up
+            connection.close()
+
 def main():
     repopath = unicode(sys.argv[1])
     server = init_stdio_server(repopath)
     server.serve()
+    #run_tcp_server(repopath, 10005)
 
 if __name__ == "__main__":
     try:
