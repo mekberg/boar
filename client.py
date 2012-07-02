@@ -121,14 +121,14 @@ def connect_ssh(url):
     else:
         raise UserError("Not a valid boar ssh URL: "+str(url))
     ssh_cmd = __get_ssh_command()
-    cmd = '%s "%s" boarserve.py -S "%s"' % (ssh_cmd, host, path)
+    cmd = '%s "%s" boar serve -S "%s"' % (ssh_cmd, host, path)
     if user:
-        cmd = '%s -l "%s" "%s" boarserve.py -S "%s"' % (ssh_cmd, user, host, path)
+        cmd = '%s -l "%s" "%s" boar serve -S "%s"' % (ssh_cmd, user, host, path)
     return _connect_cmd(cmd)
 
 def connect_tcp(url):
     url_match = re.match("boar\+tcp://(.*):(\d+)/?", url)
-    assert url_match, "Not a valid netcat Boar URL:" + url
+    assert url_match, "Not a valid tcp Boar URL:" + url
     host, port = url_match.groups()
     port = int(port)
     return _connect_tcp(host, port)
@@ -138,7 +138,7 @@ def connect_local(url):
     assert url_match, "Not a valid local Boar URL:" + url
     repopath, = url_match.groups()
     boarhome = os.path.dirname(os.path.abspath(__file__))
-    cmd = "'%s/boarserve.py' -S '%s'" % (boarhome, repopath)
+    cmd = "'%s/boar' serve -S '%s'" % (boarhome, repopath)
     return _connect_cmd(cmd)
 
 

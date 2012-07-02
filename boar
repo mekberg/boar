@@ -38,6 +38,7 @@ import workdir
 from common import *
 from boar_common import *
 import blcache
+import boarserve
 
 BOAR_VERSION = "<UNDEFINED>"
 
@@ -658,6 +659,28 @@ def cmd_mkstandalone(args):
     sid = front.create_base_snapshot(session_name)
     print "New standalone snapshot %s created for session %s" % (sid, session_name)
 
+def cmd_serve(args):
+    parser = OptionParser(usage="usage: boar serve [options] <repository path>")
+    parser.add_option("-S", "--stdio-server", dest = "use_stdio", action="store_true",
+                      help="Start a server that uses stdin/stdout as communication channels.")
+    parser.add_option("-T", "--tcp-server", dest = "use_tcp", action="store_true",
+                      help="Start a network server.")
+    parser.add_option("-p", "--port", action="store", dest = "port", type="int", default=10001, metavar = "PORT",
+                      help="The port that the network server will listen to (default: 10001)")
+    parser.add_option("-a", "--address", dest = "address", metavar = "ADDR", default="",
+                      help="The address that the network server will listen on (default: all interfaces)")
+    if len(args) == 0:
+        args = ["--help"]
+    (options, args) = parser.parse_args(args)
+    if len(args) != 1:
+        raise UserError("Wrong number of arguments")
+    repopath = unicode(args[0])
+    if options.use_tcp:
+        boarserve.run_socketserver(repopath, options.address, options.port)
+    elif options.use_stdio:
+        server = boarserve.init_stdio_server(repopath)
+        server.serve()
+
 def cmd_truncate(args):
     if len(args) == 0:
         args = ["--help"]
@@ -996,6 +1019,12 @@ def main():
         return cmd_mksession(args[1:])
     elif args[0] == "mkstandalone":
         return cmd_mkstandalone(args[1:])
+    elif args[0] == "serve":
+        # "suppress_finishmessage" is a hack to avoid duplicate
+        # "finished" messages when connecting to a boar server.  
+        # TODO: make less hackish
+        globals()["suppress_finishmessage"] = True
+        return cmd_serve(args[1:])
     elif args[0] == "truncate":
         return cmd_truncate(args[1:])
     elif args[0] == "exportmd5":
@@ -1053,7 +1082,8 @@ if __name__ == "__main__":
         return_code = 7
  
     t2 = time.time()
-    print "Finished in", round(t2-t1, 2), "seconds"
+    if not globals().get("suppress_finishmessage", False):
+        print "Finished in", round(t2-t1, 2), "seconds"
     #import common
     #print "Processed", common._file_reader_sum, "bytes"
     sys.exit(return_code)
