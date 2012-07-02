@@ -60,35 +60,17 @@ def init_stdio_server(repopath):
 def run_socketserver(repopath, address, port):
     import SocketServer
     repository.Repo(repopath) # Just check if the repo path is valid
-    class BoarTCPHandler(SocketServer.StreamRequestHandler, SocketServer.ForkingMixIn):
+    class BoarTCPHandler(SocketServer.BaseRequestHandler, SocketServer.ForkingMixIn):
         def handle(self):
-            PipedBoarServer(repopath, self.rfile, self.wfile).serve()
+            to_client = self.request.makefile(mode="wb")
+            from_client = self.request.makefile(mode="rb")
+            PipedBoarServer(repopath, from_client, to_client).serve()
     server = SocketServer.TCPServer((address, port), BoarTCPHandler)
-    server.serve_forever()
-        
-def run_tcp_server(repopath, address, port):
-    listensocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listensocket.bind((address, port))
-    repository.Repo(repopath) # Just check if the repo path is valid
-    ip = listensocket.getsockname()[0]
+    ip = server.socket.getsockname()[0]
     if ip == "0.0.0.0":
         ip = socket.gethostname()
     print "Serving repository %s as boar+tcp://%s:%s/" % (repopath, ip, port)
-    listensocket.listen(1)
-    while True:
-        connection, client_address = listensocket.accept()
-        if not os.fork():
-            # Child - serve the request
-            print "Serving request from", client_address
-            to_client = connection.makefile(mode="wb")
-            from_client = connection.makefile(mode="rb")
-            server = PipedBoarServer(repopath, from_client, to_client)
-            server.serve()
-            print "Finished serving request from", client_address
-            return
-        else:
-            # Parent - clean up
-            connection.close()
+    server.serve_forever()        
 
 def main():
     args = sys.argv[1:]
@@ -108,8 +90,7 @@ def main():
         raise UserError("Wrong number of arguments")
     repopath = unicode(args[0])
     if options.use_tcp:
-        run_tcp_server(repopath, options.address, options.port)
-        #run_socketserver(repopath, options.address, options.port)
+        run_socketserver(repopath, options.address, options.port)
     elif options.use_stdio:
         server = init_stdio_server(repopath)
         server.serve()
