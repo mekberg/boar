@@ -60,8 +60,6 @@ def connect(repourl):
     transporter = m.group(1)
     if transporter == "ssh":
         front = connect_ssh(repourl)
-    elif transporter == "nc":
-        front = connect_nc(repourl)
     elif transporter == "local":
         front = connect_local(repourl)
     elif transporter == "tcp":
@@ -123,16 +121,9 @@ def connect_ssh(url):
     else:
         raise UserError("Not a valid boar ssh URL: "+str(url))
     ssh_cmd = __get_ssh_command()
-    cmd = '%s "%s" boarserve.py "%s"' % (ssh_cmd, host, path)
+    cmd = '%s "%s" boarserve.py -S "%s"' % (ssh_cmd, host, path)
     if user:
-        cmd = '%s -l "%s" "%s" boarserve.py "%s"' % (ssh_cmd, user, host, path)
-    return _connect_cmd(cmd)
-
-def connect_nc(url):
-    url_match = re.match("boar\+nc://(.*):(\d+)/?", url)
-    assert url_match, "Not a valid netcat Boar URL:" + url
-    host, port = url_match.groups()
-    cmd = "nc %s %s" % (host, port)
+        cmd = '%s -l "%s" "%s" boarserve.py -S "%s"' % (ssh_cmd, user, host, path)
     return _connect_cmd(cmd)
 
 def connect_tcp(url):
@@ -147,7 +138,7 @@ def connect_local(url):
     assert url_match, "Not a valid local Boar URL:" + url
     repopath, = url_match.groups()
     boarhome = os.path.dirname(os.path.abspath(__file__))
-    cmd = "'%s/boarserve.py' '%s'" % (boarhome, repopath)
+    cmd = "'%s/boarserve.py' -S '%s'" % (boarhome, repopath)
     return _connect_cmd(cmd)
 
 
