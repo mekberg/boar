@@ -25,14 +25,11 @@ from blobrepo import repository
 from boar_exceptions import *
 import sys
 from time import ctime, time
-from common import md5sum, is_md5sum, warn
+from common import md5sum, is_md5sum, warn, get_json_module
 from blobrepo.sessions import bloblist_fingerprint
 import copy
 
-if sys.version_info >= (2, 6):
-    import json
-else:
-    import simplejson as json
+json = get_json_module()
 import base64
 
 def get_file_contents(front, session_name, file_name):
