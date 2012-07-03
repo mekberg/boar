@@ -144,10 +144,7 @@ class RPCInvalidParamValues(RPCFault):
 
 #=========================================
 
-if sys.version_info >= (2, 6):
-    import json
-else:
-    import simplejson as json
+json = get_json_module()
 
 #----------------------
 #
