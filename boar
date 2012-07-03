@@ -28,17 +28,14 @@ from boar_exceptions import *
 import client
 import front
 
-if sys.version_info >= (2, 6):
-    import json
-else:
-    import simplejson as json
-
 from front import Front, set_file_contents
 import workdir
 from common import *
 from boar_common import *
 import blcache
 import boarserve
+
+json = get_json_module()
 
 BOAR_VERSION = "<UNDEFINED>"
 

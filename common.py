@@ -34,6 +34,9 @@ if sys.version_info >= (2, 6):
 else:
     import simplejson as json
 
+def get_json_module():
+    return json
+
 # Something like sys.maxsize, but works pre-2.6
 VERY_LARGE_NUMBER = 9223372036854775807L
 
