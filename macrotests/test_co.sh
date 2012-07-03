@@ -3,8 +3,21 @@
 export REPO_PATH=`pwd`/TESTREPO
 $BOAR mkrepo $REPO_PATH || exit 1
 $BOAR mksession --repo=$REPO_PATH TestSessionCo || exit 1
-$BOAR co TestSessionCo || exit 1
+
+cat >expected.txt <<EOF
+!Checking out to workdir .*/TestSessionCo
+!Finished in .* seconds
+EOF
+$BOAR co TestSessionCo >output.txt 2>&1 || { cat output.txt; echo "Simple co failed"; exit 1; }
+txtmatch.py expected.txt output.txt || { echo "Unexpected output for simple checkout"; exit 1; }
+
 test -e TestSessionCo || { echo "Default workdir name should be the session name"; exit 1; }
+
+cat >expected.txt <<EOF
+!Finished in .* seconds
+EOF
+(cd TestSessionCo && $BOAR status -q) >output.txt 2>&1 || { cat output.txt; echo "Simple co status failed"; exit 1; }
+txtmatch.py expected.txt output.txt || { echo "Unexpected output for simple co status"; exit 1; }
 
 mkdir TestSessionCo/cosubdir || exit 1
 echo "Rev 2" >TestSessionCo/r2.txt || exit 1
