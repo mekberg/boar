@@ -39,13 +39,10 @@ import fnmatch
 import sqlite3
 import atexit
 
-if sys.version_info >= (2, 6):
-    import json
-else:
-    import simplejson as json
+json = get_json_module()
 
 VERSION_FILE = "wd_version.txt"
-CURRENT_VERSION = 2
+CURRENT_VERSION = 3
 METADIR = ".boar"
 CCACHE_FILE = "ccache.db"
 
