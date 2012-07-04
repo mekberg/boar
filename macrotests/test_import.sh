@@ -33,6 +33,15 @@ $BOAR import -wq Import TestSession >output.txt 2>&1 || exit 1
 txtmatch.py expected.txt output.txt || {
     echo "Import gave unexpected message"; exit 1; }
 
+cat >expected.txt <<EOF
+!Finished in .* seconds
+EOF
+
+(cd Import && $BOAR status -q) >output.txt 2>&1 || { 
+    cat output.txt; echo "Workdir status after import -w failed"; exit 1; }
+txtmatch.py expected.txt output.txt || { 
+    echo "Unexpected output for workdir status after import -w"; exit 1; }
+
 echo --- Test unchanged import
 cat >expected.txt <<EOF
 NOTICE: Nothing was imported.
