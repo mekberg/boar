@@ -112,7 +112,38 @@ class Workdir:
         self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False, \
                                  progress_printer = progress)
         self.tree_csums == None
-
+        self.__reload_manifests()
+        
+    def __reload_manifests(self):
+        self.manifest = {}
+        for fn in self.tree:
+            if not fn.endswith((".txt", ".TXT")):
+                # About 5% faster than doing the regexp every time
+                continue
+            m = re.match("(^|.*/)manifest-([a-z0-9]+)(-([a-z0-9]+))?\.txt", fn, flags=re.IGNORECASE)
+            if not m:
+                continue
+            hashname = m.group(2).lower()
+            manifest_hash = m.group(4).lower() if m.group(4) else None
+            if hashname not in ("md5"):
+                warn("Found manifest file %s, but hash type '%s' is not supported yet. Ignoring." % (fn, hashname))
+                continue
+            dirname = os.path.dirname(fn)
+            try:
+                manifest_md5sums = read_md5sum(self.wd_abspath(fn), manifest_hash)
+            except ContentViolation:
+                raise UserError("Contents of manifest file '%s' does not match the expected checksum" % fn)
+            notice("Using manifest file %s" % fn)
+            for md5, filename in manifest_md5sums:
+                filename = tounicode(filename)
+                session_filename = self.wd_sessionpath(filename)
+                if session_filename in self.manifest:
+                    if self.manifest[session_filename] != md5:
+                        raise UserError("Conflicting manifests for file "+os.path.join(dirname, filename))
+                else:
+                    self.manifest[self.wd_sessionpath(filename)] = md5
+                    
+                
     def __get_workdir_version(self):
         version_file = os.path.join(self.metadir, VERSION_FILE)
         if os.path.exists(version_file):
@@ -278,6 +309,8 @@ class Workdir:
             deleted_files = ()
             modified_files = ()
 
+        self.verify_manifest(unchanged_files + new_files + modified_files)
+
         self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message, ignore_errors)
 
         if write_meta:
@@ -285,6 +318,21 @@ class Workdir:
             self.__set_workdir_version(CURRENT_VERSION)
 
         return self.revision
+
+    def verify_manifest(self, included_files):
+        """Verify that the given set of files does not conflict with
+        any present manifest files. If a problem is found, a suitable
+        UserError is raised."""
+        if not self.manifest:
+            return
+        all_files = set(included_files)
+        for fn in self.manifest.keys():
+            if fn not in all_files:
+                raise UserError("File is described in a manifest but is not present in the workdir: %s" % fn)
+            wd_path = strip_path_offset(self.offset, fn)
+            if self.manifest[fn] != self.cached_md5sum(wd_path):
+                raise UserError("File %s contents conflicts with manifest" % wd_path)                    
+
 
     def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors):
         """ Creates a new snapshot of the files in this
@@ -302,11 +350,13 @@ class Workdir:
             front.create_session(session_name = self.sessionName, base_session = base_snapshot)
         except FileMutex.MutexLocked, e:
             raise UserError("The session '%s' is in use (lockfile %s)" % (self.sessionName, e.mutex_file))
-        
+
         for sessionpath in sorted(files):
             wd_path = strip_path_offset(self.offset, sessionpath)
             abspath = self.abspath(sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
+            if sessionpath in self.manifest and self.manifest[sessionpath] != expected_md5sum:
+                raise UserError("File %s contents conflicts with manifest" % wd_path)
             try:
                 check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
             except ContentViolation:
