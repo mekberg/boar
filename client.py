@@ -28,7 +28,7 @@ from blobrepo import repository
 from common import *
 from boar_exceptions import *
 
-BOAR_URL_PATTERN = "boar(\+(local|ssh))?://.+"
+BOAR_URL_PATTERN = "boar(\+(local|ssh|tcp))?://.+"
 
 def is_boar_url(string):
     return re.match(BOAR_URL_PATTERN, string) != None
@@ -56,7 +56,7 @@ def connect(repourl):
         return Front(user_friendly_open_local_repository(repourl))
 
     transporter = m.group(2)
-    if transporter == None:
+    if transporter == None or transporter == "tcp":
         front = connect_tcp(repourl)
     elif transporter == "ssh":
         front = connect_ssh(repourl)
@@ -125,9 +125,9 @@ def connect_ssh(url):
     return _connect_cmd(cmd)
 
 def connect_tcp(url):
-    url_match = re.match("boar://(.*):(\d+)/?", url)
+    url_match = re.match("boar(\+tcp)?://(.*):(\d+)/?", url)
     assert url_match, "Not a valid Boar URL:" + url
-    host, port = url_match.groups()
+    _, host, port = url_match.groups()
     port = int(port)
     try:
         return _connect_tcp(host, port)
