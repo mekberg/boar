@@ -100,19 +100,25 @@ def warn(s, stream = None):
 def notice(s, stream = None):
     prefixprint("NOTICE: ", s, stream)
 
-def read_file(path):
-    """Reads and returns the contents of the given filename."""
+def read_file(path, expected_md5 = None):
+    """Reads and returns the contents of the given filename. If
+    expected_md5 is given, the contents of the file will be verified
+    before they are returned. If there is a mismatch, a
+    ContentViolation error will be raised."""
     with safe_open(path) as f:
-        return f.read()
+        data = f.read()
+    if expected_md5 and md5sum(data) != expected_md5:
+        raise ContentViolation("File '%s' did not have expected checksum '%s'" % (path, expected_md5))
+    return data
 
-def read_md5sum(path):
+def read_md5sum(path, expected_md5 = None):
     """Reads a classic md5sum.exe output file and returns the data on
     the form [(md5, filename), ...]"""
     result = []
-    with safe_open(path) as f:
-        for line in f:
-            line = line.rstrip("\r\n")
-            result.append((line[0:32], line[34:]))
+    data = read_file(path, expected_md5)
+    for line in data.splitlines():
+        line = line.rstrip("\r\n")
+        result.append((line[0:32], line[34:]))
     return result
 
 _file_reader_sum = 0
@@ -137,8 +143,8 @@ def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
 
 def safe_open(path, flags = "rb"):
     """Returns a read-only file handle for the given path."""
-    if flags not in ("rb", "r"):
-        raise ValueError("only modes 'r' or 'rb' allowed")
+    if flags != "rb":
+        raise ValueError("only mode 'rb' allowed")
     return open(path, "rb")
 
 def md5sum(data):
