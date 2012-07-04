@@ -90,8 +90,10 @@ class Workdir:
         version = self.__get_workdir_version()
         if version > 3:
             raise UserError("This workdir is created by a future version of boar.")
-        if version == 0 or version == 1:
+
+        if version in (0, 1, 2):
             notice("Upgrading file checksum cache - rescan necessary, next operation will take longer than usual.")
+        if version == 0 or version == 1:
             if os.path.exists(self.metadir + "/" + 'md5sumcache'):
                 safe_delete_file(self.metadir + "/" + 'md5sumcache')
             if os.path.exists(self.metadir + "/" + CCACHE_FILE):
