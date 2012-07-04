@@ -28,20 +28,18 @@ from blobrepo import repository
 from common import *
 from boar_exceptions import *
 
-BOAR_URL_PATTERN = "boar\+([a-z]+)://.*"
+BOAR_URL_PATTERN = "boar(\+(local|ssh))?://.+"
 
 def is_boar_url(string):
     return re.match(BOAR_URL_PATTERN, string) != None
 
 def localize(repourl):
-    m = re.match(BOAR_URL_PATTERN, repourl)
-    if not m:
+    if not is_boar_url(repourl):
         repourl="boar+local://" + os.path.abspath(repourl)
     return repourl
 
 def ssh_localize(repourl):
-    m = re.match(BOAR_URL_PATTERN, repourl)
-    if not m:
+    if not is_boar_url(repourl):
         repourl="boar+ssh://localhost" + os.path.abspath(repourl)
     return repourl
 
@@ -57,13 +55,13 @@ def connect(repourl):
     if not m:
         return Front(user_friendly_open_local_repository(repourl))
 
-    transporter = m.group(1)
-    if transporter == "ssh":
+    transporter = m.group(2)
+    if transporter == None:
+        front = connect_tcp(repourl)
+    elif transporter == "ssh":
         front = connect_ssh(repourl)
     elif transporter == "local":
         front = connect_local(repourl)
-    elif transporter == "tcp":
-        front = connect_tcp(repourl)
     else:
         raise UserError("No such transporter: '%s'" % transporter)
     assert front
@@ -127,8 +125,8 @@ def connect_ssh(url):
     return _connect_cmd(cmd)
 
 def connect_tcp(url):
-    url_match = re.match("boar\+tcp://(.*):(\d+)/?", url)
-    assert url_match, "Not a valid tcp Boar URL:" + url
+    url_match = re.match("boar://(.*):(\d+)/?", url)
+    assert url_match, "Not a valid Boar URL:" + url
     host, port = url_match.groups()
     port = int(port)
     try:
