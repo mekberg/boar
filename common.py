@@ -113,12 +113,16 @@ def read_file(path, expected_md5 = None):
 
 def read_md5sum(path, expected_md5 = None):
     """Reads a classic md5sum.exe output file and returns the data on
-    the form [(md5, filename), ...]"""
+    the form [(md5, filename), ...]. Note that the data must be utf-8 encoded,
+    or an UnicodeDecodeError will be raised. One notable source of such
+    non-utf-8 files is md5sum.exe on Windows."""
     result = []
     data = read_file(path, expected_md5)
     for line in data.splitlines():
         line = line.rstrip("\r\n")
-        result.append((line[0:32], line[34:]))
+        filename = line[34:]
+        filename = filename.decode("utf-8")
+        result.append((line[0:32], convert_win_path_to_unix(filename)))
     return result
 
 _file_reader_sum = 0
