@@ -117,14 +117,19 @@ class Workdir:
     def __reload_manifests(self):
         self.manifest = {}
         for fn in self.tree:
-            if not fn.endswith((".txt", ".TXT")):
+            if not fn.endswith((".txt", ".TXT", ".md5", ".MD5")):
                 # About 5% faster than doing the regexp every time
                 continue
-            m = re.match("(^|.*/)manifest-([a-z0-9]+)(-([a-z0-9]+))?\.txt", fn, flags=re.IGNORECASE)
+            m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5)", fn, flags=re.IGNORECASE)
             if not m:
                 continue
-            hashname = m.group(2).lower()
-            manifest_hash = m.group(4).lower() if m.group(4) else None
+            if m.group(3):
+                hashname = m.group(3).lower()
+                manifest_hash = None
+            else:
+                hashname = "md5"
+                manifest_hash = m.group(4).lower()
+
             if hashname not in ("md5"):
                 warn("Found manifest file %s, but hash type '%s' is not supported yet. Ignoring." % (fn, hashname))
                 continue
