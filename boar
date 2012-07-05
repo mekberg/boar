@@ -415,7 +415,11 @@ def cmd_ls(args):
     (options, args) = parser.parse_args(args)
     front = connect_to_repo(get_repo_url())
 
-    if len(args) == 0:
+    if len(args) == 0 and options.revision:
+        session_info = front.get_session_info(options.revision)
+        session_name = session_info.get('name', None)
+        path = u""
+    elif len(args) == 0 and not options.revision:
         list_sessions(front, show_meta = False, verbose = options.verbose)
         return
     elif len(args) > 1:

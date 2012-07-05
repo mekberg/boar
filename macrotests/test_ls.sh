@@ -63,6 +63,16 @@ $BOAR --repo=TESTREPO ls -r3 TestSession >output.txt 2>&1 || {
     cat output.txt; echo "ls -r3 TestSession failed"; exit 1; }
 txtmatch.py expected.txt output.txt || { 
     echo "ls -r3 TestSession gave unexpected output"; exit 1; }
+##################
+# 'ls -r3' without specifying a session
+cat >expected.txt <<EOF
+r3.txt
+!Finished in .* seconds
+EOF
+$BOAR --repo=TESTREPO ls -r3 >output.txt 2>&1 || { 
+    cat output.txt; echo "'ls -r3' without explicit session failed"; exit 1; }
+txtmatch.py expected.txt output.txt || { 
+    echo "'ls -r3' gave unexpected output"; exit 1; }
 
 ##################
 
