@@ -21,7 +21,7 @@ Checked in session id 2
 !Finished in (.*) seconds
 EOF
 
-$BOAR import -wq Import TestSession >output.txt 2>&1 || exit 1
+$BOAR import -wq Import TestSession >output.txt 2>&1 || { cat output.txt; echo "Happy path failed"; exit 1; }
 
 txtmatch.py expected.txt output.txt || {
     echo "Import with simple manifest gave unexpected message"; exit 1; }
@@ -107,6 +107,11 @@ EOF
     cat output.txt; echo "Unsupported manifests should succeed with warning"; exit 1; }
 txtmatch.py expected.txt output.txt || {
     echo "Unsupported manifests gave unexpected message"; exit 1; }
+
+echo -- Testing subdir manifest
+(mkdir subdir && mv Import/* subdir && mv subdir Import) || exit 1
+(cd Import && $BOAR status) || exit 1
+(cd Import && $BOAR ci) || ( echo "Commit for manifest in subdir failed"; exit 1; )
 
 echo "All is well"
 true

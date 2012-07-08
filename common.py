@@ -344,6 +344,16 @@ assert split_path_from_start(u"") == ("", "")
 assert split_path_from_start(u"/var/tmp/junk") == ("var", "tmp/junk")
 assert split_path_from_start(u"var\\tmp\\junk") == ("var", "tmp/junk")
 
+def posix_path_join(*parts):
+    """This function works similar to os.path.join() on posix
+    platforms (using "/" as separator)."""
+    parts = [p for p in parts if p != ""]
+    return "/".join(parts)
+
+assert posix_path_join("", "/tmp") == "/tmp"
+assert posix_path_join("", "tmp") == "tmp"
+assert posix_path_join("a", "b") == "a/b"
+
 import os.path as posixpath
 from os.path import curdir, sep, pardir, join
 # Python 2.5 compatible relpath(), Based on James Gardner's relpath

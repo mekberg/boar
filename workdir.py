@@ -133,7 +133,7 @@ class Workdir:
             if hashname not in ("md5"):
                 warn("Found manifest file %s, but hash type '%s' is not supported yet. Ignoring." % (fn, hashname))
                 continue
-            dirname = os.path.dirname(fn)
+            dirname = self.wd_sessionpath(os.path.dirname(fn))
             try:
                 manifest_md5sums = read_md5sum(self.wd_abspath(fn), manifest_hash)
             except ContentViolation:
@@ -141,13 +141,12 @@ class Workdir:
             notice("Using manifest file %s" % fn)
             for md5, filename in manifest_md5sums:
                 filename = tounicode(filename)
-                session_filename = self.wd_sessionpath(filename)
+                session_filename = posix_path_join(dirname, filename)
                 if session_filename in self.manifest:
                     if self.manifest[session_filename] != md5:
                         raise UserError("Conflicting manifests for file "+os.path.join(dirname, filename))
                 else:
-                    self.manifest[self.wd_sessionpath(filename)] = md5
-                    
+                    self.manifest[session_filename] = md5                    
                 
     def __get_workdir_version(self):
         version_file = os.path.join(self.metadir, VERSION_FILE)
@@ -336,7 +335,7 @@ class Workdir:
                 raise UserError("File is described in a manifest but is not present in the workdir: %s" % fn)
             wd_path = strip_path_offset(self.offset, fn)
             if self.manifest[fn] != self.cached_md5sum(wd_path):
-                raise UserError("File %s contents conflicts with manifest" % wd_path)                    
+                raise UserError("File %s contents conflicts with manifest" % wd_path)
 
 
     def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors):
