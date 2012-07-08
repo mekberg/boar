@@ -113,6 +113,30 @@ echo -- Testing subdir manifest
 (cd Import && $BOAR status) || exit 1
 (cd Import && $BOAR ci) || ( echo "Commit for manifest in subdir failed"; exit 1; )
 
+echo -- Testing offset subdir manifest
+(mkdir Import/offset && mv Import/subdir Import/offset/) || exit 1
+(cd Import && $BOAR status) || exit 1
+(cd Import && $BOAR ci) || ( echo "Commit failed"; exit 1; )
+rm -r Import || exit 1
+
+$BOAR --repo=$REPO_PATH co TestSession/offset || exit 1
+(cd offset && $BOAR status) || exit 1
+(cd offset && $BOAR ci --allow-empty) || exit 1
+echo "Wrong content" >offset/subdir/file.txt
+(cd offset && $BOAR ci -q) >output.txt 2>&1 && exit 1
+
+
+cat >expected.txt <<EOF
+WARNING: Found manifest file subdir/manifest-sha1.txt, but hash type 'sha1' is
+         not supported yet. Ignoring.
+NOTICE: Using manifest file subdir/manifest-md5.txt
+NOTICE: Using manifest file subdir/manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
+ERROR: File subdir/file.txt contents conflicts with manifest
+!Finished in .* seconds
+EOF
+txtmatch.py expected.txt output.txt || {
+    echo "Erronous offset manifest gave unexpected message"; exit 1; }
+
 echo "All is well"
 true
 
