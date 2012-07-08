@@ -546,6 +546,23 @@ def tounicode(s):
     assert type(s) == unicode
     return s
 
+def dedicated_stdout():
+    """ This function replaces the sys.stdout with sys.stderr and
+    returns sys.stdout so that the caller gets exclusive
+    access. (unless someone else has made a local copy). This function
+    is aware of StreamEncoder and will make sure that nothing has been
+    written to stdout at the time of the call, otherwise an
+    AssertionError will be raised. This function will always return
+    the original sys.stdout, even if it has been wrapped in a
+    StreamEncoder."""
+    if isinstance(sys.stdout, StreamEncoder):
+        assert sys.stdout.bytecount == 0, "Cannot dedicate stdout, some data has already been written"
+        real_stdout = sys.stdout.stream
+    else:
+        real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    return real_stdout
+
 def encoded_stdout():
     """Returns the sys.stdout stream wrapped in a StreamEncoder. Makes
     sure that there is no accidential nesting of StreamEncoder due to
@@ -565,6 +582,7 @@ class StreamEncoder:
         assert errors in ("strict", "replace", "ignore", "backslashreplace")
         assert not type(stream) == type(self), "Cannot nest StreamEncoders"
         self.errors = errors
+        self.bytecount = 0
         self.stream = stream
         
         if os.name == "nt":
@@ -578,6 +596,7 @@ class StreamEncoder:
             return
         encoded_s = s.encode(self.codec_name, self.errors)
         self.stream.write(encoded_s)
+        self.bytecount += len(encoded_s)
 
     def close(self):
         self.stream.close()
