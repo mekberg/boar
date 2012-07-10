@@ -57,3 +57,9 @@ def invert_bloblist(bloblist):
             result[bi['md5sum']] = []
         result[bi['md5sum']].append(bi)
     return result
+
+
+def sorted_bloblist(bloblist):
+    def info_comp(x, y):
+        return cmp(x['filename'], y['filename'])
+    return sorted(bloblist, info_comp)

@@ -8,9 +8,9 @@ REPO=$testdir/regression-v2/TESTREPO
 cat >expected.txt <<EOF
 NOTICE: Old repo format detected. Upgrading...
 !Checking out to workdir .*/TestSession
+attention.png
 modified.txt
 windows-räksmörgås.txt
-attention.png
 !Finished in .* seconds
 EOF
 
