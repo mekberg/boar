@@ -38,20 +38,22 @@ def match_line(pattern, text, magic_string):
     
 
 def txtmatch(pattern_lines, text_lines, magic_string = None):
-    if len(pattern_lines) != len(text_lines):
-        print "*** Different lengths."
+    def print_error(pattern_lines, text_lines):
         for line in pattern_lines:
             print "expected:", line
         for line in text_lines:
             print "actual  :", line
+
+    if len(pattern_lines) != len(text_lines):
+        print "*** Length mismatch"
+        print_error(pattern_lines, text_lines)
         return False
     for i in range(0, len(pattern_lines)):
         text = text_lines[i]
         pattern = pattern_lines[i]
         if not match_line(pattern, text, magic_string):
-            print "Mismatch at line",i, "(magic = '%s')" % magic_string
-            print "Expected:", pattern
-            print "Actual:", text
+            print "Mismatch at line", i, "(magic = '%s')" % magic_string
+            print_error(pattern_lines, text_lines)
             return False
     return True
 
