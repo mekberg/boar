@@ -720,6 +720,45 @@ def parse_sessionpath(s):
     assert isinstance(offset, unicode)
     return session_name, offset
 
+def cmd_cat(args): 
+    parser = OptionParser(usage="usage: boar cat [options] <session name>[/path/]")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="The revision to fetch")
+    (options, args) = parser.parse_args(args)
+    if not args:
+        raise UserError("You must specify a filename to cat")    
+    if len(args) > 2:
+        raise UserError("Too many arguments")
+    stdout = dedicated_stdout()
+    globals()["suppress_finishmessage"] = True
+    session_name, session_path = parse_sessionpath(args.pop(0))
+    front = connect_to_repo(get_repo_url())
+    if options.revision:
+        if options.revision not in front.get_session_ids(session_name):
+            raise UserError("There is no such revision of the given session")
+        revision = options.revision
+    else:
+        revision = front.find_last_revision(session_name)
+        if not revision:
+            raise UserError("No such session found: %s" % (session_name))
+
+    bloblist = get_cached_bloblist(front, revision)
+    datasource = _get_blob_data_source(front, revision, session_path)
+    if not datasource:
+        raise UserError("No such file exists in the given session/revision: %s" % session_path)
+    while datasource.bytes_left():
+        stdout.write(datasource.read(4096))
+
+def _get_blob_data_source(front, revision, session_path):
+    """Convenience function to fetch a data souce for the contents of
+    a blob given a revision and a session path name. The data source
+    must be exhausted before making another call to the front."""
+    bloblist = get_cached_bloblist(front, revision)
+    for b in bloblist:
+        if b['filename'] == session_path:
+            return front.get_blob(b['md5sum'])
+    return None
+
 def cmd_co(args): 
     parser = OptionParser(usage="usage: boar co [options] <session name>[/path/] [workdir name]")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
@@ -1014,6 +1053,8 @@ def main():
         return cmd_verify(args[1:])
     elif args[0] == "repair":
         return cmd_repair(args[1:])
+    elif args[0] == "cat":
+        return cmd_cat(args[1:])
     elif args[0] == "co":
         return cmd_co(args[1:])
     elif args[0] == "status":
