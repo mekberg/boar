@@ -199,7 +199,7 @@ class Workdir:
         if write_meta:
             self.write_metadata()
             self.__set_workdir_version(CURRENT_VERSION)
-        for info in self.get_bloblist(self.revision):
+        for info in sorted_bloblist(self.get_bloblist(self.revision)):
             if not is_child_path(self.offset, info['filename']):
                 continue
             self.fetch_file(info['filename'], info['md5sum'], overwrite = False)
