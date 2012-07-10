@@ -535,6 +535,9 @@ class BoarMessageServer:
                 else:
                     incoming_data_source = None
                 result = self.handler.handle(data, incoming_data_source)
+                if incoming_data_source:
+                    assert incoming_data_source.bytes_left() == 0,\
+                        "The data source object must be exhausted by the handler."
                 self.__send_result(result)
                 self.call_count += 1
                 if self.handler.dead:
@@ -566,6 +569,7 @@ class ServerProxy:
         """
         #TODO: check parameters
         self.__transport = transport
+        self.active_datasource = None
 
     def __str__(self):
         return repr(self)
@@ -574,13 +578,18 @@ class ServerProxy:
 
     def __req( self, methodname, args=None, kwargs=None, id=0 ):
         # JSON-RPC 2.0: only args OR kwargs allowed!
+        if self.active_datasource:
+            assert self.active_datasource.bytes_left() == 0, \
+                "The data source must be exhausted before any more jsonrpc calls can be made."
         datasource = kwargs.get("datasource", None)
+
         if datasource:
             assert isinstance(datasource, DataSource)
+            self.active_datasource = datasource
             del kwargs["datasource"]
         for arg in args:
             assert not isinstance(arg, DataSource), "DataSource must be a keyword argument"
-                
+
         if len(args) > 0 and len(kwargs) > 0:
             raise ValueError("Only positional or named parameters are allowed!")
         if len(kwargs) == 0:
