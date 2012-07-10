@@ -91,17 +91,22 @@ class BlobListCache:
                      [revision, sqlite3.Binary(bf.serialize())])
 
     def get_bloblist(self, revision, skip_verification = False):
+        t0 = time.time()
         conn = self.conn
         conn.execute("BEGIN")
-        cursor = conn.execute('SELECT revisions.blobinfos FROM revisions WHERE revision = ?', [revision])
-        row = cursor.fetchone()
-        if row:
-            bf = BitField.deserialize(row[0])
-            rows = ",".join(map(str,bf.get_ones_indices()))
-            bloblist = map(dict, (conn.execute('SELECT blcache.* from blcache WHERE rowid IN (%s) ORDER BY filename' % rows)))
-        else:
+        is_cached = conn.execute('SELECT revisions.revision FROM revisions WHERE revision = ?', [revision]).fetchall()
+        if not is_cached:
             bloblist = self.front.get_session_bloblist(revision)
             self.__store_bloblist(revision, bloblist)
+            del bloblist
+        # Reduce complexity by always returning the cached version,
+        # even though it is a bit ineffective when the bloblist is not
+        # yet cached.
+        cursor = conn.execute('SELECT revisions.blobinfos FROM revisions WHERE revision = ?', [revision])
+        row = cursor.fetchone()
+        bf = BitField.deserialize(row[0])
+        rows = ",".join(map(str,bf.get_ones_indices()))
+        bloblist = conn.execute('SELECT blcache.* from blcache WHERE rowid IN (%s) ORDER BY filename' % rows).fetchall()            
         conn.commit()
         if not skip_verification:
             assert_valid_bloblist(self.front, revision, bloblist)
