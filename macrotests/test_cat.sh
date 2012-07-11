@@ -31,6 +31,13 @@ $BOAR cat RäksmörgåsSession/r3.txt RäksmörgåsSession/modified.txt >output.
     cat output.txt; echo "Couldn't cat multiple files"; exit 1; }
 txtmatch.py expected.txt output.txt || { echo "Cat multiple files gave unexpected output"; exit 1; }
 
+cat >expected.txt <<EOF
+Modified rev 3
+Rev 3
+EOF
+$BOAR cat -B ffa4cb9336e7655d1360220801edd01c 4b5c8990f5e8836e8f69bf5b1f19da9e >output.txt || {
+    cat output.txt; echo "Couldn't cat multiple blobs"; exit 1; }
+txtmatch.py expected.txt output.txt || { echo "Cat multiple blobs gave unexpected output"; exit 1; }
 
 echo "All is well"
 true
