@@ -39,5 +39,23 @@ $BOAR cat -B ffa4cb9336e7655d1360220801edd01c 4b5c8990f5e8836e8f69bf5b1f19da9e >
     cat output.txt; echo "Couldn't cat multiple blobs"; exit 1; }
 txtmatch.py expected.txt output.txt || { echo "Cat multiple blobs gave unexpected output"; exit 1; }
 
+
+cat >expected.txt <<EOF
+ERROR: Blob does not exist in repository: 00000000000000000000000000000000
+EOF
+$BOAR cat -B 00000000000000000000000000000000 >output.txt 2>&1 && {
+    cat output.txt; echo "Cat:ing non-existing blob should fail"; exit 1; }
+txtmatch.py expected.txt output.txt || { echo "Cat non-existing blob gave unexpected output"; exit 1; }
+
+
+cat >expected.txt <<EOF
+ERROR: No such file exists in the given session/revision: nonexisting.txt
+EOF
+$BOAR cat RäksmörgåsSession/nonexisting.txt >output.txt 2>&1 && {
+    cat output.txt; echo "Cat:ing non-existing file should fail"; exit 1; }
+txtmatch.py expected.txt output.txt || { echo "Cat non-existing file gave unexpected output"; exit 1; }
+
+
+
 echo "All is well"
 true
