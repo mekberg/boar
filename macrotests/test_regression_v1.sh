@@ -63,5 +63,16 @@ rm -r regression-v1 || exit 1
 echo "--- Test repo cloning"
 tar xzf $BOARTESTHOME/regression-v1.tar.gz || exit 1
 $BOAR clone $REPO clone || { echo "Couldn't clone"; exit 1; }
+rm -r regression-v1 || exit 1
 
+echo "--- Test cat"
+tar xzf $BOARTESTHOME/regression-v1.tar.gz || exit 1
+($BOAR cat --repo=$REPO Test/some_text.txt | md5sum - | grep 1aa9fa286a98d0bb37bc0164c23de704) || {
+    echo "Unexpected cat output"; exit 1; } 
+rm -r regression-v1 || exit 1
+tar xzf $BOARTESTHOME/regression-v1.tar.gz || exit 1
+($BOAR cat --repo=$REPO -B 1aa9fa286a98d0bb37bc0164c23de704 | md5sum - | grep 1aa9fa286a98d0bb37bc0164c23de704) || { 
+    echo "Unexpected cat -B output"; exit 1; } 
+
+echo "--- Excercise repo"
 $BOARTESTHOME/excercise_repo.sh "$BOAR" $REPO || { echo "Excercise of v1 repo failed"; exit 1; }
