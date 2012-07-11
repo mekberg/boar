@@ -730,7 +730,23 @@ def cmd_cat(args):
     globals()["suppress_finishmessage"] = True
     front = connect_to_repo(get_repo_url())
 
-    if options.blob:
+    blobids = []
+    if not options.blob:
+        while args:
+            session_name, session_path = parse_sessionpath(args.pop(0))
+            if options.revision:
+                if options.revision not in front.get_session_ids(session_name):
+                    raise UserError("There is no such revision of the given session")
+                revision = options.revision
+            else:
+                revision = front.find_last_revision(session_name)
+                if not revision:
+                    raise UserError("No such session found: %s" % (session_name))
+            blobid = _get_blobid(front, revision, session_path)
+            if not blobid:
+                raise UserError("No such file exists in the given session/revision: %s" % (session_path))
+            blobids.append(blobid)
+    else:
         if options.revision:
             raise UserError("--revision option can not be combined with --blob option")
         while args:
@@ -739,38 +755,20 @@ def cmd_cat(args):
                 raise UserError("Not a valid blobid: %s" % blobid)
             if not front.has_blob(blobid):
                 raise UserError("Blob does not exist in repository: %s" % blobid)
-            datasource = front.get_blob(blobid)
-            if not datasource:
-                raise UserError("No such blob exists: %s" % blobid)
-            while datasource.bytes_left():
-                stdout.write(datasource.read(4096))
-        return
+            blobids.append(blobid)
 
-    while args:
-        session_name, session_path = parse_sessionpath(args.pop(0))
-        if options.revision:
-            if options.revision not in front.get_session_ids(session_name):
-                raise UserError("There is no such revision of the given session")
-            revision = options.revision
-        else:
-            revision = front.find_last_revision(session_name)
-            if not revision:
-                raise UserError("No such session found: %s" % (session_name))
-
-        datasource = _get_blob_data_source(front, revision, session_path)
-        if not datasource:
-            raise UserError("No such file exists in the given session/revision: %s" % session_path)
+    for blobid in blobids:
+        datasource = front.get_blob(blobid)
         while datasource.bytes_left():
             stdout.write(datasource.read(4096))
 
-def _get_blob_data_source(front, revision, session_path):
-    """Convenience function to fetch a data souce for the contents of
-    a blob given a revision and a session path name. The data source
-    must be exhausted before making another call to the front."""
+def _get_blobid(front, revision, session_path):
+    """Convenience function to fetch the id of a blob given a revision
+    and a session path name."""
     bloblist = get_cached_bloblist(front, revision)
     for b in bloblist:
         if b['filename'] == session_path:
-            return front.get_blob(b['md5sum'])
+            return b['md5sum']
     return None
 
 def cmd_co(args): 
