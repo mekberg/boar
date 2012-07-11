@@ -744,21 +744,22 @@ def cmd_cat(args):
                 stdout.write(datasource.read(4096))
         return
 
-    session_name, session_path = parse_sessionpath(args.pop(0))
-    if options.revision:
-        if options.revision not in front.get_session_ids(session_name):
-            raise UserError("There is no such revision of the given session")
-        revision = options.revision
-    else:
-        revision = front.find_last_revision(session_name)
-        if not revision:
-            raise UserError("No such session found: %s" % (session_name))
+    while args:
+        session_name, session_path = parse_sessionpath(args.pop(0))
+        if options.revision:
+            if options.revision not in front.get_session_ids(session_name):
+                raise UserError("There is no such revision of the given session")
+            revision = options.revision
+        else:
+            revision = front.find_last_revision(session_name)
+            if not revision:
+                raise UserError("No such session found: %s" % (session_name))
 
-    datasource = _get_blob_data_source(front, revision, session_path)
-    if not datasource:
-        raise UserError("No such file exists in the given session/revision: %s" % session_path)
-    while datasource.bytes_left():
-        stdout.write(datasource.read(4096))
+        datasource = _get_blob_data_source(front, revision, session_path)
+        if not datasource:
+            raise UserError("No such file exists in the given session/revision: %s" % session_path)
+        while datasource.bytes_left():
+            stdout.write(datasource.read(4096))
 
 def _get_blob_data_source(front, revision, session_path):
     """Convenience function to fetch a data souce for the contents of
