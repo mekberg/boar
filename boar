@@ -718,18 +718,33 @@ def parse_sessionpath(s):
     return session_name, offset
 
 def cmd_cat(args): 
-    parser = OptionParser(usage="usage: boar cat [options] <session name>[/path/]")
+    parser = OptionParser(usage="usage: boar cat [options] [<session path>|blob id]")
+    parser.add_option("-B", "--blob", action="store_true", dest = "blob", 
+                      help="Fetch by blob id string instead of session path")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
                       help="The revision to fetch")
     (options, args) = parser.parse_args(args)
     if not args:
-        raise UserError("You must specify a filename to cat")    
-    if len(args) > 2:
-        raise UserError("Too many arguments")
+        raise UserError("You must specify one or more filenames or blobids")    
     stdout = dedicated_stdout()
     globals()["suppress_finishmessage"] = True
-    session_name, session_path = parse_sessionpath(args.pop(0))
     front = connect_to_repo(get_repo_url())
+
+    if options.blob:
+        if options.revision:
+            raise UserError("--revision option can not be combined with --blob option")
+        while args:
+            blobid = args.pop(0)
+            if not is_md5sum(blobid):
+                raise UserError("Not a valid blobid: %s" % blobid)
+            datasource = front.get_blob(blobid)
+            if not datasource:
+                raise UserError("No such blob exists: %s" % blobid)
+            while datasource.bytes_left():
+                stdout.write(datasource.read(4096))
+        return
+
+    session_name, session_path = parse_sessionpath(args.pop(0))
     if options.revision:
         if options.revision not in front.get_session_ids(session_name):
             raise UserError("There is no such revision of the given session")
