@@ -632,6 +632,46 @@ def cmd_relocate(args):
     wd.write_metadata()
 """
 
+def cmd_manifest(args):
+    parser = OptionParser(usage="usage: boar manifest [<session name>|-A]")
+    parser.add_option("--md5sum", action="store_true", dest = "md5sum", 
+                      help="Output is compatible with classic md5sum format (excludes some information)")
+    parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
+                      help="The revision to fetch")
+
+    if not args:
+        args = ["--help"]
+    (options, args) = parser.parse_args(args)  
+    if len(args) == 0:
+        raise UserError("You must specify a session name")
+    if len(args) > 1:
+        raise UserError("Too many arguments")
+    session_name = args.pop(0)
+    stdout = dedicated_stdout()
+    globals()["suppress_finishmessage"] = True
+    front = connect_to_repo(get_repo_url())
+    sessionId = front.find_last_revision(session_name)
+    dump = {}
+    dump['session_name'] = session_name
+    dump['revision'] = sessionId
+    dump['fingerprint'] = front.get_session_fingerprint(sessionId)
+    entries = []
+    for bi in blcache.get_bloblist(front, sessionId):
+        entries.append({'filename': bi['filename'],
+                        'md5': bi['md5sum'],
+                        'size': bi['size']})
+    dump['files'] = entries
+
+    if options.md5sum:
+        for bi in dump['files']:
+            stdout.write(bi['md5'])
+            stdout.write(" *")
+            stdout.write(bi['filename'].encode("utf-8"))
+            stdout.write("\n")
+    else:
+        json.dump(dump, stdout, indent = 4, sort_keys=True)
+
+
 def cmd_mksession(args):
     if len(args) == 0:
         args = ["--help"]
@@ -1084,6 +1124,8 @@ def main():
         return cmd_locate(args[1:])
     elif args[0] == "lostfiles":
         return cmd_lostfiles(args[1:])
+    elif args[0] == "manifest":
+        return cmd_manifest(args[1:])
     elif args[0] == "mksession":
         return cmd_mksession(args[1:])
     elif args[0] == "mkstandalone":
