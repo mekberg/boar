@@ -632,6 +632,47 @@ def cmd_relocate(args):
     wd.write_metadata()
 """
 
+def cmd_sessions(args):
+    parser = OptionParser(usage="usage: boar sessions [options]")
+    parser.add_option("-j", "--json", action="store_true", dest = "json", 
+                      help="Format output as a json data format list")
+    (options, args) = parser.parse_args(args)
+    if args:
+        raise UserError("Too many arguments")
+    stdout = dedicated_stdout()
+    globals()["suppress_finishmessage"] = True
+    front = connect_to_repo(get_repo_url())
+    names = front.get_session_names()
+    names.sort()
+    if options.json:
+        json.dump(names, stdout, indent = 4)
+    else:
+        for name in names:
+            stdout.write(name.encode("utf-8"))
+            stdout.write("\n")
+
+def cmd_revisions(args):
+    parser = OptionParser(usage="usage: boar revisions [options] <session name>")
+    parser.add_option("-j", "--json", action="store_true", dest = "json", 
+                      help="Format output as a json data format list")
+    (options, args) = parser.parse_args(args)
+    if len(args) != 1:
+        raise UserError("Wrong number of arguments")
+    session_name = args.pop(0)
+    assert isinstance(session_name, unicode)
+    stdout = dedicated_stdout()
+    globals()["suppress_finishmessage"] = True
+    front = connect_to_repo(get_repo_url())
+    revs = front.get_session_ids(session_name)
+    revs.sort()
+    if options.json:
+        json.dump(revs, stdout, indent = 4)
+    else:
+        for rev in revs:
+            stdout.write(str(rev))
+            stdout.write("\n")
+        
+
 def cmd_manifest(args):
     parser = OptionParser(usage="usage: boar manifest [<session name>|-A]")
     parser.add_option("--md5sum", action="store_true", dest = "md5sum", 
@@ -1129,13 +1170,17 @@ def main():
     elif args[0] == "mksession":
         return cmd_mksession(args[1:])
     elif args[0] == "mkstandalone":
-        return cmd_mkstandalone(args[1:])
+        return cmd_mkstandalone(args[1:]) 
+    elif args[0] == "revisions":
+        return cmd_revisions(args[1:])
     elif args[0] == "serve":
         # "suppress_finishmessage" is a hack to avoid duplicate
         # "finished" messages when connecting to a boar server.  
         # TODO: make less hackish
         globals()["suppress_finishmessage"] = True
         return cmd_serve(args[1:])
+    elif args[0] == "sessions":
+        return cmd_sessions(args[1:])
     elif args[0] == "truncate":
         return cmd_truncate(args[1:])
     elif args[0] == "exportmd5":
