@@ -220,6 +220,16 @@ class Front:
                 result.append(sid)
         return result
 
+    def get_session_names(self, include_meta = False):
+        sessions_count = {}
+        for sid in self.get_session_ids():
+            session_info = self.get_session_info(sid)
+            name = session_info.get("name", "<no name>")
+            if not include_meta and name.startswith("__"):
+                continue
+            sessions_count[name] = sessions_count.get(name, 0) + 1
+        return sessions_count.keys()
+
     def get_deleted_snapshots(self):
         return self.repo.get_deleted_snapshots()
 
