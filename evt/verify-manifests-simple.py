@@ -21,31 +21,39 @@ independently verify the contents of a Boar repository by taking
 advantage of manifest files.
 """
 
-import commands
 import json
 import re
 import sys
+import hashlib
+import subprocess
 
-def run_command(cmd):
+def run_command(*cmdlist):
     """Execute a shell command and return the output. Raises an
     exception if the command failed for any reason."""
-    status, output = commands.getstatusoutput(cmd)
-    if status:
-        print output
+    process = subprocess.Popen(cmdlist, stdout=subprocess.PIPE)
+    stdoutdata, stderrdata = process.communicate()
+    status = process.wait()
+    if status != 0:
+        print stdoutdata
         raise Exception("Command '%s' failed with error %s" % 
-                        (cmd, status))
-    return output
+                        (cmdlist, status))
+    return stdoutdata
 
-def verify_blob(repourl, expected_md5):
-    line = run_command("boar --repo='%s' cat --blob %s | md5sum -" % 
-                       (repourl, expected_md5))
-    calculated_md5 = line[0:32]
-    assert calculated_md5 == expected_md5
+def verify_blob(repourl, expected_md5):    
+    boar_process = subprocess.Popen(["boar", "--repo", repourl, "cat", "--blob", expected_md5],
+                                    stdout=subprocess.PIPE)
+    summer = hashlib.md5()
+    while True:
+        data = boar_process.stdout.read(4096)
+        if data == "":
+            break
+        summer.update(data)
+    assert boar_process.wait() == 0, "Boar gave unexpected return code"
+    assert summer.hexdigest() == expected_md5
 
 def verify_manifest(repourl, session_name, manifest_path):
     print "Verifying manifest", session_name, manifest_path
-    manifest_contents = run_command("boar --repo='%s' cat '%s/%s'" % 
-                                    (repourl, session_name, manifest_path))
+    manifest_contents = run_command("boar", "--repo", repourl, "cat", session_name + "/" + manifest_path)
     for line in manifest_contents.splitlines():
         md5, filename = line[0:32], line[34:]
         verify_blob(repourl, md5)
@@ -64,10 +72,9 @@ def main():
         print "Usage: verify-manifests-simple.py <repository>"
         return
     repourl = args.pop(0)
-    session_names = json.loads(run_command("boar sessions --json"))
+    session_names = json.loads(run_command("boar", "sessions", "--json"))
     for session_name in session_names:
-        session_contents = json.loads(run_command("boar --repo='%s' contents '%s'" % 
-                                                  (repourl, session_name)))
+        session_contents = json.loads(run_command("boar", "--repo", repourl, "contents", session_name))
         for fileinfo in session_contents['files']:
             if is_manifest(fileinfo['filename']):
                 verify_manifest(repourl, session_name, fileinfo['filename'])
