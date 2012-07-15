@@ -673,13 +673,12 @@ def cmd_revisions(args):
             stdout.write("\n")
         
 
-def cmd_manifest(args):
-    parser = OptionParser(usage="usage: boar manifest [<session name>|-A]")
+def cmd_contents(args):
+    parser = OptionParser(usage="usage: boar contents [<session name>]")
     parser.add_option("--md5sum", action="store_true", dest = "md5sum", 
                       help="Output is compatible with classic md5sum format (excludes some information)")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
                       help="The revision to fetch")
-
     if not args:
         args = ["--help"]
     (options, args) = parser.parse_args(args)  
@@ -1165,8 +1164,8 @@ def main():
         return cmd_locate(args[1:])
     elif args[0] == "lostfiles":
         return cmd_lostfiles(args[1:])
-    elif args[0] == "manifest":
-        return cmd_manifest(args[1:])
+    elif args[0] == "contents":
+        return cmd_contents(args[1:])
     elif args[0] == "mksession":
         return cmd_mksession(args[1:])
     elif args[0] == "mkstandalone":
