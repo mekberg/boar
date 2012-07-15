@@ -618,19 +618,20 @@ def cmd_ci(args):
     else:
         notice("Didn't find any changes to check in.", sys.stdout)
 
-"""
 def cmd_relocate(args):
-    if len(args) == 0:
-        args = ["--help"]
-    parser = OptionParser(usage="usage: boar relocate <new repo location>")
+    if not args:
+        args.append("--help")
+    parser = OptionParser(usage="usage: boar relocate <repository>")
     (options, args) = parser.parse_args(args)
     if len(args) > 1:
         raise UserError("Too many arguments")
-    new_location, = args
-    wd = workdir.init_workdir(ucwd)
-    wd.repoUrl = new_location
-    wd.write_metadata()
-"""
+    repourl = args[0]
+    front = client.connect(repourl)
+    metafile = os.path.join(workdir.find_meta(ucwd), "info")
+    metadata = read_json(metafile)
+    metadata['repo_path'] = repourl
+    replace_file(metafile, dumps_json(metadata))
+    print "New location is %s" % repourl
 
 def cmd_sessions(args):
     parser = OptionParser(usage="usage: boar sessions [options]")
