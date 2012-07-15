@@ -19,6 +19,13 @@
 The purpose of this tool is to provide a simple example on how to
 independently verify the contents of a Boar repository by taking
 advantage of manifest files.
+
+This program demonstrates some useful mechanisms for automatically
+accessing a repository through boar. It shows how to list sessions,
+how to list files in a session and how to access files in a repository
+by file name or by blob id. We can do these things by using the Boar
+commands "sessions", "contents", and "cat". These commands are
+guaranteed to give clean machine-readable output.
 """
 
 import json
@@ -69,7 +76,11 @@ def is_manifest(filename):
 def main():
     args = sys.argv[1:]
     if len(args) != 1:
-        print "Usage: verify-manifests-simple.py <repository>"
+        print """This is a demonstration program that searches the repository for manifest 
+files, and then verifies that the manifests are correct. Only the latest 
+revision of every session is verified. 
+
+Usage: verify-manifests-simple.py <repository>"""
         return
     repourl = args.pop(0)
     session_names = json.loads(run_command("boar", "sessions", "--json"))
@@ -79,4 +90,6 @@ def main():
             if is_manifest(fileinfo['filename']):
                 verify_manifest(repourl, session_name, fileinfo['filename'])
 
-main()
+
+if __name__ == "__main__":
+    main()
