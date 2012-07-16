@@ -571,6 +571,9 @@ def dedicated_stdout():
     else:
         real_stdout = sys.stdout
     sys.stdout = sys.stderr
+    if os.name == "nt":
+        import msvcrt
+        msvcrt.setmode(real_stdout.fileno(), os.O_BINARY)
     return real_stdout
 
 def encoded_stdout():
