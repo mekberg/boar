@@ -51,7 +51,16 @@ def run_command(*cmdlist):
                         (cmdlist, status))
     return stdoutdata
 
-def verify_blob(repourl, expected_md5):    
+def verify_blob(repourl, expected_md5):
+    """This function will stream the given blob from the repository
+    and verify that the contents are as expected. If an error is
+    detected, an AssertionError will be raised."""
+
+    # As the expected checksum and blob id are the same thing, this is
+    # easy. It would be even easier if we used run_command() here, but
+    # then we would have problems when handling files larger than
+    # available RAM, as that function returns the complete output of
+    # the command..
     boar_process = subprocess.Popen([boar_cmd, "--repo", repourl, "cat", "--blob", expected_md5],
                                     stdout=subprocess.PIPE)
     summer = hashlib.md5()
@@ -64,9 +73,35 @@ def verify_blob(repourl, expected_md5):
     assert summer.hexdigest() == expected_md5, "Expected: %s Got: %s" % (expected_md5, summer.hexdigest())
 
 def verify_manifest(repourl, session_name, manifest_path):
+    """This function will load the given manifest and then verify the
+    checksum of every file specified within. If the manifest file has
+    a md5 checksum in its filename, the manifest file itself will be
+    verified against that checksum.
+    
+    Note that for simplicity and speed, this function will only check
+    if all the files are intact and accessible by their blob ids. It
+    will not detect deviations from the file structure described in
+    the manifest. As long as the files are intact, the file structure
+    can always be reconstructed by using the manifest."""
+
     print "Verifying manifest", session_name + "/" + manifest_path
+
+    # Use the --punycode flag and encoded arguments to avoid problems
+    # on Windows with non-ascii chars in command arguments.
     manifest_contents = run_command(boar_cmd, "--repo", repourl, "cat", "--punycode",
                                     (session_name + "/" + manifest_path).encode("punycode"))
+    
+    m = re.match(".*-([a-z0-9]{32})\.md5$", manifest_path, flags=re.IGNORECASE)
+    expected_manifest_md5 = m.group(1) if m else None
+
+    if expected_manifest_md5:
+        # Let's verify that the checksum in the name of the manifest
+        # is correct.
+        md5summer = hashlib.md5()
+        md5summer.update(manifest_contents)
+        assert expected_manifest_md5 == md5summer.hexdigest(), \
+            "Manifest %s checksum didn't match contents" % (session_name + "/" + manifest_path)
+
     for line in manifest_contents.splitlines():
         md5, filename = line[0:32], line[34:]
         verify_blob(repourl, md5)
@@ -75,7 +110,7 @@ def verify_manifest(repourl, session_name, manifest_path):
 def is_manifest(filename):
     """Returns True if a filename looks like a manifest file that this
     program will understand."""
-    m = re.match("(^|.*/)(manifest-md5\.txt|manifest-([a-z0-9]{32})\.md5)", 
+    m = re.match("(^|.*/)(manifest-md5\.txt|manifest-[a-z0-9]{32}\.md5)", 
                  filename, flags=re.IGNORECASE)
     return m != None
 
@@ -88,9 +123,15 @@ revision of every session is verified.
 
 Usage: verify-manifests-simple.py <repository>"""
         return
+
     repourl = args.pop(0)
     session_names = json.loads(run_command(boar_cmd, "--repo", repourl, "sessions", "--json"))
     for session_name in session_names:
+        # The "boar contents" command will dump a json-list containing
+        # information about the session, including a list of all the
+        # files. We are using the --punycode flag and encoded
+        # arguments to avoid problems on Windows with non-ascii chars
+        # in command arguments.
         session_contents = json.loads(run_command(boar_cmd, "--repo", repourl,
                                                 "contents", "--punycode", session_name.encode("punycode")))
         for fileinfo in session_contents['files']:
