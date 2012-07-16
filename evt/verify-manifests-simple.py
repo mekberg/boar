@@ -33,7 +33,12 @@ import re
 import sys
 import hashlib
 import subprocess
+import os
 
+boar_cmd = "boar"
+if os.name == 'nt':
+    boar_cmd = "boar.bat"
+    
 def run_command(*cmdlist):
     """Execute a shell command and return the output. Raises an
     exception if the command failed for any reason."""
@@ -47,7 +52,7 @@ def run_command(*cmdlist):
     return stdoutdata
 
 def verify_blob(repourl, expected_md5):    
-    boar_process = subprocess.Popen(["boar", "--repo", repourl, "cat", "--blob", expected_md5],
+    boar_process = subprocess.Popen([boar_cmd, "--repo", repourl, "cat", "--blob", expected_md5],
                                     stdout=subprocess.PIPE)
     summer = hashlib.md5()
     while True:
@@ -56,11 +61,12 @@ def verify_blob(repourl, expected_md5):
             break
         summer.update(data)
     assert boar_process.wait() == 0, "Boar gave unexpected return code"
-    assert summer.hexdigest() == expected_md5
+    assert summer.hexdigest() == expected_md5, "Expected: %s Got: %s" % (expected_md5, summer.hexdigest())
 
 def verify_manifest(repourl, session_name, manifest_path):
-    print "Verifying manifest", session_name, manifest_path
-    manifest_contents = run_command("boar", "--repo", repourl, "cat", session_name + "/" + manifest_path)
+    print "Verifying manifest", session_name + "/" + manifest_path
+    manifest_contents = run_command(boar_cmd, "--repo", repourl, "cat", "--punycode",
+                                    (session_name + "/" + manifest_path).encode("punycode"))
     for line in manifest_contents.splitlines():
         md5, filename = line[0:32], line[34:]
         verify_blob(repourl, md5)
@@ -83,13 +89,13 @@ revision of every session is verified.
 Usage: verify-manifests-simple.py <repository>"""
         return
     repourl = args.pop(0)
-    session_names = json.loads(run_command("boar", "sessions", "--json"))
+    session_names = json.loads(run_command(boar_cmd, "--repo", repourl, "sessions", "--json"))
     for session_name in session_names:
-        session_contents = json.loads(run_command("boar", "--repo", repourl, "contents", session_name))
+        session_contents = json.loads(run_command(boar_cmd, "--repo", repourl,
+                                                "contents", "--punycode", session_name.encode("punycode")))
         for fileinfo in session_contents['files']:
             if is_manifest(fileinfo['filename']):
                 verify_manifest(repourl, session_name, fileinfo['filename'])
-
 
 if __name__ == "__main__":
     main()
