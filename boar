@@ -680,6 +680,8 @@ def cmd_contents(args):
                       help="Output is compatible with classic md5sum format (excludes some information)")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
                       help="The revision to fetch")
+    parser.add_option("--punycode", action="store_true", dest = "punycode",  
+                      help="The session name will be given in the punycode format")
     if not args:
         args = ["--help"]
     (options, args) = parser.parse_args(args)  
@@ -688,10 +690,15 @@ def cmd_contents(args):
     if len(args) > 1:
         raise UserError("Too many arguments")
     session_name = args.pop(0)
+    if options.punycode:
+        session_name = str(session_name).decode("punycode")
     stdout = dedicated_stdout()
     globals()["suppress_finishmessage"] = True
     front = connect_to_repo(get_repo_url())
     sessionId = front.find_last_revision(session_name)
+    if not sessionId:
+        raise UserError("No such session found: %s" % (session_name))
+
     dump = {}
     dump['session_name'] = session_name
     dump['revision'] = sessionId
@@ -804,6 +811,8 @@ def cmd_cat(args):
                       help="Fetch by blob id string instead of session path")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
                       help="The revision to fetch")
+    parser.add_option("--punycode", action="store_true", dest = "punycode",  
+                      help="The filename will be given in the punycode format")
     (options, args) = parser.parse_args(args)
     if not args:
         raise UserError("You must specify one or more filenames or blobids")    
@@ -814,7 +823,10 @@ def cmd_cat(args):
     blobids = []
     if not options.blob:
         while args:
-            session_name, session_path = parse_sessionpath(args.pop(0))
+            path = args.pop(0)
+            if options.punycode:
+                path = str(path).decode("punycode")
+            session_name, session_path = parse_sessionpath(path)
             if options.revision:
                 if options.revision not in front.get_session_ids(session_name):
                     raise UserError("There is no such revision of the given session")
@@ -830,6 +842,8 @@ def cmd_cat(args):
     else:
         if options.revision:
             raise UserError("--revision option can not be combined with --blob option")
+        if options.punycode:
+            raise UserError("--punycode option can not be combined with --blob option")
         while args:
             blobid = args.pop(0)
             if not is_md5sum(blobid):
