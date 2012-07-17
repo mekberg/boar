@@ -315,9 +315,11 @@ def strip_path_offset(offset, path, separator="/"):
     assert __add_path_offset(offset, result, separator) == path
     return result
 
-def is_child_path(parent, child, separator="/"):
-    assert type(parent) == unicode
-    assert type(child) == unicode
+def is_child_path(parent, child, separator="/"):    
+    # We don't want any implicit conversions to unicode. That might
+    # cause decoding errors.
+    assert type(parent) == type(child)
+
     assert separator in ("/", "\\")
     if parent == "":
         return True
