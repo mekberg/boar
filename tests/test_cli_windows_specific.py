@@ -47,22 +47,19 @@ class TestCli(unittest.TestCase):
     def setUp(self):
         self.testdir = tempfile.mkdtemp(prefix="boar_test_cli_")
         os.chdir(self.testdir)
+        call([BOAR, "mkrepo", "TESTREPOåäö"])
+        assert os.path.exists("TESTREPOåäö")
+        output, returncode = call([BOAR, "mkrepo", "TESTREPOåäö"], check=False)
+        assert returncode == 1
+        call([BOAR, "--repo", "TESTREPOåäö", "mksession", "TestSessionåäö"])
+        assert "ERROR: File or directory already exists" in output
 
     def tearDown(self):
         os.chdir(BOAR_HOME)
         shutil.rmtree(self.testdir)
 
-    def testMkrepo(self):
-        output, returncode = call([BOAR, "mkrepo", "TESTREPOåäö"])
-        assert os.path.exists("TESTREPOåäö")
-        output, returncode = call([BOAR, "mkrepo", "TESTREPOåäö"], check=False)
-        assert returncode == 1
-        assert "ERROR: File or directory already exists" in output
-
     def testCat(self):
         testdata = "a\n\b\n\c"
-        call([BOAR, "mkrepo", "TESTREPOåäö"])
-        call([BOAR, "--repo", "TESTREPOåäö", "mksession", "TestSessionåäö"])
         call([BOAR, "--repo", "TESTREPOåäö", "co", "TestSessionåäö"])
         write_file("TestSessionåäö/fil.txt", testdata)
         call([BOAR, "--repo", "TESTREPOåäö", "ci"], cwd="TestSessionåäö")
