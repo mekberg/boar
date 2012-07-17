@@ -1187,6 +1187,8 @@ def main():
         return cmd_mkstandalone(args[1:]) 
     elif args[0] == "revisions":
         return cmd_revisions(args[1:])
+    elif args[0] == "relocate":
+        return cmd_relocate(args[1:])
     elif args[0] == "serve":
         # "suppress_finishmessage" is a hack to avoid duplicate
         # "finished" messages when connecting to a boar server.  
