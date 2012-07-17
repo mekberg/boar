@@ -440,17 +440,17 @@ class Workdir:
 
     def wd_sessionpath(self, wdpath):
         """Transforms a workdir path to a session path"""
-        assert not is_windows_path(wdpath)
-        if wdpath.startswith("/"):
-            raise UserError("Given workdir subpath must not start with a slash")
+        if os.path.isabs(wdpath):
+            raise UserError("Given workdir subpath points outside current session: '%s'" % wdpath)
         if self.offset != "":
-            wdpath = self.offset + "/" + wdpath
+            wdpath = os.path.join(self.offset, wdpath)
+        wdpath = convert_win_path_to_unix(wdpath)
         result = posix_normpath(wdpath)
         if result == ".":
             result = u""
-        parts = os.path.split(result)
+        parts = result.split("/")
         if ".." in parts:
-            raise UserError("Given workdir subpath points outside current session: '%s'" % wdpath)
+            raise UserError("Given workdir subpath contains parental references: '%s'" % wdpath)
         assert not "." in parts
         return result
 

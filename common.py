@@ -288,37 +288,42 @@ def get_relative_path(p):
 
 # This method avoids an infinite loop when add_path_offset() and
 # strip_path_offset() verfies the results of each other.
-def __add_path_offset(offset, p):
-    return offset + "/" + p
+def __add_path_offset(offset, p, separator="/"):
+    assert separator in ("/", "\\")
+    return offset + separator + p
 
-def add_path_offset(offset, p):
-    result = __add_path_offset(offset, p)
-    assert strip_path_offset(offset, result) == p
+def add_path_offset(offset, p, separator="/"):
+    assert separator in ("/", "\\")
+    result = __add_path_offset(offset, p, separator)
+    assert strip_path_offset(offset, result, separator) == p
     return result
 
-def strip_path_offset(offset, p):
-    """ Removes the initial part of pathname p that is identical to
-    the given offset. Example: strip_path_offset("myfiles",
+def strip_path_offset(offset, path, separator="/"):
+    """ Removes the initial part of pathname 'path' that is identical to
+    the given 'offset'. Example: strip_path_offset("myfiles",
     "myfiles/dir1/file.txt") => "dir1/file.txt" """
     # TODO: For our purposes, this function really is a dumber version
     # of my_relpath(). One should replace the other.
     if offset == "":
-        return p
-    if offset == p:
+        return path
+    if offset == path:
         return u""
-    assert not offset.endswith("/"), "Offset must be given without ending slash. Was: "+offset
-    assert p.startswith(offset), "'%s' does not begin with offset '%s'" % (p, offset)
-    assert p[len(offset)] == "/", "Offset was: "+offset+" Path was: "+p
-    result = p[len(offset)+1:]
-    assert __add_path_offset(offset, result) == p
+    assert separator in ("/", "\\")
+    assert not offset.endswith(separator), "Offset must be given without ending slash. Was: "+offset
+    assert is_child_path(offset, path, separator), "Path %s is not a child of offset %s" % (path, offset)
+    result = path[len(offset)+1:]
+    assert __add_path_offset(offset, result, separator) == path
     return result
 
-def is_child_path(parent, child):
-    assert type(parent) == unicode
-    assert type(child) == unicode
+def is_child_path(parent, child, separator="/"):    
+    # We don't want any implicit conversions to unicode. That might
+    # cause decoding errors.
+    assert type(parent) == type(child)
+
+    assert separator in ("/", "\\")
     if parent == "":
         return True
-    result = child.startswith(parent + "/")
+    result = child.startswith(parent + separator)
     #print "is_child_path('%s', '%s') => %s" % (parent, child, result)
     return result
 
