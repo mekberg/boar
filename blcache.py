@@ -115,7 +115,8 @@ class BlobListCache:
 def __get_or_create_cache_dir():
     cachedir = os.getenv("BOAR_CACHEDIR")
     if not cachedir:
-        cachedir = os.path.join(os.path.expanduser("~"), ".boarcache")
+        return None # Disabled pending further testing, unless explicitly requested.
+        #cachedir = os.path.join(os.path.expanduser("~"), ".boarcache")
     if not os.path.exists(cachedir):
         try:
             os.mkdir(cachedir)
