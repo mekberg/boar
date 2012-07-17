@@ -73,8 +73,8 @@ class TestCli(unittest.TestCase):
         write_file("TestSessionåäö/a/fil.txt", testdata)
         call([BOAR, "ci"], cwd="TestSessionåäö/a")
         output, returncode = call([BOAR, "log", "fil.txt"], cwd="TestSessionåäö/a")
+        assert "r2 | " in output
         assert returncode == 0
-        print output
 
 class TestCliWindowsSpecific(unittest.TestCase):
     def setUp(self):
