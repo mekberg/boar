@@ -361,7 +361,7 @@ def cmd_log(args):
         front = wd.front
         if args and (args[0].startswith("/") or args[0].startswith("\\")):
             raise UserError("Path must not be absolute")
-        workdir_cwd = strip_path_offset(wd.root, ucwd)
+        workdir_cwd = strip_path_offset(wd.root, ucwd, separator=os.sep)
         offset = u""
         if args:
             offset = wd.wd_sessionpath(os.path.join(workdir_cwd, args[0]))
