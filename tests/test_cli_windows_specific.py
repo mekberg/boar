@@ -62,9 +62,19 @@ class TestCli(unittest.TestCase):
         testdata = "a\n\b\n\c"
         call([BOAR, "--repo", "TESTREPOåäö", "co", "TestSessionåäö"])
         write_file("TestSessionåäö/fil.txt", testdata)
-        call([BOAR, "--repo", "TESTREPOåäö", "ci"], cwd="TestSessionåäö")
+        call([BOAR, "ci"], cwd="TestSessionåäö")
         output, returncode = call([BOAR, "--repo", "TESTREPOåäö", "cat", "TestSessionåäö/fil.txt"])
         self.assertEqual(output, testdata)
+
+    def testLogWorkdir(self):
+        testdata = "Tjosan\nHejsan\n"
+        call([BOAR, "--repo", "TESTREPOåäö", "co", "TestSessionåäö"])
+        os.mkdir("TestSessionåäö/a/")
+        write_file("TestSessionåäö/a/fil.txt", testdata)
+        call([BOAR, "ci"], cwd="TestSessionåäö/a")
+        output, returncode = call([BOAR, "log", "fil.txt"], cwd="TestSessionåäö/a")
+        assert returncode == 0
+        print output
 
 class TestCliWindowsSpecific(unittest.TestCase):
     def setUp(self):
