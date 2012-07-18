@@ -50,9 +50,12 @@ def verify_assert():
 
 verify_assert() # This module uses assert to check for external conditions.
 
+def dumps_json(obj):
+    return json.dumps(obj, indent = 4)
+
 def write_json(filename, obj):
     assert not os.path.exists(filename), "File already exists: " + filename
-    data = json.dumps(obj, indent = 4)
+    data = dumps_json(obj)
     with StrictFileWriter(filename, md5sum(data), len(data)) as f:
         f.write(data)
 
