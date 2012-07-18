@@ -698,9 +698,10 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
             while datareader.bytes_left() > 0:
                 f.write(datareader.read(2**14))
         os.rename(tmpfile, target_path)
-    finally:
+    except:
         if os.path.exists(tmpfile):
             os.remove(tmpfile)
+        raise
 
 def bloblist_to_dict(bloblist):
     d = {}
