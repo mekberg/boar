@@ -246,7 +246,7 @@ class Workdir:
         old_bloblist = self.get_bloblist(old_revision)
         new_bloblist = self.get_bloblist(new_revision)
         new_bloblist_dict = bloblist_to_dict(new_bloblist)
-        for b in new_bloblist:
+        for b in sorted_bloblist(new_bloblist):
             if not is_child_path(self.offset, b['filename']):
                 continue
             if b['filename'] in modified_files:
