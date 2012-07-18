@@ -10,16 +10,10 @@ cd regression-boar-daily.11-Jul-2011/workdir
 # Relocate the workdir pointer to the repo.  Also, since the test data
 # contains a half-finished commit, let's change the session_id to
 # point at the latest revision (the one in progress of being
-# committed). This should probably be done with some future boar
-# commands eventually.
-cat >$testdir/regression-boar-daily.11-Jul-2011/workdir/.meta/info <<EOF || exit 1
-{
-    "session_name": "Test",
-    "offset": "",
-    "session_id": 7,
-    "repo_path": "$REPO"
-}
-EOF
+# committed).
+
+(cd $testdir/regression-boar-daily.11-Jul-2011/workdir && $BOAR relocate $REPO) || exit 1
+(cd $testdir/regression-boar-daily.11-Jul-2011/workdir && $BOAR update --ignore-changes -r 7) || exit 1
 
 REPO_PATH=$REPO $BOAR status -q |tee $testdir/status.txt || { echo "Couldn't execute status (note: output redirected)"; exit 1; }
 if [ `grep -c . $testdir/status.txt` -ne 1 ]; then 
