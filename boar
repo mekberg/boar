@@ -993,35 +993,39 @@ def cmd_lostfiles(args):
             if restore_missing:
                 wd.fetch_file(bi['filename'], bi['md5sum'], overwrite = False)
 
-def __clone_once(source_front, target_front):
+def __clone_once(source_front, target_front, skip_verify=False):
     if front.is_identical(source_front, target_front):
         print "Repositories are already identical"
         return
 
-    print "Quick verifying source repo"
-    verify_repo(source_front, verify_blobs = False)
-    print "Quick verifying destination repo"
-    verify_repo(target_front, verify_blobs = False)
+    if not skip_verify:
+        print "Quick verifying source repo"
+        verify_repo(source_front, verify_blobs = False)
+        print "Quick verifying destination repo"
+        verify_repo(target_front, verify_blobs = False)
+
     front.clone(source_front, target_front)
-    print "Performing full verify on cloned repo"
-    verify_repo(target_front, verify_blobs = True)
+
+    if not skip_verify:
+        print "Performing full verify on cloned repo"
+        verify_repo(target_front, verify_blobs = True)
     print "Repos are in sync."
 
-def __clone_replicate(repo1, repo2):
+def __clone_replicate(source_front, target_front, skip_verify = False):
+    if not skip_verify:
+        print "Quick verifying source repo"
+        verify_repo(source_front, verify_blobs = False)
+        print "Quick verifying destination repo"
+        verify_repo(target_front, verify_blobs = False)
     print "Entering continous replication mode."
-    print "Will replicate all incoming changes on %s to %s" % (repo1, repo2)
+    print "Will replicate all incoming changes on %s to %s" % (source_front, target_front)
     while True:
-        if repo1.isIdentical(repo2):
-            time.sleep(60)
+        if front.is_identical(source_front, target_front):
+            time.sleep(10)
             continue
         print "Incoming changes found. Cloning..."
-        verify_repo(Front(repo1), verify_blobs = False)
-        print "Quick verifying destination repo"
-        verify_repo(Front(repo2), verify_blobs = False)
-        repo2.pullFrom(repo1)
-        print "Performing full verify on cloned repo"
-        verify_repo(Front(repo2), verify_blobs = True)
-        print "Repos are in sync. Waiting for incoming changes..."
+        __clone_once(source_front, target_front, skip_verify=True)
+        print "Waiting for incoming changes..."
 
 def cmd_clone(args):
     if len(args) == 0:
@@ -1029,6 +1033,8 @@ def cmd_clone(args):
     parser = OptionParser(usage="usage: boar clone <source repo> <destination repo>")
     parser.add_option("-r", "--replicate", dest = "replicate", action="store_true",
                       help="Continously replicate any changes from the master to the clone (does not return)")
+    parser.add_option("--skip-verification", dest = "skip_verify", action="store_true",
+                      help="No verifications will be performed. WARNING: If the source repo is corrupt, the clone may also become corrupt.")
     (options, args) = parser.parse_args(args)
     if len(args) != 2:
         raise UserError("You must specify one source repository and one destination repository.")
@@ -1040,9 +1046,9 @@ def cmd_clone(args):
     if not front.is_continuation(base_front = target_front, cont_front = source_front):
         raise UserError("The source repo is not a continuation of the destination repo. Cannot clone.")
     if options.replicate:
-        __clone_replicate(source_front, target_front)
+        __clone_replicate(source_front, target_front, skip_verify = options.skip_verify)
     else:
-        __clone_once(source_front, target_front)
+        __clone_once(source_front, target_front, skip_verify = options.skip_verify)
 
 
 def cmd_diffrepo(args):
