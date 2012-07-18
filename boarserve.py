@@ -55,16 +55,19 @@ def init_stdio_server(repopath):
     sys.stdout = sys.stderr
     return server
 
+class ThreadedTCPServer(SocketServer.ForkingMixIn, SocketServer.TCPServer):
+    pass
+
 def run_socketserver(repopath, address, port):
     repository.Repo(repopath) # Just check if the repo path is valid
-    class BoarTCPHandler(SocketServer.BaseRequestHandler, SocketServer.ForkingMixIn):
+    class BoarTCPHandler(SocketServer.BaseRequestHandler):
         def handle(self):
             to_client = self.request.makefile(mode="wb")
             from_client = self.request.makefile(mode="rb")
             PipedBoarServer(repopath, from_client, to_client).serve()
-    server = SocketServer.TCPServer((address, port), BoarTCPHandler)
+    server = ThreadedTCPServer((address, port), BoarTCPHandler)
     ip = server.socket.getsockname()[0]
     if ip == "0.0.0.0":
         ip = socket.gethostname()
-    print "Serving repository %s as boar+tcp://%s:%s/" % (repopath, ip, port)
+    print "Serving repository %s as boar://%s:%s/" % (repopath, ip, port)
     server.serve_forever()        
