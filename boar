@@ -1224,6 +1224,16 @@ return_code = 0
 
 if __name__ == "__main__":
     t1 = time.time()
+
+    if os.name == "nt":
+        import msvcrt
+        # Without this, windows wininetd server breaks, as well as all binary
+        # stdout output, as in "cat".
+        msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+        msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+        
+    # The StreamEncoder affects what happens when we write unicode objects to
+    # the stream. Ordinary strings are unaffected.
     sys.stdout = StreamEncoder(sys.stdout)
     sys.stderr = StreamEncoder(sys.stderr)
     sys.argv = map(tounicode, sys.argv)
