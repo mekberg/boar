@@ -37,7 +37,7 @@ import boarserve
 
 json = get_json_module()
 
-BOAR_VERSION = "<UNDEFINED>"
+BOAR_VERSION = "boar.21-Jul-2012"
 
 def print_help():
     print """Boar version %s
