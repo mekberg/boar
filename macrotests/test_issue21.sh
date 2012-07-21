@@ -9,8 +9,8 @@ echo "file2" >workdir/file_unreadable.txt || exit 1
 chmod a-r workdir/file_unreadable.txt || exit 1
 $BOAR mkrepo TESTREPO || exit 1
 $BOAR --repo=TESTREPO mksession "Test" || exit 1
-$BOAR --repo=TESTREPO import workdir "Test/workdir" && { echo "Import of non-readable file succeeded - should fail"; exit 1; }
-$BOAR --repo=TESTREPO import --ignore-errors workdir "Test/workdir" || { echo "Import failed even though --ignore-errors was given"; exit 1; }
+$BOAR --repo=TESTREPO import -W workdir "Test/workdir" && { echo "Import of non-readable file succeeded - should fail"; exit 1; }
+$BOAR --repo=TESTREPO import -W --ignore-errors workdir "Test/workdir" || { echo "Import failed even though --ignore-errors was given"; exit 1; }
 chmod -R u+r workdir || exit 1
 rm -r workdir || exit 1
 rm -r TESTREPO || exit 1
@@ -35,8 +35,8 @@ echo "file1" >workdir/file.txt || exit 1
 echo "file2" >workdir/file_unreadable.txt || exit 1
 $BOAR mkrepo TESTREPO || exit 1
 $BOAR --repo=TESTREPO mksession "Test" || exit 1
-$BOAR --EXEC make_unreadable_at_commit.py --repo=TESTREPO import workdir "Test/workdir" && { echo "Import of non-readable file succeeded - should fail"; exit 1; }
-$BOAR --EXEC make_unreadable_at_commit.py --repo=TESTREPO import --ignore-errors workdir "Test/workdir" || { echo "Import failed even though --ignore-errors was given"; exit 1; }
+$BOAR --EXEC make_unreadable_at_commit.py --repo=TESTREPO import -W workdir "Test/workdir" && { echo "Import of non-readable file succeeded - should fail"; exit 1; }
+$BOAR --EXEC make_unreadable_at_commit.py --repo=TESTREPO import -W --ignore-errors workdir "Test/workdir" || { echo "Import failed even though --ignore-errors was given"; exit 1; }
 chmod -R u+r workdir || exit 1
 echo "Test part 2 succeeded"
 
