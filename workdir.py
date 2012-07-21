@@ -608,7 +608,8 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
 def init_workdir(path):
     """ Tries to find a workdir root directory at the given path or
     above. Returns a workdir object if successful, or None if not. """
-    wdparams = load_workdir_parameters()
+    assert isinstance(path, unicode)
+    wdparams = load_workdir_parameters(path)
     if wdparams == None:
         return None
     wd = Workdir(repoUrl = wdparams["repoUrl"],
@@ -618,8 +619,8 @@ def init_workdir(path):
                  root = wdparams["root"]) 
     return wd
 
-def load_workdir_parameters():
-    metapath = find_meta(tounicode(os.getcwd()))
+def load_workdir_parameters(path):
+    metapath = find_meta(path)
     if not metapath:
         return None
     info = load_meta_info(metapath)
