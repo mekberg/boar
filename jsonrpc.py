@@ -400,10 +400,8 @@ def log_filedate( filename ):
 
 HEADER_SIZE=21
 HEADER_MAGIC=0x626f6172 # "boar"
-HEADER_VERSION=2
-"""
-The header has 
-"""
+HEADER_VERSION=3
+
 def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L):
     assert binary_payload_size >= 0
     assert type(has_binary_payload) == bool
@@ -412,11 +410,26 @@ def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 
     assert len(header_str) == HEADER_SIZE
     return header_str
 
-def unpack_header(header_str):
-    assert len(header_str) == HEADER_SIZE, "Unexpected header size of " + str(len(header_str)) + " bytes"
-    magic, version, payload_size, has_binary_payload, binary_payload_size = \
-        struct.unpack("!III?Q", header_str)
-    assert magic == HEADER_MAGIC, "Unexpected header: " + header_str
+def read_header(stream):
+    leader = stream.read(8)
+    if len(leader) != 8:
+        raise ConnectionLost("Transport stream closed by other side.")
+    magic_number, version_number = struct.unpack("!II", leader)
+
+    if magic_number != HEADER_MAGIC:
+        raise ConnectionLost("Garbled message stream: %s..." % repr(leader))
+
+    if version_number != HEADER_VERSION:
+        raise ConnectionLost("Wrong message protocol version: Expected %s, got %s" % (HEADER_VERSION, version_number))
+
+    header_data = stream.read(13)
+
+    if len(header_data) != 13:
+        raise ConnectionLost("Transport stream closed by other side after greeting.")
+
+    payload_size, has_binary_payload, binary_payload_size = \
+        struct.unpack("!I?Q", header_data)
+
     if not has_binary_payload:
         assert binary_payload_size == 0
         binary_payload_size = None
@@ -455,10 +468,7 @@ class BoarMessageClient:
         self.s_out.flush()
         
     def __recv( self ):
-        header = self.s_in.read(HEADER_SIZE)
-        if len(header) == 0:
-            raise ConnectionLost("Transport stream closed unexpectedly.")
-        datasize, binary_data_size = unpack_header(header)
+        datasize, binary_data_size = read_header(self.s_in)
         data = self.s_in.read(datasize)
         if binary_data_size != None:            
             return data, StreamDataSource(self.s_in, binary_data_size)
@@ -524,11 +534,11 @@ class BoarMessageServer:
         try:
             self.log( "BoarMessageServer.Serve(): connected")
             while 1:
-                header = self.s_in.read(HEADER_SIZE)
-                if not header:
-                    self.log("Connection was closed by other side")
+                try:
+                    datasize, binary_data_size = read_header(self.s_in)
+                except ConnectionLost, e:
+                    self.log("Disconnected: %s" % e)
                     break
-                datasize, binary_data_size = unpack_header(header)
                 data = self.s_in.read(datasize)
                 if binary_data_size != None:
                     incoming_data_source = StreamDataSource(self.s_in, binary_data_size)
