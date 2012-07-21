@@ -12,7 +12,7 @@ grep "Usage: boar" no_cmd_output.txt || {
     cat no_cmd_output.txt; echo "No subcommand with --repo gave unexpected error message"; exit 1; }
 
 echo --- Test --help flag
-for subcmd in ci clone co diffrepo getprop info import list locate log ls mkrepo mksession setprop status update verify; do
+for subcmd in cat ci clone co contents diffrepo getprop info import list locate log ls mkrepo mksession setprop status update verify; do
     echo Testing $subcmd --help
     ( REPO_PATH="" $BOAR $subcmd --help | grep "Usage:" >/dev/null ) || \
 	{ echo "Subcommand '$subcmd' did not give a help message with --help flag"; exit 1; }
