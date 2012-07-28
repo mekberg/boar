@@ -292,7 +292,7 @@ class JsonRpc20:
         return data["method"], data["params"], data["id"]
 
     @staticmethod
-    def loads_response( string ):
+    def loads_response( string, allowed_exceptions ):
         """de-serialize a JSON-RPC Response/error
 
         :Returns: | [result, id] for Responses
@@ -345,10 +345,14 @@ class JsonRpc20:
             elif data["error"]["code"] == INVALID_PARAM_VALUES:
                 raise RPCInvalidParamValues(message,error_data)
             elif data["error"]["code"] == HANDLE_EXCEPTION:
-                #print data["error"]["data"]
-                try:
-                    exception = eval(data["error"]["data"])
-                except NameError:
+                exception = None
+                exception_obj = json.loads(data["error"]["data"])
+                assert isinstance(exception_obj['message'], unicode)
+                for exception_type in allowed_exceptions:
+                    if exception_obj['module'] == exception_type.__module__ and \
+                            exception_obj['name'] == exception_type.__name__:
+                        exception = exception_type(exception_obj['message'])
+                if not exception:
                     raise Exception("Unknown remote exception: %s" % data["error"]["data"])
                 assert isinstance(exception, Exception)
                 raise exception
@@ -400,7 +404,7 @@ def log_filedate( filename ):
 
 HEADER_SIZE=21
 HEADER_MAGIC=0x626f6172 # "boar"
-HEADER_VERSION=3
+HEADER_VERSION=4
 
 def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L):
     assert binary_payload_size >= 0
@@ -420,7 +424,7 @@ def read_header(stream):
         raise ConnectionLost("Garbled message stream: %s..." % repr(leader))
 
     if version_number != HEADER_VERSION:
-        raise ConnectionLost("Wrong message protocol version: Expected %s, got %s" % (HEADER_VERSION, version_number))
+        raise WrongProtocolVersion("Wrong message protocol version: Expected %s, got %s" % (HEADER_VERSION, version_number))
 
     header_data = stream.read(13)
 
@@ -536,6 +540,9 @@ class BoarMessageServer:
             while 1:
                 try:
                     datasize, binary_data_size = read_header(self.s_in)
+                except WrongProtocolVersion, e:
+                    self.__send_result("['Dummy message. The response header should tell the client that the server is of an incompatible version']")
+                    break
                 except ConnectionLost, e:
                     self.log("Disconnected: %s" % e)
                     break
@@ -572,13 +579,17 @@ class ServerProxy:
 
     :TODO: verbose/logging?
     """
-    def __init__( self, transport ):
+    def __init__( self, transport, allowed_exceptions ):
         """
         :Parameters:
             - transport: a Transport instance
+            - allowed_exceptions: A list of all classes that are valid incoming exceptions.
         """
         #TODO: check parameters
         self.__transport = transport
+        for exception_class in allowed_exceptions:
+            assert isinstance(exception_class, type)
+        self.allowed_exceptions = allowed_exceptions[:]
         self.active_datasource = None
 
     def __str__(self):
@@ -610,7 +621,7 @@ class ServerProxy:
         resp_str, result_data_source = self.__transport.sendrecv( req_str, datasource)
         if result_data_source:
             return result_data_source
-        resp = JsonRpc20.loads_response( resp_str )
+        resp = JsonRpc20.loads_response( resp_str, self.allowed_exceptions)
         return resp[0]
 
     def __getattr__(self, name):
@@ -719,7 +730,7 @@ class RpcHandler:
             self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id=None )
-
+        
         if method not in self.funcs:
             self.dead = True
             return JsonRpc20.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND], method), id )
@@ -742,7 +753,10 @@ class RpcHandler:
             return JsonRpc20.dumps_error( err, id=None )
         except Exception, err:
             self.dead = True
-            return JsonRpc20.dumps_error( RPCFault(HANDLE_EXCEPTION, traceback.format_exc(), repr(err)), id )
+            exception_string = json.dumps({'module': err.__class__.__module__,
+                                           'name': err.__class__.__name__,
+                                           'message': str(err)})
+            return JsonRpc20.dumps_error( RPCFault(HANDLE_EXCEPTION, traceback.format_exc(), exception_string), id )
 
         try:
             return JsonRpc20.dumps_response( result, id )

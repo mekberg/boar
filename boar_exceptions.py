@@ -26,6 +26,9 @@ class UserError(BoarException):
 class ConnectionLost(UserError):
     pass
 
+class WrongProtocolVersion(ConnectionLost):
+    pass
+
 class SessionNotFoundError(UserError):
     """This exception is thrown when an attempt has been made to
     access a non-existing session."""

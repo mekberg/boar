@@ -79,7 +79,15 @@ def user_friendly_open_local_repository(path):
     return repo
 
 def create_boar_proxy(from_server, to_server):
-    server = jsonrpc.ServerProxy(jsonrpc.BoarMessageClient(from_server, to_server))
+    allowed_exceptions = []
+    import exceptions, boar_exceptions, common
+    for module in exceptions, boar_exceptions, common:
+        for obj in module.__dict__.values():
+            if type(obj) == type and issubclass(obj, Exception):
+                allowed_exceptions.append(obj)
+
+    server = jsonrpc.ServerProxy(jsonrpc.BoarMessageClient(from_server, to_server), allowed_exceptions)
+
     try:
         assert server.ping() == "pong"
     except ConnectionLost, e:
