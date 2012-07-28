@@ -174,7 +174,8 @@ def checksum_fileobj(f, checksum_names, start = 0, end = None):
     checksummers = []
     for name in checksum_names:
         assert name in ("md5", "sha256", "sha512")
-        checksummers.append(eval("hashlib.%s()" % name))
+        summer = hashlib.__dict__[name]()
+        checksummers.append(summer)
     for block in file_reader(f, start, end):
         assert block != "", "Got an empty read"
         for m in checksummers:
