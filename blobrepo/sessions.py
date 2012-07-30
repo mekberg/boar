@@ -339,6 +339,7 @@ class SessionReader:
             raise CorruptionError("Session data for snapshot %s is mangled" % self.dirname)
         self.fingerprint_file = os.path.join(self.path, self.get_fingerprint() + ".fingerprint")
         self.quick_verify()
+        self.load_stats = None 
 
     def get_properties(self):
         """Returns a copy of the session properties."""
@@ -428,6 +429,7 @@ class SessionReader:
                 # Missing session here means repo corruption
                 raise CorruptionError("Required base snapshot %s is missing" % base_session_id)
             all_session_objs.append(session_obj)
+        self.load_stats = { "add_count": 0, "remove_count": 0, "total_count": 0 }
         bloblist = []
         seen = set()
         for session_obj in all_session_objs:
@@ -436,9 +438,12 @@ class SessionReader:
                 if blobinfo['filename'] in seen:
                     continue
                 seen.add(blobinfo['filename'])
+                self.load_stats['add_count'] += 1
                 if blobinfo.get("action", None) == "remove":
+                    self.load_stats['remove_count'] += 1
                     continue
                 bloblist.append(dict(blobinfo))
+        self.load_stats['total_count'] = len(bloblist)
         return bloblist
 
 
