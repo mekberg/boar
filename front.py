@@ -204,6 +204,7 @@ class Front:
         self.repo = repo
         self.new_session = None
         self.blobs_to_verify = []
+        self.loadstats = {}
 
     def allows_permanent_erase(self):
         return self.repo.allows_permanent_erase()
@@ -311,7 +312,14 @@ class Front:
         for b in bloblist:
             assert b['filename'] not in seen, "Duplicate file found in bloblist - internal error"
             seen.add(b['filename'])
+        self.loadstats[id] = session_reader.load_stats
         return bloblist
+
+    def get_session_load_stats(self, id):
+        """Returns the load stats dict for the given session. The
+        return value may be None if the session instance has not
+        yet loaded its bloblist."""
+        return self.loadstats.get(id, None)
 
     def get_session_raw_bloblist(self, id):
         session_reader = self.repo.get_session(id)
@@ -328,6 +336,7 @@ class Front:
 
     def create_base_snapshot(self, session_name, truncate = False):
         assert not self.new_session
+        assert truncate in (True, False)
         with self.repo:
             sid = self.find_last_revision(session_name)
             old_fingerprint = self.get_session_fingerprint(sid)
