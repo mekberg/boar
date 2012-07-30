@@ -181,16 +181,19 @@ class _NaiveSessionWriter:
 
 
 class SessionWriter:
-    def __init__(self, repo, session_name, base_session = None, session_id = None):
+    def __init__(self, repo, session_name, base_session = None, session_id = None, force_base_snapshot = False):
         assert session_name and isinstance(session_name, unicode)
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
+        assert isinstance(force_base_snapshot, bool)
+
         self.dead = False
         self.repo = repo
         self.session_name = session_name
         self.max_blob_size = None
         self.base_session = base_session
         self.session_path = None
+        self.force_base_snapshot = force_base_snapshot
         self.metadatas = {}
         # Summers for new blobs. { blobname: summer, ... }
         self.blob_writer = {}
@@ -201,18 +204,21 @@ class SessionWriter:
             prefix = "tmp_", 
             dir = os.path.join(self.repo.repopath, repository.TMP_DIR))
 
-        self.writer = _NaiveSessionWriter(session_name, base_session, self.session_path)
+        if self.force_base_snapshot:
+            self.writer = _NaiveSessionWriter(session_name, None, self.session_path)
+        else:
+            self.writer = _NaiveSessionWriter(session_name, base_session, self.session_path)
         # The latest_snapshot is used to detect any unexpected
         # concurrent changes in the repo when it is time to commit.
         self.latest_snapshot = repo.find_last_revision(session_name)
 
         self.base_session_info = {}
-        self.base_bloblist_dict = {}
+        self.base_bloblist_dict = {} # All blobinfos in the base snapshot, as a dict
         if self.base_session != None:
             self.base_session_info = self.repo.get_session(self.base_session).get_properties()['client_data']
             self.base_bloblist_dict = bloblist_to_dict(\
                 self.repo.get_session(self.base_session).get_all_blob_infos())
-        self.resulting_blobdict = self.base_bloblist_dict
+        self.resulting_blobdict = self.base_bloblist_dict # POTENTIAL BUG - should be copy?
 
         self.forced_session_id = None
         if session_id != None:
@@ -300,8 +306,15 @@ class SessionWriter:
                 (sessioninfo['name'], self.session_name)
         self.writer.set_fingerprint(bloblist_fingerprint(self.resulting_blobdict.values()))
         self.writer.set_client_data(sessioninfo)
-        for blobitem in self.metadatas.values():
+
+        if self.force_base_snapshot:
+            bloblist = self.resulting_blobdict.values()
+        else:
+            bloblist = self.metadatas.values()
+
+        for blobitem in bloblist:
             if "action" in blobitem:
+                assert not self.force_base_snapshot
                 self.writer.add_action_remove(blobitem['filename'])
             else:
                 self.writer.add_blobinfo(blobitem)

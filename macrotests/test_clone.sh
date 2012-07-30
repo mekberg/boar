@@ -19,7 +19,7 @@ cat > expected_original_repo_log.txt <<EOF
 !Revision id 1 \(.*\), 0 files, \(standalone\) Log: <not specified>
 !Revision id 2 \(.*\), 1 files, \(delta\) Log: Log message uno
 !Revision id 3 \(.*\), 1 files, \(delta\) Log: Log message räksmörgås
-!Revision id 4 \(.*\), 1 files, \(delta\) Log: Log message plain and simple
+!Revision id 4 \(.*\), 1 files, \(standalone\) Log: Log message plain and simple
 EOF
 
 $BOAR --repo=TESTREPO list TestSession |grep -v "Finished" >original_repo_log.txt || exit 1

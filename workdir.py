@@ -298,6 +298,12 @@ class Workdir:
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes(self.revision, ignore_errors = ignore_errors)
 
+        stats = self.front.get_session_load_stats(self.revision)
+
+        # If there are more removals than actual files, let's make
+        # things faster by creating a new base snapshot.
+        force_base_snapshot = stats != None and (stats['remove_count'] + stats['add_count'] >= 2 * stats['total_count'])
+
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
 
         if not allow_empty and (len(new_files) + len(modified_files) + len(deleted_files) == 0):
@@ -315,7 +321,7 @@ class Workdir:
 
         self.verify_manifest(unchanged_files + new_files + modified_files)
 
-        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message, ignore_errors)
+        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message, ignore_errors, force_base_snapshot)
 
         if write_meta:
             self.write_metadata()
@@ -338,7 +344,7 @@ class Workdir:
                 raise UserError("File %s contents conflicts with manifest" % wd_path)
 
 
-    def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors):
+    def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors, force_base_snapshot):
         """ Creates a new snapshot of the files in this
         workdir. Modified and new files are passed in the 'files'
         argument, deleted files in the 'deleted_files' argument. The
@@ -350,8 +356,11 @@ class Workdir:
         # their checksums stored in the checksum cache. The
         # self.get_changes() call will do that.
 
+        assert isinstance(force_base_snapshot, bool)
+        assert isinstance(ignore_errors, bool)
+
         try:
-            front.create_session(session_name = self.sessionName, base_session = base_snapshot)
+            front.create_session(session_name = self.sessionName, base_session = base_snapshot, force_base_snapshot = force_base_snapshot)
         except FileMutex.MutexLocked, e:
             raise UserError("The session '%s' is in use (lockfile %s)" % (self.sessionName, e.mutex_file))
 

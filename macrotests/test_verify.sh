@@ -26,7 +26,7 @@ cat >expected.txt <<EOF
 [2, 1, "TestSession", "8061e73301587d92fdca155181c92961", null, false]
 [3, 2, "TestSession", "4e35e0568a64e6b3c9dbaf26961deb38", null, false]
 [4, null, "EmptySnapshot", "d41d8cd98f00b204e9800998ecf8427e", null, false]
-[5, 3, "TestSession", "ed6b2754f96ba1e3c1cf10ab3e492b03", null, false]
+[5, null, "TestSession", "ed6b2754f96ba1e3c1cf10ab3e492b03", null, false]
 !Finished in .* seconds
 EOF
 
