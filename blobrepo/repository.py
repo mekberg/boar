@@ -535,14 +535,16 @@ class Repo:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]
 
-    def create_session(self, session_name, base_session = None, session_id = None):
+    def create_session(self, session_name, base_session = None, session_id = None, force_base_snapshot = False):
         misuse_assert(not self.readonly, "Cannot create a session in a write protected repo")
         assert isinstance(session_name, unicode)
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
-        return sessions.SessionWriter(self, session_name = session_name, \
-                                          base_session = base_session, \
-                                          session_id = session_id)
+        assert isinstance(force_base_snapshot, bool)
+        return sessions.SessionWriter(self, session_name = session_name, 
+                                      base_session = base_session, 
+                                      session_id = session_id,
+                                      force_base_snapshot = force_base_snapshot)
 
     def find_last_revision(self, session_name):
         """ Returns the id of the latest snapshot in the specified

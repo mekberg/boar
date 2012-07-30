@@ -325,14 +325,15 @@ class Front:
         session_reader = self.repo.get_session(id)
         return copy.copy(session_reader.get_raw_bloblist())
 
-    def create_session(self, session_name, base_session = None):
+    def create_session(self, session_name, base_session = None, force_base_snapshot = False):
         """Creates a new snapshot for the given session. Commit() must
         be called when the construction of the new snapshot is
         completed()."""
         assert isinstance(session_name, basestring), session_name
         assert not self.new_session, "There already exists an active new snapshot"
-        self.new_session = self.repo.create_session(session_name = session_name, \
-                                                        base_session = base_session)
+        self.new_session = self.repo.create_session(session_name = session_name, 
+                                                    base_session = base_session,
+                                                    force_base_snapshot = force_base_snapshot)
 
     def create_base_snapshot(self, session_name, truncate = False):
         assert not self.new_session
@@ -550,7 +551,7 @@ class DryRunFront:
     def get_session_bloblist(self, id):
         return self.realfront.get_session_bloblist(id)
 
-    def create_session(self, session_name, base_session = None):
+    def create_session(self, session_name, base_session = None, force_base_snapshot = False):
         pass
 
     def init_new_blob(self, blob_md5, size):
