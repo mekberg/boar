@@ -50,6 +50,14 @@ echo f2c >Import/f2.txt || exit 1
 echo f3c >Import/f3.txt || exit 1
 (cd Import && $BOAR ci -q ) || exit 1 # Snapshot 10, 6 adds, 3 total -> trigger rebalancing
 
+$BOAR co TestSession || exit 1
+md5sum -c - <<EOF || exit 1
+e9fc50a797b54e61ee8cef912a58d74a  TestSession/f1.txt
+832aa76e6ac74e563fc4ea0eca3c99fa  TestSession/f2.txt
+9c1ee37c2aa52c37d0cceebe1e2ac56d  TestSession/f3.txt
+EOF
+rm -r TestSession || exit 1
+
 # Remove one file per snapshot
 rm Import/f1.txt || exit 1
 (cd Import && $BOAR ci -q ) || exit 1 # Snapshot 11, rebalanced due to previous 0-length snapshot
@@ -86,5 +94,25 @@ $BOAR clone $REPO_PATH CLONE || exit 1
 $BOAR --repo=CLONE list --dump >output.txt || exit 1
 txtmatch.py expected.txt output.txt || {
     echo "Unexpected clone dump contents"; exit 1; }
+
+cat >expected.txt <<EOF
+!r13 | TestSession | .* | 0 log lines
+!r12 | TestSession | .* | 0 log lines
+!r11 | TestSession | .* | 0 log lines
+!r10 | TestSession | .* | 0 log lines
+!r9 | TestSession | .* | 0 log lines
+!r8 | TestSession | .* | 0 log lines
+!r7 | TestSession | .* | 0 log lines
+!r6 | TestSession | .* | 0 log lines
+!r5 | TestSession | .* | 0 log lines
+!r4 | TestSession | .* | 0 log lines
+!r3 | TestSession | .* | 0 log lines
+!r2 | TestSession | .* | 0 log lines
+!r1 | TestSession | .* | 0 log lines
+EOF
+
+$BOAR --repo="$REPO_PATH" log TestSession | grep TestSession >output.txt || exit 1
+txtmatch.py expected.txt output.txt || {
+    echo "Unexpected log contents"; exit 1; }
 
 true
