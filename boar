@@ -32,7 +32,6 @@ from front import Front, set_file_contents
 import workdir
 from common import *
 from boar_common import *
-import blcache
 import boarserve
 
 json = get_json_module()
@@ -88,7 +87,7 @@ def list_revisions(front, session_name):
     for sid in sids:
         session_info = front.get_session_info(sid)
         log_message = session_info.get("log_message", "<not specified>")
-        bloblist = blcache.get_bloblist(front, sid)
+        bloblist = front.get_session_bloblist(sid)
         if front.get_base_id(sid):
             is_base = "(delta)"
         else:
@@ -116,7 +115,7 @@ def list_files(front, session_name, revision):
     session_info = front.get_session_info(revision)
     if session_info == None or session_info.get("name") != session_name:
         raise UserError("There is no such session/revision")
-    for info in blcache.get_bloblist(front, revision):
+    for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
 def verify_repo(front, verify_blobs = True):
@@ -174,7 +173,7 @@ def cmd_locate(args):
 
     missing = []
     found = 0
-    inverted_bloblist = invert_bloblist(blcache.get_bloblist(front, revision))
+    inverted_bloblist = invert_bloblist(front.get_session_bloblist(revision))
     for root in files_to_look_for:
         if os.path.isdir(root):
             tree = get_tree(root, absolute_paths = True)
@@ -296,9 +295,9 @@ class _ChangePrinter:
     def get_comparer(self, sid):
         front = self.front
         current_bloblist = get_cached_bloblist(front, sid)
-        base_id = front.get_base_id(sid)
-        base_bloblist = get_cached_bloblist(front, base_id) if base_id else []
-        return treecompare_bloblists(base_bloblist, current_bloblist)
+        previous_rev = front.get_predecessor(sid)
+        previous_bloblist = get_cached_bloblist(front, previous_rev) if previous_rev else []
+        return treecompare_bloblists(previous_bloblist, current_bloblist)
 
     def print_changes(self, sid):
         comparer = self.get_comparer(sid)
@@ -465,8 +464,7 @@ def cmd_ls(args):
         raise UserError("No such file or directory found in session: "+path)        
 
 def get_cached_bloblist(front, revision):
-    cache = blcache.get_cache(front)
-    return cache.get_bloblist(revision)    
+    return front.get_session_bloblist(revision)    
     
 def cmd_verify(args):
     parser = OptionParser(usage="usage: boar verify [options]")
@@ -718,7 +716,7 @@ def cmd_contents(args):
     dump['revision'] = sessionId
     dump['fingerprint'] = front.get_session_fingerprint(sessionId)
     entries = []
-    for bi in blcache.get_bloblist(front, sessionId):
+    for bi in front.get_session_bloblist(sessionId):
         entries.append({'filename': bi['filename'],
                         'md5': bi['md5sum'],
                         'size': bi['size']})
@@ -992,7 +990,7 @@ def cmd_getprop(args):
 def cmd_find(front, args):
     cs, sessionName = args
     sessionId = front.find_last_revision(sessionName)
-    for bi in blcache.get_bloblist(front, sessionId):
+    for bi in front.get_session_bloblist(sessionId):
         if bi['md5sum'] == cs:
             print bi['filename']
 

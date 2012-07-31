@@ -34,9 +34,9 @@ cat >expected_dump_msg.txt <<EOF
 [2, null, "AnotherTestSession", "d41d8cd98f00b204e9800998ecf8427e", null, false]
 [3, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
 [4, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
-[5, 2, "AnotherTestSession", "0e997688909a2d27886dfdeaa627b560", null, false]
+[5, null, "AnotherTestSession", "0e997688909a2d27886dfdeaa627b560", null, false]
 [6, null, "__deleted", "d41d8cd98f00b204e9800998ecf8427e", null, true]
-[7, 5, "AnotherTestSession", "31a44468d11cc4924b15c5d106410a63", null, false]
+[7, null, "AnotherTestSession", "31a44468d11cc4924b15c5d106410a63", null, false]
 [8, null, "TestSession", "ed6b2754f96ba1e3c1cf10ab3e492b03", null, false]
 !Finished in .* seconds
 EOF
@@ -63,8 +63,8 @@ txtmatch.py expected.txt output.txt || { echo "Unexpected list result"; exit 1; 
 
 cat >expected.txt <<EOF
 !Revision id 2 \(.*\), 0 files, \(standalone\) Log: <not specified>
-!Revision id 5 \(.*\), 1 files, \(delta\) Log: <not specified>
-!Revision id 7 \(.*\), 1 files, \(delta\) Log: <not specified>
+!Revision id 5 \(.*\), 1 files, \(standalone\) Log: <not specified>
+!Revision id 7 \(.*\), 1 files, \(standalone\) Log: <not specified>
 !Finished in .* seconds
 EOF
 
