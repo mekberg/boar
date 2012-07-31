@@ -448,12 +448,16 @@ class SessionReader:
         for session_obj in all_session_objs:
             rawbloblist = session_obj.get_raw_bloblist()
             for blobinfo in rawbloblist:
+
+                if blobinfo.get("action", None) == "remove":
+                    self.load_stats['remove_count'] += 1
+                else:
+                    self.load_stats['add_count'] += 1
+
                 if blobinfo['filename'] in seen:
                     continue
                 seen.add(blobinfo['filename'])
-                self.load_stats['add_count'] += 1
                 if blobinfo.get("action", None) == "remove":
-                    self.load_stats['remove_count'] += 1
                     continue
                 bloblist.append(dict(blobinfo))
         self.load_stats['total_count'] = len(bloblist)
