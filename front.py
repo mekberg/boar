@@ -299,6 +299,18 @@ class Front:
         baseid = session_reader.get_base_id()
         return baseid
 
+    def get_predecessor(self, id):
+        info = self.get_session_info(id)
+        assert info, "No such revision"
+        session_name = info['name']
+        ids = self.get_session_ids(session_name)
+        ids.sort()
+        pos = ids.index(id)
+        assert pos >= 0
+        if pos == 0:
+            return None
+        return ids[pos - 1]
+
     def get_session_fingerprint(self, id):
         session_reader = self.repo.get_session(id)        
         properties = session_reader.get_properties()
@@ -319,7 +331,7 @@ class Front:
         """Returns the load stats dict for the given session. The
         return value may be None if the session instance has not
         yet loaded its bloblist."""
-        return self.loadstats.get(id, None)
+        return copy.copy(self.loadstats.get(id, None))
 
     def get_session_raw_bloblist(self, id):
         session_reader = self.repo.get_session(id)

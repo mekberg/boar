@@ -17,8 +17,8 @@ echo "Rev 4" >TestSession/r4.txt || exit 1
 
 cat > expected_original_repo_log.txt <<EOF
 !Revision id 1 \(.*\), 0 files, \(standalone\) Log: <not specified>
-!Revision id 2 \(.*\), 1 files, \(delta\) Log: Log message uno
-!Revision id 3 \(.*\), 1 files, \(delta\) Log: Log message räksmörgås
+!Revision id 2 \(.*\), 1 files, \(standalone\) Log: Log message uno
+!Revision id 3 \(.*\), 1 files, \(standalone\) Log: Log message räksmörgås
 !Revision id 4 \(.*\), 1 files, \(standalone\) Log: Log message plain and simple
 EOF
 

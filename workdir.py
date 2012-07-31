@@ -19,7 +19,6 @@ from __future__ import with_statement
 import os
 from front import Front, DryRunFront
 import blobrepo.repository as repository
-import blcache
 from treecomp import TreeComparer
 from common import *
 from boar_exceptions import *
@@ -299,10 +298,19 @@ class Workdir:
             self.get_changes(self.revision, ignore_errors = ignore_errors)
 
         stats = self.front.get_session_load_stats(self.revision)
-
-        # If there are more removals than actual files, let's make
-        # things faster by creating a new base snapshot.
-        force_base_snapshot = stats != None and (stats['remove_count'] + stats['add_count'] >= 2 * stats['total_count'])
+        if stats and stats['total_count'] == 0:
+            # If the previoys snapshot is empty, there's no use pointing to it
+            force_base_snapshot = True
+        elif stats:
+            # Add the impact of this new snapshot
+            stats['remove_count'] += len(deleted_files)            
+            stats['add_count'] += len(new_files) + len(modified_files)
+            stats['total_count'] += len(new_files) - len(deleted_files)
+            # If there are more removals than actual files, let's make
+            # things faster by creating a new base snapshot.
+            force_base_snapshot = stats['remove_count'] + stats['add_count']  >= 2 * stats['total_count']
+        else:
+            force_base_snapshot = False
 
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
 
@@ -397,7 +405,7 @@ class Workdir:
 
     def get_bloblist(self, revision):
         assert type(revision) == int, "Revision was '%s'" % revision
-        return blcache.get_bloblist(self.front, revision)
+        return self.front.get_session_bloblist(revision)
 
     def exists_in_workdir(self, csum):
         """ Returns true if at least one file with the given checksum exists
