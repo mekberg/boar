@@ -353,11 +353,7 @@ class Front:
         with self.repo:
             sid = self.find_last_revision(session_name)
             old_fingerprint = self.get_session_fingerprint(sid)
-            bloblist = self.get_session_bloblist(sid)
-            sessioninfo = self.get_session_info(sid)
-            self.create_session(session_name)
-            for blobinfo in bloblist:
-                self.add(blobinfo)
+            self.create_session(session_name, base_session = sid, force_base_snapshot = True)
             if truncate:
                 if not self.repo.allows_permanent_erase():
                     raise UserError("This repository does not allow destructive changes.")
