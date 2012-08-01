@@ -114,19 +114,27 @@ def read_file(path, expected_md5 = None):
         raise ContentViolation("File '%s' did not have expected checksum '%s'" % (path, expected_md5))
     return data
 
-def read_md5sum(path, expected_md5 = None):
-    """Reads a classic md5sum.exe output file and returns the data on
-    the form [(md5, filename), ...]. Note that the data must be utf-8 encoded,
-    or an UnicodeDecodeError will be raised. One notable source of such
-    non-utf-8 files is md5sum.exe on Windows."""
+def parse_md5sum(text):
+    """Expects a sting containing a classic md5sum.exe output format,
+    and returns the data on the form [(md5, filename), ...]. Note that
+    the data must be utf-8 encoded, or an UnicodeDecodeError will be
+    raised. One notable source of such non-utf-8 files is md5sum.exe
+    on Windows."""
     result = []
-    data = read_file(path, expected_md5)
-    for line in data.splitlines():
+    for line in text.splitlines():
         line = line.rstrip("\r\n")
         filename = line[34:]
         filename = filename.decode("utf-8")
         result.append((line[0:32], convert_win_path_to_unix(filename)))
     return result
+
+def read_md5sum(path, expected_md5 = None):
+    """Reads a classic md5sum.exe output file and returns the data on
+    the form [(md5, filename), ...]. Note that the data must be utf-8 encoded,
+    or an UnicodeDecodeError will be raised. One notable source of such
+    non-utf-8 files is md5sum.exe on Windows."""
+    data = read_file(path, expected_md5)
+    return parse_md5sum(data)
 
 _file_reader_sum = 0
 def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
