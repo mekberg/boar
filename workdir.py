@@ -119,16 +119,9 @@ class Workdir:
             if not fn.endswith((".txt", ".TXT", ".md5", ".MD5")):
                 # About 5% faster than doing the regexp every time
                 continue
-            m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5)", fn, flags=re.IGNORECASE)
-            if not m:
+            hashname, manifest_hash = parse_manifest_name(fn)
+            if not hashname:
                 continue
-            if m.group(3):
-                hashname = m.group(3).lower()
-                manifest_hash = None
-            else:
-                hashname = "md5"
-                manifest_hash = m.group(4).lower()
-
             if hashname not in ("md5"):
                 warn("Found manifest file %s, but hash type '%s' is not supported yet. Ignoring." % (fn, hashname))
                 continue

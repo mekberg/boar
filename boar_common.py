@@ -16,7 +16,7 @@
 
 from __future__ import with_statement
 
-import os
+import os, re
 
 from common import *
 
@@ -63,3 +63,18 @@ def sorted_bloblist(bloblist):
     def info_comp(x, y):
         return cmp(x['filename'], y['filename'])
     return sorted(bloblist, info_comp)
+
+def parse_manifest_name(path):
+    """Returns a tuple (lowercase hash name, hash). Both are None if
+    the path is not a valid manifest filename."""
+    m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5)", path, flags=re.IGNORECASE)
+    if not m:
+        return None, None
+    if m.group(3):
+        hashname = m.group(3).lower()
+        return hashname, None
+    else:
+        hashname = "md5"
+        manifest_hash = m.group(4).lower()
+        return hashname, manifest_hash
+
