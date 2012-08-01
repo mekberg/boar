@@ -35,6 +35,15 @@ def safe_delete_file(path):
     assert not filename.endswith(".recipe"), "safe_delete prevented deletion of recipe data"
     os.remove(path)
 
+def bloblist_to_dict(bloblist):
+    """Returns the bloblist as a dict on the form filename ->
+    blobinfo."""
+    blobdict = {}
+    for b in bloblist:
+        blobdict[b['filename']] = b
+    assert len(blobdict) == len(bloblist), "Duplicate filename in bloblist"
+    return blobdict
+
 def treecompare_bloblists(from_bloblist, to_bloblist):
     """Constructs and returns a TreeComparer instance using the
     filenames and md5sums found in the given bloblist entries."""
@@ -42,6 +51,7 @@ def treecompare_bloblists(from_bloblist, to_bloblist):
         cmpdict = {}
         for b in bloblist:
             cmpdict[b['filename']] = b['md5sum']
+        assert len(cmpdict) == len(bloblist), "Duplicate filename in bloblist"
         return cmpdict
 
     from_dict = bloblist_to_dict(from_bloblist)
