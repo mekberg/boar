@@ -108,6 +108,12 @@ class TestStrictFileWriterEnforcement(unittest.TestCase):
     def testWrongChecksum(self):
         self.assertRaises(common.ConstraintViolation, self.sfw.write, "avocato")
 
+    def testWithHappyPath(self):
+        with self.sfw:
+            self.sfw.write("avocado")
+        self.assertTrue(self.sfw.is_closed())
+        self.assertEquals("avocado", open(self.filename).read())
+
     def testWithContentViolation(self):
         try:
             with self.sfw:
