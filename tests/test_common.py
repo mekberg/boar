@@ -108,6 +108,36 @@ class TestStrictFileWriterEnforcement(unittest.TestCase):
     def testWrongChecksum(self):
         self.assertRaises(common.ConstraintViolation, self.sfw.write, "avocato")
 
+    def testWithContentViolation(self):
+        try:
+            with self.sfw:
+                self.sfw.write("AVOCADO")
+            assert False, "Should throw an exception"
+        except Exception, e:
+            # Must be a content violation
+            self.assertEquals(type(e), common.ContentViolation)
+        self.assertTrue(self.sfw.is_closed())
+
+    def testWithUnderrunViolation(self):
+        try:
+            with self.sfw:
+                self.sfw.write("AVO")
+            assert False, "Should throw an exception"
+        except Exception, e:
+            # Must be a size violation
+            self.assertEquals(type(e), common.SizeViolation)
+        self.assertTrue(self.sfw.is_closed())
+
+    def testWithOverrunViolation(self):
+        try:
+            with self.sfw:
+                self.sfw.write("avocados")
+            assert False, "Should throw an exception"
+        except Exception, e:
+            # Must be a size violation
+            self.assertEquals(type(e), common.SizeViolation)
+        self.assertTrue(self.sfw.is_closed())
+
 class TestStripPathOffset(unittest.TestCase):
     def testSimple(self):
         self.assertEquals("b", common.strip_path_offset("/a", "/a/b"))

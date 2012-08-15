@@ -694,10 +694,16 @@ class ConstraintViolation(Exception):
     violation of a usage contract."""
     pass
 
+class SizeViolation(ConstraintViolation):
+    """This exception is thrown by a StrictFileWriter when the written
+    file has more or less content than expected."""
+    pass
+
 class ContentViolation(ConstraintViolation):
     """This exception is thrown by a StrictFileWriter when the written
     file has a different content than expected."""
     pass
+
 
 class StrictFileWriter:
     """This class will work as a file object when created, but with
@@ -729,21 +735,33 @@ class StrictFileWriter:
 
     def write(self, buf):
         if self.written_bytes + len(buf) > self.expected_size:
-            raise ContentViolation("Violation of file contract (too big) detected: "+str(self.filename))
+            self.__close()
+            raise SizeViolation("Violation of file contract (too big) detected: "+str(self.filename))
         self.md5summer.update(buf)
         if self.written_bytes + len(buf) == self.expected_size:
             if self.md5summer.hexdigest() != self.expected_md5:
+                self.__close()
                 raise ContentViolation("Violation of file contract (checksum) detected: "+str(self.filename))
         self.f.write(buf)
         self.written_bytes += len(buf)
     
     def close(self):
+        if self.is_closed():
+            return
+        self.__close()
         if self.written_bytes != self.expected_size:
-            raise ContentViolation("Violation of file contract (too small, %s < %s) detected: %s" %
+            raise SizeViolation("Violation of file contract (too small, %s < %s) detected: %s" %
                                    (self.written_bytes, self.expected_size, self.filename))
-        if self.f:
-            self.f.close()
-            self.f = None
+
+    def __close(self):
+        """Closes the file without doing any constraint checks."""
+        if not self.f:
+            return
+        self.f.close()
+        self.f = None
+
+    def is_closed(self):
+        return self.f == None
         
     def __enter__(self):
         return self
