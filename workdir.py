@@ -373,7 +373,7 @@ class Workdir:
                 raise UserError("File %s contents conflicts with manifest" % wd_path)
             try:
                 check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
-            except ContentViolation:
+            except ConstraintViolation:
                 raise UserError("File changed during commit: %s" % wd_path)
             except EnvironmentError, e:
                 if ignore_errors:
