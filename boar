@@ -119,17 +119,37 @@ def list_files(front, session_name, revision):
     for info in front.get_session_bloblist(revision):
         print info['filename'], str(info['size']/1024+1) + "k"
 
-def verify_manifests(front, sid, verbose = False):
+def verify_manifests(front, sid, verbose = False, required_manifests = []):
+    assert type(verbose) == bool
     bloblist = front.get_session_bloblist(sid)
     blobdict = bloblist_to_dict(bloblist)
     manifests = [ f for f in blobdict.keys() if parse_manifest_name(f)[0]]
     manifests.sort()
     result = True
+    remaining_required_manifests = set(required_manifests)
     for manifest_filename in manifests:
+        hashname, expected_manifest_hash = parse_manifest_name(manifest_filename)
+        if hashname not in ("md5",):
+            warning("Cannot verify manifest %s - hash type not supported" % manifest_filename)
+            continue
         manifests_result = "OK"
         manifest_blob = blobdict[manifest_filename]['md5sum']
         manifest_basedir, _ = posixpath.split(manifest_filename)
-        md5data = parse_md5sum(front.get_blob(manifest_blob).read())
+        manifest_raw = front.get_blob(manifest_blob).read()
+        
+        # TODO: test manifest checksum
+        if expected_manifest_hash:
+            calculated_manifest_md5 = md5sum(manifest_raw)             
+            if expected_manifest_hash != calculated_manifest_md5:
+                print "%s CORRUPTED MANIFEST" % manifest_filename
+                result = False
+                continue
+            else:
+                print "%s is valid" % manifest_filename
+            if calculated_manifest_md5 in remaining_required_manifests:
+                del remaining_required_manifests[calculated_manifest_md5]
+
+        md5data = parse_md5sum(manifest_raw)
         for md5, filename in md5data:
             session_path = posixpath.join(manifest_basedir, filename)
             if session_path in blobdict and blobdict[session_path]['md5sum'] == md5:
@@ -137,8 +157,12 @@ def verify_manifests(front, sid, verbose = False):
             else:
                 result = False
                 manifest_result = "ERROR"
-                if verbose: print manifest_filename, filename, "ERROR"
+                print manifest_filename, filename, "ERROR"
         print manifest_filename, manifests_result
+
+    if remaining_required_manifests:
+        result = False
+        print "Missing manifests:", remaining_required_manifests
     return result
 
 def verify_repo(front, verify_blobs = True):
@@ -163,7 +187,6 @@ def verify_repo(front, verify_blobs = True):
             if bi['md5sum'] not in existing_blobs:
                 raise CorruptionError("Snapshot %s is missing blob %s" % (session_ids[i], bi['md5sum']))
         print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
-        verify_manifests(front, id)
     if not verify_blobs:
         print "Skipping blob verification"
         return True
@@ -502,18 +525,27 @@ def cmd_verify(args):
 
 def cmd_manifests(args):
     parser = OptionParser(usage="usage: boar manifests [options] <session name>")
+    parser.add_option("-e", "--require", dest = "required_manifests", action="append", default=[],
+                      help="The verification will fail unless a manifest with this md5 checksum exists in the snapshot")
+    
+    # -A tests all sessions
+    # -r revision to test 
+    # -e --require <hashsum>
     (options, args) = parser.parse_args(args)
     if not args:
         raise UserError("Too few arguments")
     elif len(args) != 1:
         raise UserError("Too many arguments")
+    for cs in options.required_manifests:
+        if not is_md5sum(cs):
+            raise UserError("Not a valid md5 checksum: %s" % cs)
     session_name = args[0]
     front = connect_to_repo(get_repo_url())
     latest_sid = front.find_last_revision(session_name)
     if not latest_sid:
         raise UserError("No such session found: %s" % (session_name))
 
-    all_ok = verify_manifests(front, latest_sid)
+    all_ok = verify_manifests(front, latest_sid, False, options.required_manifests)
     if not all_ok:
         raise UserError("Some manifest files failed verification")
 
