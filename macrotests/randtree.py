@@ -21,6 +21,13 @@ import os
 import time
 import random
 import array
+import hashlib
+
+def md5sum(data):
+    m = hashlib.md5()
+    m.update(data)
+    return m.hexdigest()
+
 from mkrandfile import mkrandfile_fast
 allowed_chars = u" abcdefghijklmnpqrstuvwxyzåäöABCDEFGHIJKLMNPQRSTUVWXYZÅÄÖ_0123456789"
 
@@ -67,6 +74,7 @@ class RandTree:
         self.dirs = [""]
         self.rnd = random.Random(0)
         self.files = {} # filename -> seed integer
+        self.file_data = {} # seed -> file contents (cache)
 
     def find_unused_filename(self, path, prefix = "", suffix = ""):
         random_base = get_random_filename(self.rnd)
@@ -102,17 +110,47 @@ class RandTree:
             del self.files[fn]
 
     def get_file_data(self, fn):
-        random.seed(self.files[fn])
-        data_array = array.array("B") # unsigned chars
-        size = random.randint(0, 2**16)
-        for x in xrange(0, size):
-            data_array.append(random.randrange(256))
-        data = data_array.tostring()
-        assert len(data) == size
-        return data
+        seed = self.files[fn]
+        if seed not in self.file_data:
+            random.seed(seed)
+            size = random.randint(0, 2**17)
+            bytes = [chr(x) for x in range(0, 256)]
+            self.file_data[seed] = ''.join([random.choice(bytes) for i in xrange(size)])
+        return self.file_data[seed]
+
+    def write(self, destination):
+        for fn in self.files:
+            assert not os.path.isabs(fn)
+            fullname = os.path.join(destination, fn)
+            directory = os.path.dirname(fullname)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            assert os.path.isdir(directory)
+            with open(fullname, "wb") as f:
+                f.write(self.get_file_data(fn))            
+
+    def delete_from(self, destination):
+        """ This method deletes all files written by "write()" from
+        the destination directory. Empty directories will not be
+        removed."""
+        for fn in self.files:
+            fullname = os.path.join(destination, fn)
+            os.remove(fullname)
+
+    def write_md5sum(self, destination, prefix = ""):
+        with open(destination, "wb") as f:
+            for fn in self.files:
+                f.write(md5sum(self.get_file_data(fn)))
+                f.write(" *")
+                f.write(os.path.join(prefix, fn.encode("utf-8")))
+                f.write(os.linesep)            
 
 def main():
     r = RandTree()
+    r.add_dirs(5)
+    r.add_files(10)
+    r.write("testtree")
+    r.write_md5sum("testtree.md5", "testtree")
     
 def main_old():
     #dirname, count, size = sys.argv[1:]
