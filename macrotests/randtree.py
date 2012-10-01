@@ -70,7 +70,8 @@ def add_random_tree(path, total_dirs, total_files, total_size):
         add_randomized_file(parent, total_size / total_files)
 
 class RandTree:
-    def __init__(self):
+    def __init__(self, directory):
+        self.directory = directory
         self.dirs = [""]
         self.rnd = random.Random(0)
         self.files = {} # filename -> seed integer
@@ -96,18 +97,33 @@ class RandTree:
             parent = self.rnd.choice(self.dirs)
             new_file = self.find_unused_filename(parent, prefix = "file_")
             self.files[new_file] = self.rnd.randint(0, 2**32)
+            self.__write_file(new_file)
+
+    def __write_file(self, fn):
+            assert not os.path.isabs(fn)
+            assert fn in self.files
+            fullname = os.path.join(self.directory, fn)
+            directory = os.path.dirname(fullname)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            assert os.path.isdir(directory)
+            with open(fullname, "wb") as f:
+                f.write(self.get_file_data(fn))
 
     def modify_files(self, number_of_files):
         assert number_of_files <= len(self.files)
         winners = self.rnd.sample(self.files, number_of_files)
         for fn in winners:
             self.files[fn] += 1
+            self.__write_file(fn)
 
     def delete_files(self, number_of_files):
         assert number_of_files <= len(self.files)
         winners = self.rnd.sample(self.files, number_of_files)
         for fn in winners:
             del self.files[fn]
+            fullname = os.path.join(self.directory, fn)
+            os.remove(fullname)
 
     def get_file_data(self, fn):
         seed = self.files[fn]
@@ -117,25 +133,6 @@ class RandTree:
             bytes = [chr(x) for x in range(0, 256)]
             self.file_data[seed] = ''.join([random.choice(bytes) for i in xrange(size)])
         return self.file_data[seed]
-
-    def write(self, destination):
-        for fn in self.files:
-            assert not os.path.isabs(fn)
-            fullname = os.path.join(destination, fn)
-            directory = os.path.dirname(fullname)
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-            assert os.path.isdir(directory)
-            with open(fullname, "wb") as f:
-                f.write(self.get_file_data(fn))            
-
-    def delete_from(self, destination):
-        """ This method deletes all files written by "write()" from
-        the destination directory. Empty directories will not be
-        removed."""
-        for fn in self.files:
-            fullname = os.path.join(destination, fn)
-            os.remove(fullname)
 
     def write_md5sum(self, destination, prefix = ""):
         with open(destination, "wb") as f:
