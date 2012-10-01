@@ -19,6 +19,13 @@ from __future__ import with_statement
 import sys, os, unittest, tempfile, shutil
 import subprocess
 
+if __name__ == '__main__':
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "macrotests"))
+
+import randtree
+
+import hashlib
+
 def call(cmd, check=True, cwd=None):
     """Execute a command and return output and status code. If 'check' is True,
     an exception will be raised if the command exists with an error code. If
@@ -42,6 +49,11 @@ else:
 def write_file(path, contents):
     with open(path, "wb") as f:
         f.write(contents)
+
+def md5sum(data):
+    m = hashlib.md5()
+    m.update(data)
+    return m.hexdigest()
 
 class TestCli(unittest.TestCase):
     def setUp(self):
@@ -102,7 +114,43 @@ class TestCliWindowsSpecific(unittest.TestCase):
     def testEmpty(self):
         pass
 
+class TestRandomTree(unittest.TestCase):
+    def setUp(self):
+        self.testdir = tempfile.mkdtemp(prefix="boar_test_random_tree_")
+        os.chdir(self.testdir)
+        call([BOAR, "mkrepo", "TESTREPO"])
+        call([BOAR, "--repo", "TESTREPO", "mksession", "TestSession"])
 
+    def tearDown(self):
+        os.chdir(BOAR_HOME)
+        shutil.rmtree(self.testdir)
+
+    def testEmpty(self):
+        manifest_filename = "workdir/manifest-md5.txt"
+        workdir = "workdir"
+        r = randtree.RandTree(workdir)
+        r.add_dirs(10)
+        r.add_files(50)
+        r.write_md5sum(manifest_filename)
+        call([BOAR, "--repo", "TESTREPO", "import", workdir, "TestSession"])
+
+        r.modify_files(1)
+        output, returncode = call([BOAR, "ci"], cwd = workdir, check = False)
+        assert returncode == 1, "Should fail due to manifest error"
+        assert "contents conflicts with manifest" in output
+
+        for x in range(0, 20):
+            r.delete_files(5)
+            r.add_files(5)
+            r.modify_files(5)
+            r.write_md5sum(manifest_filename)
+            call([BOAR, "ci"], cwd = workdir)
+            call([BOAR, "--repo", "TESTREPO", "manifests", "TestSession"])
+        manifest_md5sum = md5sum(open(manifest_filename, "rb").read())
+        self.assertEqual(manifest_md5sum, "7bfbcf05e769c56a6b344e28a0b57af5")
+        
+        print os.getcwd()
+        
 if __name__ == '__main__':
     unittest.main()
 
