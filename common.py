@@ -420,7 +420,8 @@ def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     then finished will be called.
     """
     assert isinstance(root, unicode) # type affects os.path.walk callback args
-    
+    assert type(skip) == type([]), "skip list must be a list"
+
     if not progress_printer:
         progress_printer = __DummyProgressPrinter()
 
