@@ -105,8 +105,9 @@ def dump_all_revisions(front):
         name = session_info.get("name", None)
         base = front.get_base_id(sid)
         deleted = sid in deleted_sids
+        #bloblist = front.get_session_bloblist(sid)
+        #print json.dumps((sid, base, name, front.get_session_fingerprint(sid), log_message, deleted)), front.get_session_load_stats(sid)
         print json.dumps((sid, base, name, front.get_session_fingerprint(sid), log_message, deleted))
-        #print json.dumps({"snapshot":sid, "base":base, "fingerprint":front.get_session_fingerprint(sid), "log":log_message, "deleted": sid in deleted_sids})
 
 def list_files(front, session_name, revision):
     try:
