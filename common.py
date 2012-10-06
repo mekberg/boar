@@ -664,7 +664,7 @@ def unc_abspath(s):
     converts the path to an UNC path without using the broken python 2.x os.path
     tools."""
     if os.name != "nt":
-        return os.abspath(s)
+        return os.path.abspath(s)
     if s.startswith(r"\\"):
         assert not "/" in s
         return s
