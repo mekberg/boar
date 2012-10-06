@@ -96,7 +96,6 @@ class TestCliWindowsSpecific(unittest.TestCase):
     #
     # Actual tests start here
     #
-
     def testNoArgs(self):
         output, returncode = call([BOAR], check=False)
         assert "Usage: boar" in output
@@ -110,60 +109,6 @@ class TestCliWindowsSpecific(unittest.TestCase):
     def testEmpty(self):
         pass
 
-class TestRandomTree(unittest.TestCase):
-    def setUp(self):
-        self.testdir = tempfile.mkdtemp(prefix="boar_test_random_tree_")
-        os.chdir(self.testdir)
-        call([BOAR, "mkrepo", "TESTREPO"])
-        call([BOAR, "--repo", "TESTREPO", "mksession", "TestSession"])
-
-    def tearDown(self):
-        os.chdir(BOAR_HOME)
-        shutil.rmtree(self.testdir)
-
-    def testEmpty(self):
-        manifest_filename = "workdir/manifest-md5.txt"
-        workdir = u"workdir"
-        r = randtree.RandTree(workdir)
-        r.add_dirs(10)
-        r.add_files(50)
-        r.write_md5sum(manifest_filename)
-        call([BOAR, "--repo", "TESTREPO", "import", workdir, "TestSession"])
-
-        r.modify_files(1)
-        output, returncode = call([BOAR, "ci"], cwd = workdir, check = False)
-        assert returncode == 1, "Should fail due to manifest error"
-        assert "contents conflicts with manifest" in output
-
-        for x in range(0, 20):
-            r.delete_files(5)
-            r.add_files(5)
-            r.modify_files(5)
-            r.write_md5sum(manifest_filename)
-            call([BOAR, "ci"], cwd = workdir)
-            call([BOAR, "--repo", "TESTREPO", "manifests", "TestSession"])
-        manifest_md5sum = md5sum(open(manifest_filename, "rb").read())
-        self.assertEqual(manifest_md5sum, "7bfbcf05e769c56a6b344e28a0b57af5")
-        
-        # Verify that the workdir contents matches the randtree instance
-        all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
-        all_files.remove("manifest-md5.txt")
-        self.assertEqual(set(all_files), set(r.files))
-        for fn in all_files:
-            path = os.path.join(workdir, fn)
-            self.assertEqual(md5sum(r.get_file_data(fn)), md5sum_file(path))
-            
-        # Remove the tree and check it out
-        shutil.rmtree(workdir)
-        call([BOAR, "--repo", "TESTREPO", "co", "TestSession", workdir])
-
-        # Do the check again on the fresh check-out
-        all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
-        all_files.remove("manifest-md5.txt")
-        self.assertEqual(set(all_files), set(r.files))
-        for fn in all_files:
-            path = os.path.join(workdir, fn)
-            self.assertEqual(md5sum(r.get_file_data(fn)), md5sum_file(path))
 
 if __name__ == '__main__':
     unittest.main()
