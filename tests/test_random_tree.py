@@ -66,7 +66,7 @@ class TestRandomTree(unittest.TestCase):
         manifest_filename = "workdir/manifest-md5.txt"
         workdir = u"workdir"
         assert len(workdir) < 50
-        r = randtree.RandTree(workdir, max_path_length=200)
+        r = randtree.RandTree(workdir, use_windows_limits=True, max_path_length=200)
         r.add_dirs(10)
         r.add_files(50)
         r.write_md5sum(manifest_filename)
@@ -85,7 +85,7 @@ class TestRandomTree(unittest.TestCase):
             call([BOAR, "ci"], cwd = workdir)
             call([BOAR, "--repo", "TESTREPO", "manifests", "TestSession"])
         manifest_md5sum = md5sum(open(manifest_filename, "rb").read())
-        self.assertEqual(manifest_md5sum, "c0fdee9906f2e5f76a5e9e18da1dc4f5")
+        self.assertEqual(manifest_md5sum, "e6426e40fa877351267dc064fdfe0c6c")
         
         # Verify that the workdir contents matches the randtree instance
         all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])

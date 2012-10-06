@@ -32,20 +32,29 @@ from common import *
 
 allowed_chars = u" abcdefghijklmnpqrstuvwxyzåäöABCDEFGHIJKLMNPQRSTUVWXYZÅÄÖ_0123456789"
 
-def get_random_filename(random = random):
+def get_random_filename(random = random, windows_compatible = False):
     result = ""
     for x in range(0, random.choice([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 21, 50, 200])):
         result += random.choice(allowed_chars)
+    if windows_compatible:
+        result = result.rstrip(". ") # Not allowed by most windows applications, including python
+        if result == "":
+            result = "x"
     return result
 
+def lowercase(iterable):
+    for s in iterable:
+        yield s.lower()
+
 class RandTree:
-    def __init__(self, directory, max_path_length = VERY_LARGE_NUMBER):
+    def __init__(self, directory, use_windows_limits = False, max_path_length = VERY_LARGE_NUMBER):
         self.directory = unc_abspath(directory)
         self.dirs = [""]
         self.rnd = random.Random(0)
         self.max_path_length = max_path_length
         self.files = {} # filename -> seed integer
         self.file_data = {} # seed -> file contents (cache)
+        self.use_windows_limits = use_windows_limits
 
     def find_unused_filename(self, prefix = "", suffix = ""):
         for n in xrange(0, 100):
@@ -54,14 +63,19 @@ class RandTree:
                 return candidate_path
         raise Exception("Couldn't find a suitable filename within the given constraints")
 
+    def has_filename(self, filename):
+        if not self.use_windows_limits:
+            return filename in self.files or filename in self.dirs
+        return filename.lower() in lowercase(self.files) or filename.lower() in lowercase(self.dirs)
+
     def __find_unused_filename(self, prefix, suffix):
         path = self.rnd.choice(self.dirs)
-        random_base = get_random_filename(self.rnd)
+        random_base = get_random_filename(self.rnd, windows_compatible = self.use_windows_limits)
         filename = os.path.join(path, prefix + random_base + suffix)
         index = 0
-        while filename in self.files or filename in self.dirs:
+        while self.has_filename(filename):
             index += 1
-            filename = os.path.join(path, prefix + random_base + str(index)+ suffix)
+            filename = os.path.join(path, prefix + random_base + str(index) + suffix)
         return filename
 
     def add_dirs(self, number_of_dirs):
@@ -119,6 +133,9 @@ class RandTree:
                 f.write(" *")
                 f.write(os.path.join(prefix, fn.encode("utf-8")))
                 f.write(os.linesep)            
+
+
+assert list(lowercase({"Tjo": 1})) == ["tjo"]
 
 """
 def main():
