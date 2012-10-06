@@ -63,8 +63,6 @@ class TestRandomTree(unittest.TestCase):
         shutil.rmtree(self.testdir)
 
     def testWindowsRandomTree(self):
-        if os.name == "nt":
-            return # This test will fail on windows, see issue 83
         manifest_filename = "workdir/manifest-md5.txt"
         workdir = u"workdir"
         assert len(workdir) < 50
@@ -110,6 +108,8 @@ class TestRandomTree(unittest.TestCase):
             self.assertEqual(md5sum(r.get_file_data(fn)), md5sum_file(path))
 
     def testNormalRandomTree(self):
+        if os.name == "nt":
+            return # This test will fail on windows, see issue 83
         manifest_filename = "workdir/manifest-md5.txt"
         workdir = u"workdir"
         r = randtree.RandTree(workdir)
