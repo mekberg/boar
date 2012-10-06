@@ -30,7 +30,6 @@ if __name__ == '__main__':
 
 from common import *
 
-from mkrandfile import mkrandfile_fast
 allowed_chars = u" abcdefghijklmnpqrstuvwxyzåäöABCDEFGHIJKLMNPQRSTUVWXYZÅÄÖ_0123456789"
 
 def get_random_filename(random = random):
@@ -39,48 +38,24 @@ def get_random_filename(random = random):
         result += random.choice(allowed_chars)
     return result
 
-def find_unused_filename(path, prefix = "", suffix = "", random = random):
-    random_base = get_random_filename(random = random)
-    filename = path + "/" + prefix + random_base + suffix
-    index = 0
-    while os.path.exists(filename):
-        index += 1
-        filename = path + "/" + prefix + random_base + str(index) + suffix
-    return filename
-
-def add_randomized_file(path, file_size = 0):
-    filename = find_unused_filename(path)
-    write_random_contents(filename, file_size)
-
-def write_random_contents(filename, file_size_bytes):
-    assert not os.path.exists(filename)
-    mkrandfile_fast(filename, file_size_bytes/1024)
-
-def add_random_tree(path, total_dirs, total_files, total_size):
-    existing_dirs = [path]
-    for n in xrange(total_dirs):
-        print "Creating dirs", n, "\r",
-        sys.stdout.flush()
-        parent = random.choice(existing_dirs)
-        new_dir = find_unused_filename(parent, prefix = "dir_")
-        os.mkdir(new_dir)
-        existing_dirs.append(new_dir)
-    for n in xrange(total_files):
-        print "Creating files", n, "\r",
-        sys.stdout.flush()
-        parent = random.choice(existing_dirs)
-        add_randomized_file(parent, total_size / total_files)
-
 class RandTree:
-    def __init__(self, directory):
+    def __init__(self, directory, max_path_length = VERY_LARGE_NUMBER):
         self.directory = unc_abspath(directory)
-        print "Directory:", self.directory
         self.dirs = [""]
         self.rnd = random.Random(0)
+        self.max_path_length = max_path_length
         self.files = {} # filename -> seed integer
         self.file_data = {} # seed -> file contents (cache)
 
-    def find_unused_filename(self, path, prefix = "", suffix = ""):
+    def find_unused_filename(self, prefix = "", suffix = ""):
+        for n in xrange(0, 100):
+            candidate_path = self.__find_unused_filename(prefix, suffix)
+            if len(candidate_path) <= self.max_path_length:
+                return candidate_path
+        raise Exception("Couldn't find a suitable filename within the given constraints")
+
+    def __find_unused_filename(self, prefix, suffix):
+        path = self.rnd.choice(self.dirs)
         random_base = get_random_filename(self.rnd)
         filename = os.path.join(path, prefix + random_base + suffix)
         index = 0
@@ -90,15 +65,15 @@ class RandTree:
         return filename
 
     def add_dirs(self, number_of_dirs):
-        for n in xrange(number_of_dirs):
-            parent = self.rnd.choice(self.dirs)
-            new_dir = self.find_unused_filename(parent, prefix = "dir_")
+        for n in xrange(number_of_dirs):            
+            new_dir = self.find_unused_filename(prefix = "dir_")
+            assert len(new_dir) <= self.max_path_length
             self.dirs.append(new_dir)
 
     def add_files(self, number_of_files):
         for n in xrange(number_of_files):
-            parent = self.rnd.choice(self.dirs)
-            new_file = self.find_unused_filename(parent, prefix = "file_")
+            new_file = self.find_unused_filename(prefix = "file_")
+            assert len(new_file) <= self.max_path_length
             self.files[new_file] = self.rnd.randint(0, 2**32)
             self.__write_file(new_file)
 
@@ -108,7 +83,6 @@ class RandTree:
             fullname = os.path.join(self.directory, fn)
             directory = os.path.dirname(fullname)
             if not os.path.exists(directory):
-                print len(directory), directory
                 unc_makedirs(directory)
             assert os.path.isdir(directory)
             with open(fullname, "wb") as f:
@@ -146,19 +120,12 @@ class RandTree:
                 f.write(os.path.join(prefix, fn.encode("utf-8")))
                 f.write(os.linesep)            
 
+"""
 def main():
-    r = RandTree()
+    r = RandTree("/tmp/TESTRAND", max_path_length = 50)
     r.add_dirs(5)
-    r.add_files(10)
-    r.write("testtree")
-    r.write_md5sum("testtree.md5", "testtree")
-    
-def main_old():
-    #dirname, count, size = sys.argv[1:]
-    dirname, dircount, filecount, total_size = sys.argv[1:]
-    os.mkdir(dirname)
-    random.seed((dircount, filecount)) # Make deterministic
-    add_random_tree(dirname, int(dircount), int(filecount), int(total_size))
+    r.add_files(100)
 
 if __name__ == "__main__":
     main()
+"""
