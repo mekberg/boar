@@ -438,7 +438,9 @@ def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
             assert type(name) == unicode, "All filenames should be unicode"
             try:
                 fullpath = os.path.join(dirname, name)
-                if os.path.isdir(fullpath):
+                unc_path = unc_abspath(fullpath)
+                assert os.path.exists(unc_path), "File was removed during scan"
+                if os.path.isdir(unc_path):
                     continue
             except OSError:
                 print "Failed on file:", dirname, name
@@ -655,6 +657,39 @@ def posix_normpath(path):
     assert not "\\" in result
     assert isinstance(result, unicode)
     return result
+
+
+def unc_abspath(s):
+    """This method works as os.abspath() except on Windows. On windows, it
+    converts the path to an UNC path without using the broken python 2.x os.path
+    tools."""
+    if os.name != "nt":
+        return os.abspath(s)
+    if s.startswith(r"\\"):
+        assert not "/" in s
+        return s
+    assert not s.startswith("\\")
+    s = s.replace("/", "\\")
+    if len(s) > 2 and s[1] == ":":
+        # Likely a windows non-UNC absolute path
+        return "\\\\?\\" + s
+    return "\\\\?\\" + os.getcwd() + "\\" + s
+
+def unc_makedirs(s):
+    """This method works as os.makedirs() except on Windows. On windows, it
+    first converts the path to an UNC path, thereby avoiding some limits on path
+    length."""
+    if os.name != "nt":
+        return os.makedirs(s)
+    unc_path = unc_abspath(s)
+    unc_mount, unc_tail = os.path.splitunc(unc_path)
+    unc_tail = unc_tail.lstrip("\\")
+    dirnames = unc_tail.split("\\")
+    path_to_mkdir = unc_mount
+    for part in dirnames:
+        path_to_mkdir += "\\" + part
+        if not os.path.exists(path_to_mkdir):
+            os.mkdir(path_to_mkdir)
 
 def FakeFile():
     """ Behaves like a file object, but does not actually do anything."""
