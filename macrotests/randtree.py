@@ -130,7 +130,7 @@ class RandTree:
         md5 = hashlib.md5()
         sep = "!SEPARATOR!"
         for fn in sorted(self.files):
-            md5.update(fn.encode("utf-8"))
+            md5.update(fn.replace("\\", "/").encode("utf-8"))
             md5.update(sep)
             md5.update(self.get_file_data(fn))
             md5.update(sep)
