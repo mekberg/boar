@@ -84,9 +84,7 @@ class TestRandomTree(unittest.TestCase):
             r.write_md5sum(manifest_filename)
             call([BOAR, "ci"], cwd = workdir)
             call([BOAR, "--repo", "TESTREPO", "manifests", "TestSession"])
-        manifest_md5sum = md5sum(open(manifest_filename, "rb").read())
-        self.assertEqual(manifest_md5sum, "e6426e40fa877351267dc064fdfe0c6c")
-        
+        self.assertEqual(r.fingerprint(), "f3515d526ac529ebb8d62001d9c2a3de")
         # Verify that the workdir contents matches the randtree instance
         all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
         all_files.remove("manifest-md5.txt")
@@ -105,6 +103,7 @@ class TestRandomTree(unittest.TestCase):
         self.assertEqual(set(all_files), set(r.files))
         for fn in all_files:
             path = os.path.join(workdir, fn)
+            print fn
             self.assertEqual(md5sum(r.get_file_data(fn)), md5sum_file(path))
 
     def testNormalRandomTree(self):
@@ -130,8 +129,7 @@ class TestRandomTree(unittest.TestCase):
             r.write_md5sum(manifest_filename)
             call([BOAR, "ci"], cwd = workdir)
             call([BOAR, "--repo", "TESTREPO", "manifests", "TestSession"])
-        manifest_md5sum = md5sum(open(manifest_filename, "rb").read())
-        self.assertEqual(manifest_md5sum, "7bfbcf05e769c56a6b344e28a0b57af5")
+        self.assertEqual(r.fingerprint(), "7b751c797c3b065e270d86da4274f6c8")
         
         # Verify that the workdir contents matches the randtree instance
         all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
