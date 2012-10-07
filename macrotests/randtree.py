@@ -23,10 +23,12 @@ import random
 import array
 import hashlib
 
-def md5sum(data):
-    m = hashlib.md5()
-    m.update(data)
-    return m.hexdigest()
+
+if __name__ == '__main__':
+    boar_home = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, boar_home)
+
+from common import *
 
 from mkrandfile import mkrandfile_fast
 allowed_chars = u" abcdefghijklmnpqrstuvwxyzåäöABCDEFGHIJKLMNPQRSTUVWXYZÅÄÖ_0123456789"
@@ -71,7 +73,8 @@ def add_random_tree(path, total_dirs, total_files, total_size):
 
 class RandTree:
     def __init__(self, directory):
-        self.directory = directory
+        self.directory = unc_abspath(directory)
+        print "Directory:", self.directory
         self.dirs = [""]
         self.rnd = random.Random(0)
         self.files = {} # filename -> seed integer
@@ -105,7 +108,8 @@ class RandTree:
             fullname = os.path.join(self.directory, fn)
             directory = os.path.dirname(fullname)
             if not os.path.exists(directory):
-                os.makedirs(directory)
+                print len(directory), directory
+                unc_makedirs(directory)
             assert os.path.isdir(directory)
             with open(fullname, "wb") as f:
                 f.write(self.get_file_data(fn))
