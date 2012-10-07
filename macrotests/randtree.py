@@ -126,14 +126,23 @@ class RandTree:
             self.file_data[seed] = ''.join([random.choice(bytes) for i in xrange(size)])
         return self.file_data[seed]
 
+    def fingerprint(self):
+        md5 = hashlib.md5()
+        sep = "!SEPARATOR!"
+        for fn in sorted(self.files):
+            md5.update(fn.encode("utf-8"))
+            md5.update(sep)
+            md5.update(self.get_file_data(fn))
+            md5.update(sep)
+        return md5.hexdigest()
+
     def write_md5sum(self, destination, prefix = ""):
         with open(destination, "wb") as f:
-            for fn in self.files:
+            for fn in sorted(self.files):
                 f.write(md5sum(self.get_file_data(fn)))
                 f.write(" *")
                 f.write(os.path.join(prefix, fn.encode("utf-8")))
-                f.write(os.linesep)            
-
+                f.write(os.linesep)
 
 assert list(lowercase({"Tjo": 1})) == ["tjo"]
 
