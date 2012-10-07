@@ -19,7 +19,7 @@ from __future__ import with_statement
 import sys
 import os
 import time
-import random
+import random as random_module
 import array
 import hashlib
 
@@ -32,7 +32,7 @@ from common import *
 
 allowed_chars = u" abcdefghijklmnpqrstuvwxyzåäöABCDEFGHIJKLMNPQRSTUVWXYZÅÄÖ_0123456789"
 
-def get_random_filename(random = random, windows_compatible = False):
+def get_random_filename(random, windows_compatible = False):
     result = ""
     for x in range(0, random.choice([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 21, 50, 200])):
         result += random.choice(allowed_chars)
@@ -50,7 +50,7 @@ class RandTree:
     def __init__(self, directory, use_windows_limits = False, max_path_length = VERY_LARGE_NUMBER):
         self.directory = unc_abspath(directory)
         self.dirs = [""]
-        self.rnd = random.Random(0)
+        self.rnd = random_module.Random(0)
         self.max_path_length = max_path_length
         self.files = {} # filename -> seed integer
         self.file_data = {} # seed -> file contents (cache)
@@ -104,14 +104,14 @@ class RandTree:
 
     def modify_files(self, number_of_files):
         assert number_of_files <= len(self.files)
-        winners = self.rnd.sample(self.files, number_of_files)
+        winners = self.rnd.sample(sorted(self.files), number_of_files)
         for fn in winners:
             self.files[fn] += 1
             self.__write_file(fn)
 
     def delete_files(self, number_of_files):
         assert number_of_files <= len(self.files)
-        winners = self.rnd.sample(self.files, number_of_files)
+        winners = self.rnd.sample(sorted(self.files), number_of_files)
         for fn in winners:
             del self.files[fn]
             fullname = os.path.join(self.directory, fn)
@@ -120,10 +120,10 @@ class RandTree:
     def get_file_data(self, fn):
         seed = self.files[fn]
         if seed not in self.file_data:
-            random.seed(seed)
-            size = random.randint(0, 2**17)
+            random_module.seed(seed)
+            size = random_module.randint(0, 2**17)
             bytes = [chr(x) for x in range(0, 256)]
-            self.file_data[seed] = ''.join([random.choice(bytes) for i in xrange(size)])
+            self.file_data[seed] = ''.join([random_module.choice(bytes) for i in xrange(size)])
         return self.file_data[seed]
 
     def fingerprint(self):
