@@ -371,23 +371,21 @@ assert posix_path_join("", "/tmp") == "/tmp"
 assert posix_path_join("", "tmp") == "tmp"
 assert posix_path_join("a", "b") == "a/b"
 
-import os.path as posixpath
-from os.path import curdir, sep, pardir, join
 # Python 2.5 compatible relpath(), Based on James Gardner's relpath
 # function.
 # http://www.saltycrane.com/blog/2010/03/ospathrelpath-source-code-python-25/
-def my_relpath(path, start=curdir):
+def my_relpath(path, start=os.path.curdir):
     """Return a relative version of a path"""
     assert os.path.isabs(path)
     if not path:
         raise ValueError("no path specified")
     assert isinstance(path, unicode)
     assert isinstance(start, unicode)
-    absstart = posixpath.abspath(start)
-    abspath = posixpath.abspath(path)
+    absstart = os.path.abspath(start)
+    abspath = os.path.abspath(path)
     if absstart[-1] != os.path.sep:
         absstart += os.path.sep
-    assert abspath.startswith(absstart), abspath + " " + absstart    
+    assert abspath.startswith(absstart), abspath + " " + absstart
     return abspath[len(absstart):]
 
 def open_raw(filename):

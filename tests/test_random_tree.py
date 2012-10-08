@@ -123,7 +123,7 @@ class TestRandomTree(unittest.TestCase):
         self._testRandomTree(workdir=workdir,
                              use_windows_limits=True,
                              max_path_length=100000,
-                             expected_fingerprint="53ec82c3db6bba2888e7fcbc0231b7c7")
+                             expected_fingerprint="f014553adf18a403d836e08576db193a")
         manifest_filename = "workdir/manifest-md5.txt"
 
 if __name__ == '__main__':
