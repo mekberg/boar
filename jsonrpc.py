@@ -404,7 +404,7 @@ def log_filedate( filename ):
 
 HEADER_SIZE=21
 HEADER_MAGIC=0x626f6172 # "boar"
-HEADER_VERSION=4
+HEADER_VERSION=5
 
 def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L):
     assert binary_payload_size >= 0
