@@ -51,6 +51,10 @@ def write_file(path, contents):
     with open(path, "wb") as f:
         f.write(contents)
 
+def backslashes_to_slashes(s):
+    return s.replace("\\", "/")
+
+
 class TestRandomTree(unittest.TestCase):
     def setUp(self):
         self.testdir = tempfile.mkdtemp(prefix="boar_test_random_tree_")
@@ -62,11 +66,9 @@ class TestRandomTree(unittest.TestCase):
         os.chdir(BOAR_HOME)
         shutil.rmtree(self.testdir)
 
-    def testWindowsRandomTree(self):
-        manifest_filename = "workdir/manifest-md5.txt"
-        workdir = u"workdir"
-        assert len(workdir) < 50
-        r = randtree.RandTree(workdir, use_windows_limits=True, max_path_length=200)
+    def _testRandomTree(self, workdir, use_windows_limits, max_path_length, expected_fingerprint):
+        manifest_filename = os.path.join(workdir, "manifest-md5.txt")
+        r = randtree.RandTree(workdir, use_windows_limits=use_windows_limits, max_path_length=max_path_length)
         r.add_dirs(10)
         r.add_files(50)
         r.write_md5sum(manifest_filename)
@@ -84,11 +86,11 @@ class TestRandomTree(unittest.TestCase):
             r.write_md5sum(manifest_filename)
             call([BOAR, "ci"], cwd = workdir)
             call([BOAR, "--repo", "TESTREPO", "manifests", "TestSession"])
-        self.assertEqual(r.fingerprint(), "26f472409c8f4ef3a8250a6bef6739ca")
+        self.assertEqual(r.fingerprint(), expected_fingerprint)
         # Verify that the workdir contents matches the randtree instance
         all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
         all_files.remove("manifest-md5.txt")
-        self.assertEqual(set(all_files), set(r.files))
+        self.assertEqual(set(all_files), set(map(backslashes_to_slashes, r.files)))
         for fn in all_files:
             path = os.path.join(workdir, fn)
             self.assertEqual(md5sum(r.get_file_data(fn)), md5sum_file(path))
@@ -100,55 +102,29 @@ class TestRandomTree(unittest.TestCase):
         # Do the check again on the fresh check-out
         all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
         all_files.remove("manifest-md5.txt")
-        self.assertEqual(set(all_files), set(r.files))
+        self.assertEqual(set(all_files), set(map(backslashes_to_slashes, r.files)))
         for fn in all_files:
             path = os.path.join(workdir, fn)
             self.assertEqual(md5sum(r.get_file_data(fn)), md5sum_file(path))
+
+
+    def testWindowsCompatibleRandomTree(self):
+        workdir = u"workdir"
+        assert len(workdir) < 50
+        self._testRandomTree(workdir=workdir,
+                             use_windows_limits=True,
+                             max_path_length=200,
+                             expected_fingerprint="26f472409c8f4ef3a8250a6bef6739ca")
 
     def testNormalRandomTree(self):
         if os.name == "nt":
             return # This test will fail on windows, see issue 83
-        manifest_filename = "workdir/manifest-md5.txt"
         workdir = u"workdir"
-        r = randtree.RandTree(workdir)
-        r.add_dirs(10)
-        r.add_files(50)
-        r.write_md5sum(manifest_filename)
-        call([BOAR, "--repo", "TESTREPO", "import", workdir, "TestSession"])
-
-        r.modify_files(1)
-        output, returncode = call([BOAR, "ci"], cwd = workdir, check = False)
-        assert returncode == 1, "Should fail due to manifest error"
-        assert "contents conflicts with manifest" in output
-
-        for x in range(0, 20):
-            r.delete_files(5)
-            r.add_files(5)
-            r.modify_files(5)
-            r.write_md5sum(manifest_filename)
-            call([BOAR, "ci"], cwd = workdir)
-            call([BOAR, "--repo", "TESTREPO", "manifests", "TestSession"])
-        self.assertEqual(r.fingerprint(), "53ec82c3db6bba2888e7fcbc0231b7c7")
-        
-        # Verify that the workdir contents matches the randtree instance
-        all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
-        all_files.remove("manifest-md5.txt")
-        self.assertEqual(set(all_files), set(r.files))
-        for fn in all_files:
-            path = os.path.join(workdir, fn)
-            self.assertEqual(md5sum(r.get_file_data(fn)), md5sum_file(path))
-            
-        # Remove the tree and check it out
-        shutil.rmtree(workdir)
-        call([BOAR, "--repo", "TESTREPO", "co", "TestSession", workdir])
-
-        # Do the check again on the fresh check-out
-        all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
-        all_files.remove("manifest-md5.txt")
-        self.assertEqual(set(all_files), set(r.files))
-        for fn in all_files:
-            path = os.path.join(workdir, fn)
-            self.assertEqual(md5sum(r.get_file_data(fn)), md5sum_file(path))
+        self._testRandomTree(workdir=workdir,
+                             use_windows_limits=True,
+                             max_path_length=100000,
+                             expected_fingerprint="f014553adf18a403d836e08576db193a")
+        manifest_filename = "workdir/manifest-md5.txt"
 
 if __name__ == '__main__':
     unittest.main()
