@@ -23,12 +23,13 @@ import random as random_module
 import array
 import hashlib
 
+import posixpath
 
 if __name__ == '__main__':
     boar_home = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, boar_home)
 
-from common import *
+from common import md5sum, VERY_LARGE_NUMBER
 
 allowed_chars = u" abcdefghijklmnpqrstuvwxyzåäöABCDEFGHIJKLMNPQRSTUVWXYZÅÄÖ_0123456789"
 
@@ -48,7 +49,7 @@ def lowercase(iterable):
 
 class RandTree:
     def __init__(self, directory, use_windows_limits = False, max_path_length = VERY_LARGE_NUMBER):
-        self.directory = unc_abspath(directory)
+        self.directory = os.path.abspath(directory)
         self.dirs = [""]
         self.rnd = random_module.Random(0)
         self.max_path_length = max_path_length
@@ -71,11 +72,11 @@ class RandTree:
     def __find_unused_filename(self, prefix, suffix):
         path = self.rnd.choice(self.dirs)
         random_base = get_random_filename(self.rnd, windows_compatible = self.use_windows_limits)
-        filename = os.path.join(path, prefix + random_base + suffix)
+        filename = posixpath.join(path, prefix + random_base + suffix)
         index = 0
         while self.has_filename(filename):
             index += 1
-            filename = os.path.join(path, prefix + random_base + str(index) + suffix)
+            filename = posixpath.join(path, prefix + random_base + str(index) + suffix)
         return filename
 
     def add_dirs(self, number_of_dirs):
@@ -88,16 +89,18 @@ class RandTree:
         for n in xrange(number_of_files):
             new_file = self.find_unused_filename(prefix = "file_")
             assert len(new_file) <= self.max_path_length
+            assert "\\" not in new_file
+            assert not os.path.isabs(new_file)
             self.files[new_file] = self.rnd.randint(0, 2**32)
             self.__write_file(new_file)
 
     def __write_file(self, fn):
-            assert not os.path.isabs(fn)
+            assert not posixpath.isabs(fn)
             assert fn in self.files
             fullname = os.path.join(self.directory, fn)
             directory = os.path.dirname(fullname)
             if not os.path.exists(directory):
-                unc_makedirs(directory)
+                os.makedirs(directory)
             assert os.path.isdir(directory)
             with open(fullname, "wb") as f:
                 f.write(self.get_file_data(fn))
