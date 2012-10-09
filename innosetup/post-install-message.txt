@@ -1,0 +1,7 @@
+Thank you for using Boar!
+
+You probably already knew this, but just to avoid potential confusion: Boar is a command line tool. That means, there will no executable program in the start menu. Your next step should be to open a command prompt and then read through the quick start guide at the Boar project page.
+
+Have fun,
+
+/Mats
