@@ -93,10 +93,17 @@ class TestRandomTree(unittest.TestCase):
             
         # Remove the tree and check it out
         shutil.rmtree(workdir)
+        assert not os.path.exists(workdir)
         call([BOAR, "--repo", "TESTREPO", "co", "TestSession", workdir])
 
         # Do the check again on the fresh check-out
         self._assertWorkdirEqualsTree(workdir, r)
+
+        call([BOAR, "clone", "TESTREPO", "CLONE"])
+        shutil.rmtree(workdir)
+        shutil.rmtree("TESTREPO")
+        call([BOAR, "--repo", "CLONE", "co", "TestSession", u"second_workdir"])
+        self._assertWorkdirEqualsTree(u"second_workdir", r)
 
     def _assertWorkdirEqualsTree(self, workdir, randtree):
         all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
