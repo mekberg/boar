@@ -352,6 +352,7 @@ class Front:
         assert truncate in (True, False)
         with self.repo:
             sid = self.find_last_revision(session_name)
+            assert sid, "No such session: %s" % session_name
             old_fingerprint = self.get_session_fingerprint(sid)
             self.create_session(session_name, base_session = sid, force_base_snapshot = True)
             if truncate:

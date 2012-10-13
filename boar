@@ -879,6 +879,8 @@ def cmd_truncate(args):
         raise UserError("Too many arguments")
     session_name, = args
     front = connect_to_repo(get_repo_url())
+    if not front.find_last_revision(session_name):
+        raise UserError("There is no session with the name '%s'" % session_name)
     sid = front.truncate(session_name)
     print "Session %s has been truncated to revision %s" % (session_name, sid)    
 
