@@ -137,4 +137,23 @@ chmod -R a+w TESTREPO_protected || exit 1
 
 txtmatch.py expected.txt output.txt || { echo "Unexpected error message for write protected session"; exit 1; }
 
+echo --- Verify nice error messages on non-existing session
+cat >expected.txt <<EOF
+ERROR: There is no session with the name 'NoSuchSession'
+!Finished in .* seconds
+EOF
+
+$BOAR --repo=TESTREPO_truncated truncate NoSuchSession >output.txt 2>&1 && {
+    cat output.txt; echo "Truncation of non-existing session should fail"; exit 1; }
+txtmatch.py expected.txt output.txt || { echo "Unexpected error message for non-existing session"; exit 1; }
+
+cat >expected.txt <<EOF
+ERROR: There is no session with the name 'TestSession/'
+!Finished in .* seconds
+EOF
+
+$BOAR --repo=TESTREPO_truncated truncate TestSession/ >output.txt 2>&1 && {
+    cat output.txt; echo "Truncation of non-existing session should fail"; exit 1; }
+txtmatch.py expected.txt output.txt || { echo "Unexpected error message for session with accidential slash"; exit 1; }
+
 exit 0 # All is well
