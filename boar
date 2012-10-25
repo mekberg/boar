@@ -1018,7 +1018,7 @@ def cmd_setprop(args):
     if options.file:
         session_name, property_name = args
         try:        
-            with safe_open(options.file, "r") as f:
+            with safe_open(options.file, "rb") as f:
                 new_value = f.read().decode("utf-8")
         except Exception, e:
             raise UserError("Problems reading file %s: %s" % (options.file, e))
