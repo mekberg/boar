@@ -656,9 +656,7 @@ def find_meta(path):
 
 def load_meta_info(metapath):
     assert metapath
-    with safe_open(os.path.join(metapath, "info"), "rb") as f:
-        info = json.load(f)
-    return info
+    return read_json(os.path.join(metapath, "info"))
 
 def create_front(repoUrl):
     return client.connect(repoUrl)
