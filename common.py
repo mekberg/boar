@@ -29,10 +29,19 @@ import textwrap
 from tempfile import TemporaryFile
 from threading import current_thread
 
-if sys.version_info >= (2, 6):
-    import json
-else:
+try: 
+    # Simplejson can be a lot faster, but has some odd optimization
+    # that makes the result mix str and unicode instances. By
+    # converting the argument string into unicode
     import simplejson as json
+    original_loads = json.loads
+    def unicode_loads(s, *args, **kw):
+        return original_loads(unicode(s, "utf-8"), *args, **kw)
+    json.loads = unicode_loads
+except ImportError: 
+    import json
+
+del json.load # Let's not use this
 
 def get_json_module():
     return json
@@ -61,7 +70,7 @@ def write_json(filename, obj):
 
 def read_json(filename):
     with safe_open(filename, "rb") as f:
-        return json.load(f)
+        return json.loads(f.read())
 
 """ This file contains code that is generally useful, without being
 specific for any project """
