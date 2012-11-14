@@ -36,7 +36,9 @@ try:
     import simplejson as json
     original_loads = json.loads
     def unicode_loads(s, *args, **kw):
-        return original_loads(unicode(s, "utf-8"), *args, **kw)
+        if type(s) == str:
+            s = unicode(s, "utf-8")
+        return original_loads(s, *args, **kw)
     json.loads = unicode_loads
 except ImportError: 
     import json
