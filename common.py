@@ -145,6 +145,8 @@ def read_md5sum(path, expected_md5 = None):
     or an UnicodeDecodeError will be raised. One notable source of such
     non-utf-8 files is md5sum.exe on Windows."""
     data = read_file(path, expected_md5)
+    if data.startswith('\xef\xbb\xbf'):
+        data = data[3:] # Remove unicode BOM
     return parse_md5sum(data)
 
 _file_reader_sum = 0
