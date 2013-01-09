@@ -191,6 +191,7 @@ def cmd_scanblocks(args):
     all_rolling = set(front.get_all_rolling())
     #print all_rolling
     hits = []
+    block_checksums = {}
     with open(filename, "r") as f:
         size = 0
         while True:
@@ -207,6 +208,7 @@ def cmd_scanblocks(args):
                 if front.has_block(rolling, sha):
                     print "True hit at", rs.offset()
                     hits.append(rs.offset())
+                    block_checksums[rs.offset()] = (rolling, sha)
                 else:
                     print "False hit at", rs.offset()
 
