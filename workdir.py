@@ -352,6 +352,7 @@ class Workdir:
         new snapshot will be created as a modification of the snapshot
         given in the 'base_snapshot' argument."""
 
+        #print "All checksums:", front.get_all_rolling()
         # To increase the chance of detecting spurious reading errors,
         # all the files should at this point have been scanned and had
         # their checksums stored in the checksum cache. The

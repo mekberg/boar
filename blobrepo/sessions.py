@@ -30,6 +30,7 @@ import hashlib
 import types
 
 from common import *
+from deduplication import BlockChecksum
 
 """
 The SessionWriter and SessionReader are together with Repository the
@@ -196,6 +197,8 @@ class SessionWriter:
         self.force_base_snapshot = force_base_snapshot
         self.metadatas = {}
         # Summers for new blobs. { blobname: summer, ... }
+        self.blob_checksummers = {}
+        self.blob_blocks = {}
         self.blob_writer = {}
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
@@ -249,6 +252,16 @@ class SessionWriter:
         
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""
+        assert is_md5sum(blob_md5)
+        assert not self.repo.has_blob(blob_md5), "blob already exists"
+        if not self.blob_checksummers.has_key(blob_md5):
+            assert blob_md5 not in self.blob_blocks
+            self.blob_checksummers[blob_md5] = hashlib.md5()
+            #self.blob_blocks[blob_md5] = BlockChecksum(2**17)
+            self.blob_blocks[blob_md5] = BlockChecksum(2**12)
+        assert not self.dead
+        self.blob_checksummers[blob_md5].update(fragment)
+        self.blob_blocks[blob_md5].feed_string(fragment)
         self.blob_writer[blob_md5].write(fragment)
 
     def blob_finished(self, blob_md5):
@@ -300,6 +313,12 @@ class SessionWriter:
         assert not self.dead
         assert self.session_path != None
         assert not self.blob_writer, "Commit while blob writer is active"
+        for name, blocksummer in self.blob_blocks.items():
+            seq = 0
+            for blockdata in blocksummer.blocks:
+                offset, rolling, sha256 = blockdata
+                self.repo.blocks.add_block(name, seq, offset, rolling, sha256)
+                seq += 1
         if "name" in sessioninfo:
             assert self.session_name == sessioninfo['name'], \
                 "Committed session name '%s' did not match expected name '%s'" % \

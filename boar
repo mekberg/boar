@@ -32,6 +32,8 @@ import front
 from front import Front, set_file_contents
 import workdir
 from common import *
+import deduplication
+
 from boar_common import *
 import boarserve
 
@@ -240,6 +242,56 @@ def cmd_locate(args):
                 for bi in blobinfos:
                     print "   " + bi['filename']
     print "%s files exists in the given session, %s do not." % (found, len(missing))
+
+
+
+def cmd_scanblocks(args):
+    WINDOW_SIZE = 2**12
+    front = init_repo_from_env(cmdline_repo)
+    filename, = args
+    rs = deduplication.RollingChecksum(WINDOW_SIZE)
+    all_rolling = set(front.get_all_rolling())
+    #print all_rolling
+    hits = []
+    block_checksums = {}
+    with open(filename, "r") as f:
+        size = 0
+        while True:
+            byte = f.read(1)
+            if byte == "":
+                break
+            size += 1
+            rs.feed_byte(ord(byte))
+            rolling = rs.value()
+            if rolling == None:
+                continue            
+            if rolling in all_rolling:
+                sha = rs.sha256()
+                if front.has_block(rolling, sha):
+                    print "True hit at", rs.offset()
+                    hits.append(rs.offset())
+                    block_checksums[rs.offset()] = (rolling, sha)
+                else:
+                    print "False hit at", rs.offset()
+
+    print "Thinking..."
+    hits = deduplication.remove_overlapping_blocks(hits, WINDOW_SIZE)
+    # Lets take a look at that list
+    redundant_bytes = 0
+    unique_bytes = 0
+    n = 0
+    while n < size:
+        if hits and hits[0] == n:
+            n += WINDOW_SIZE
+            hits.pop(0)
+            redundant_bytes += WINDOW_SIZE
+        else:
+            n += 1
+            unique_bytes += 1
+    print "Filesize:", size
+    print unique_bytes, "unique bytes"
+    print redundant_bytes, "redundant bytes"
+    print len(hits), "overlaps"
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
@@ -1308,6 +1360,8 @@ def main():
         return cmd_setprop(args[1:])
     elif args[0] == "getprop":
         return cmd_getprop(args[1:])
+    elif args[0] == "scanblocks":
+        return cmd_scanblocks(args[1:])
     else:
         print_help()
         return 1

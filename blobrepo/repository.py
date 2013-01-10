@@ -29,13 +29,15 @@ import sys
 import tempfile
 import random, time
 
+import derived
+
 from common import *
 from boar_common import *
 from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
 from boar_exceptions import *
 
-LATEST_REPO_FORMAT = 4
+LATEST_REPO_FORMAT = 5
 REPOID_FILE = "repoid.txt"
 VERSION_FILE = "version.txt"
 RECOVERYTEXT_FILE = "recovery.txt"
@@ -46,6 +48,7 @@ RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
 DERIVED_SHA256_DIR = "derived/sha256"
+DERIVED_BLOCKS_DIR = "derived/blocks"
 DELETE_MARKER = "deleted.json"
 
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
@@ -57,6 +60,8 @@ REPO_DIRS_V3 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
 REPO_DIRS_V4 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
+REPO_DIRS_V5 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR, DERIVED_BLOCKS_DIR)
 
 recoverytext = """Repository format v%s
 
@@ -135,7 +140,7 @@ def integrity_assert(test, errormsg = None):
 def create_repository(repopath):
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
-    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR:
+    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR:
         os.mkdir(os.path.join(repopath, d))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
     create_file(os.path.join(repopath, REPOID_FILE), generate_random_repoid())
@@ -149,7 +154,7 @@ def is_recipe_filename(filename):
 def looks_like_repo(repo_path):
     """Superficial check to see if the given path contains anything
     resembling a repo of any version."""
-    assert LATEST_REPO_FORMAT == 4 # Look through this function when updating format
+    assert LATEST_REPO_FORMAT == 5 # Look through this function when updating format
     for dirname in (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR):
         dirpath = os.path.join(repo_path, dirname)
         if not (os.path.exists(dirpath) and os.path.isdir(dirpath)):
@@ -176,12 +181,11 @@ class Repo:
         self.scanners = ()
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
-
         self.readonly = False
         if not isWritable(os.path.join(repopath, TMP_DIR)):
             if self.get_queued_session_id() != None:
                 raise UserError("Repo is write protected with pending changes. Cannot continue.")
-            if self.__get_repo_version() not in (0, 1, 2, 3, 4):
+            if self.__get_repo_version() not in (0, 1, 2, 3, 4, 5):
                 # Intentional explicit counting so that we'll remember to check compatability with future versions
                 raise UserError("Repo is write protected and from an unsupported older version of boar. Cannot continue.")
             notice("Repo is write protected - only read operations can be performed")
@@ -192,6 +196,7 @@ class Repo:
             try:
                 self.__upgrade_repo()
                 self.__quick_check()
+                self.blocks = derived.blobs_blocks(self, self.repopath + "/derived/blocks")
                 self.process_queue()
             finally:
                 self.repo_mutex.release()
@@ -217,8 +222,8 @@ class Repo:
         if repo_version != LATEST_REPO_FORMAT:
             raise UserError("Repo version %s can not be handled by this version of boar" % repo_version)
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        assert LATEST_REPO_FORMAT == 4 # Check below must be updated when repo format changes
-        for directory in REPO_DIRS_V4:
+        assert LATEST_REPO_FORMAT == 5 # Check below must be updated when repo format changes
+        for directory in REPO_DIRS_V5:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
         integrity_assert(os.path.exists(os.path.join(self.repopath, REPOID_FILE)), 
                          "Repository at %s does not have an identity file." % self.repopath)
@@ -247,7 +252,9 @@ class Repo:
         if self.__get_repo_version() == 3:
             self.__upgrade_repo_v3()
             assert self.__get_repo_version() == 4
-
+        if self.__get_repo_version() == 4:
+            self.__upgrade_repo_v4()
+            assert self.__get_repo_version() == 5
         try:
             self.__quick_check()
         except:
@@ -369,6 +376,27 @@ class Repo:
             if not os.path.exists(os.path.join(self.repopath, REPOID_FILE)):
                 create_file(os.path.join(self.repopath, REPOID_FILE), repoid)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "4")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+
+    def __upgrade_repo_v4(self):
+        """ This upgrade will perform the following actions:
+        * Update "version.txt" to 5
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
+        version = self.__get_repo_version()
+        assert version == 4
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        for directory in REPO_DIRS_V4:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                 "Repository says it is v4 format but is missing %s" % directory)
+        try:
+            if not dir_exists(os.path.join(self.repopath, DERIVED_BLOCKS_DIR)):
+                os.mkdir(os.path.join(self.repopath, DERIVED_BLOCKS_DIR))
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "5")
         except OSError, e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
@@ -739,7 +767,7 @@ class Repo:
                 continue
             blob_path = os.path.join(queued_item, filename)
             assert filename == md5sum_file(blob_path), "Invalid blob found in queue dir:" + blob_path
-    
+        
         # Check the existence of all required files
         # TODO: check the contents for validity
         meta_info = read_json(os.path.join(queued_item, "session.json"))
