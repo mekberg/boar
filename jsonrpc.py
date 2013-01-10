@@ -27,8 +27,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
 #=========================================
 #import
 
-import sys
+import sys, os
 import struct
+from boar_exceptions import *
+from common import *
+import traceback
 
 #=========================================
 # errors
@@ -48,6 +51,8 @@ PROCEDURE_EXCEPTION    = -32000
 AUTHENTIFICATION_ERROR = -32001
 PERMISSION_DENIED      = -32002
 INVALID_PARAM_VALUES   = -32003
+
+HANDLE_EXCEPTION   = -10002
 
 #human-readable messages
 ERROR_MESSAGE = {
@@ -87,61 +92,59 @@ class RPCFault(RPCError):
         self.error_code   = error_code
         self.error_message = error_message
         self.error_data   = error_data
+        self.stack_trace = traceback.format_exc()
+
     def __str__(self):
         return repr(self)
     def __repr__(self):
-        return( "<RPCFault %s: %s (%s)>" % (self.error_code, repr(self.error_message), repr(self.error_data)) )
+        return( "<RPCFault %s: %s (%s)>\nRPCFault Traceback:\n%s" % (self.error_code, repr(self.error_message), repr(self.error_data), self.stack_trace) )
 
 class RPCParseError(RPCFault):
     """Broken rpc-package. (PARSE_ERROR)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, PARSE_ERROR, ERROR_MESSAGE[PARSE_ERROR], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, PARSE_ERROR, message, error_data)
 
 class RPCInvalidRPC(RPCFault):
     """Invalid rpc-package. (INVALID_REQUEST)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, INVALID_REQUEST, ERROR_MESSAGE[INVALID_REQUEST], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, INVALID_REQUEST, message, error_data)
 
 class RPCMethodNotFound(RPCFault):
     """Method not found. (METHOD_NOT_FOUND)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, METHOD_NOT_FOUND, message, error_data)
 
 class RPCInvalidMethodParams(RPCFault):
     """Invalid method-parameters. (INVALID_METHOD_PARAMS)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, INVALID_METHOD_PARAMS, ERROR_MESSAGE[INVALID_METHOD_PARAMS], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, INVALID_METHOD_PARAMS, message, error_data)
 
 class RPCInternalError(RPCFault):
     """Internal error. (INTERNAL_ERROR)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, INTERNAL_ERROR, message, error_data)
 
 class RPCProcedureException(RPCFault):
     """Procedure exception. (PROCEDURE_EXCEPTION)"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, PROCEDURE_EXCEPTION, ERROR_MESSAGE[PROCEDURE_EXCEPTION], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, PROCEDURE_EXCEPTION, message, error_data)
 class RPCAuthentificationError(RPCFault):
     """AUTHENTIFICATION_ERROR"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, AUTHENTIFICATION_ERROR, ERROR_MESSAGE[AUTHENTIFICATION_ERROR], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, AUTHENTIFICATION_ERROR, message, error_data)
 class RPCPermissionDenied(RPCFault):
     """PERMISSION_DENIED"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, PERMISSION_DENIED, ERROR_MESSAGE[PERMISSION_DENIED], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, PERMISSION_DENIED, message, error_data)
 class RPCInvalidParamValues(RPCFault):
     """INVALID_PARAM_VALUES"""
-    def __init__(self, error_data=None):
-        RPCFault.__init__(self, INVALID_PARAM_VALUES, ERROR_MESSAGE[INVALID_PARAM_VALUES], error_data)
+    def __init__(self, message=None, error_data=None):
+        RPCFault.__init__(self, INVALID_PARAM_VALUES, message, error_data)
 
 
 #=========================================
-# data structure / serializer
 
-if sys.version_info >= (2, 6):
-    import json as simplejson
-else:
-    import simplejson
+json = get_json_module()
 
 #----------------------
 #
@@ -169,12 +172,10 @@ class DataSource:
         than specified if there are no more bytes to read."""
         raise NotImplementedError()
 
-class SocketDataSource(DataSource):
-    def __init__(self, socket, data_size):
-        self.socket = socket
+class StreamDataSource(DataSource):
+    def __init__(self, stream, data_size):
+        self.stream = stream
         self.remaining = data_size
-        if self.remaining == 0:
-            self.socket.close()
 
     def bytes_left(self):
         return self.remaining
@@ -183,13 +184,11 @@ class SocketDataSource(DataSource):
         if self.remaining == 0:
             return ""
         bytes_to_read = min(n, self.remaining)
-        data = RecvNBytes(self.socket, bytes_to_read)
+        data = self.stream.read(bytes_to_read)
         self.remaining -= bytes_to_read
         assert len(data) == bytes_to_read
         assert len(data) <= n
         assert self.remaining >= 0
-        if self.remaining == 0:
-            self.socket.close()
         return data
 
 class FileDataSource(DataSource):
@@ -217,100 +216,47 @@ class FileDataSource(DataSource):
             self.fo.close()
         return data
 
-def RecvNBytes(socket, n, timeout = None):
-    data_parts = []
-    readsize = 0
-    while readsize < n:
-        ready_list = select.select((socket,), (), (), timeout)[0]
-        if not ready_list:
-            raise Exception("Communication timeout")
-        d = socket.recv( min(4096, n - readsize ))
-        if len(d) == 0:
-            raise Exception("Unexpected end of stream")
-        data_parts.append(d)
-        readsize += len(d)
-    assert readsize == n, "Protocol error. Expected %s bytes, got %s" % (n, readsize)
-    data = "".join(data_parts)
-    return data    
-
 #----------------------
 # JSON-RPC 2.0
 
 class JsonRpc20:
-    """JSON-RPC V2.0 data-structure / serializer
-
-    :SeeAlso:   JSON-RPC 2.0 specification
-    :TODO:      catch simpeljson.dumps not-serializable-exceptions
-    """
-    def __init__(self, dumps=simplejson.dumps, loads=simplejson.loads):
-        """init: set serializer to use
-
-        :Parameters:
-            - dumps: json-encoder-function
-            - loads: json-decoder-function
-        :Note: The dumps_* functions of this class already directly create
-               the invariant parts of the resulting json-object themselves,
-               without using the given json-encoder-function.
-        """
-        self.dumps = simplejson.dumps
-        self.loads = simplejson.loads
-
-
-    def dumps_request( self, method, params=(), id=0 ):
-        """serialize JSON-RPC-Request
-
-        :Parameters:
-            - method: the method-name (str/unicode)
-            - params: the parameters (list/tuple/dict)
-            - id:     the id (should not be None)
-        :Returns:   | {"jsonrpc": "2.0", "method": "...", "params": ..., "id": ...}
-                    | "jsonrpc", "method", "params" and "id" are always in this order.
-                    | "params" is omitted if empty
-        :Raises:    TypeError if method/params is of wrong type or 
-                    not JSON-serializable
+    """BOAR-JSON-RPC V2.0"""
+    @staticmethod
+    def dumps_request( method, params=(), id=0 ):
+        """ Serialize a JSON-RPC-Request. Accepts a method name and parameters.
         """
         if not isinstance(method, (str, unicode)):
             raise TypeError('"method" must be a string (or unicode string).')
         if not isinstance(params, (tuple, list, dict)):
             raise TypeError("params must be a tuple/list/dict or None.")
+        obj = { "jsonrpc": "2.0",
+                "method": method,
+                "params": params,
+                "id": id }
+        return json.dumps(obj)
 
-        if params:
-            return '{"jsonrpc": "2.0", "method": %s, "params": %s, "id": %s}' % \
-                    (self.dumps(method), self.dumps(params), self.dumps(id))
-        else:
-            return '{"jsonrpc": "2.0", "method": %s, "id": %s}' % \
-                    (self.dumps(method), self.dumps(id))
+    @staticmethod
+    def dumps_response( result, id=None ):
+        """Serialize a JSON-RPC-Response. The 'result' argument may be
+        any serializable object."""
+        obj = { "jsonrpc": "2.0",
+                "result": result,
+                "id": id }
+        return json.dumps(obj)
 
-    def dumps_response( self, result, id=None ):
-        """serialize a JSON-RPC-Response (without error)
 
-        :Returns:   | {"jsonrpc": "2.0", "result": ..., "id": ...}
-                    | "jsonrpc", "result", and "id" are always in this order.
-        :Raises:    TypeError if not JSON-serializable
-        """
-        return '{"jsonrpc": "2.0", "result": %s, "id": %s}' % \
-                (self.dumps(result), self.dumps(id))
+    @staticmethod
+    def dumps_error( error, id=None ):
+        """serialize a JSON-RPC-Response-error, typically a RPCError instance."""
+        obj = { "jsonrpc": "2.0",
+                "error": {"code": error.error_code,
+                          "message": error.error_message,
+                          "data": error.error_data},
+                "id": id }
+        return json.dumps(obj)
 
-    def dumps_error( self, error, id=None ):
-        """serialize a JSON-RPC-Response-error
-      
-        :Parameters:
-            - error: a RPCFault instance
-        :Returns:   | {"jsonrpc": "2.0", "error": {"code": error_code, "message": error_message, "data": error_data}, "id": ...}
-                    | "jsonrpc", "result", "error" and "id" are always in this order, data is omitted if None.
-        :Raises:    ValueError if error is not a RPCFault instance,
-                    TypeError if not JSON-serializable
-        """
-        if not isinstance(error, RPCFault):
-            raise ValueError("""error must be a RPCFault-instance.""")
-        if error.error_data is None:
-            return '{"jsonrpc": "2.0", "error": {"code":%s, "message": %s}, "id": %s}' % \
-                    (self.dumps(error.error_code), self.dumps(error.error_message), self.dumps(id))
-        else:
-            return '{"jsonrpc": "2.0", "error": {"code":%s, "message": %s, "data": %s}, "id": %s}' % \
-                    (self.dumps(error.error_code), self.dumps(error.error_message), self.dumps(error.error_data), self.dumps(id))
-
-    def loads_request( self, string ):
+    @staticmethod
+    def loads_request( string ):
         """de-serialize a JSON-RPC Request/Notification
 
         :Returns:   | [method_name, params, id] or [method_name, params]
@@ -319,7 +265,7 @@ class JsonRpc20:
         :Raises:    RPCParseError, RPCInvalidRPC, RPCInvalidMethodParams
         """
         try:
-            data = self.loads(string)
+            data = json.loads(string)
         except ValueError, err:
             raise RPCParseError("No valid JSON. (%s)" % str(err))
         if not isinstance(data, dict):  raise RPCInvalidRPC("No valid RPC-package.")
@@ -345,14 +291,15 @@ class JsonRpc20:
         assert "id" in data, "JsonRPC notifications not supported"
         return data["method"], data["params"], data["id"]
 
-    def loads_response( self, string ):
+    @staticmethod
+    def loads_response( string, allowed_exceptions ):
         """de-serialize a JSON-RPC Response/error
 
         :Returns: | [result, id] for Responses
         :Raises:  | RPCFault+derivates for error-packages/faults, RPCParseError, RPCInvalidRPC
         """
         try:
-            data = self.loads(string)
+            data = json.loads(string)
         except ValueError, err:
             raise RPCParseError("No valid JSON. (%s)" % str(err))
         if not isinstance(data, dict):  raise RPCInvalidRPC("No valid RPC-package.")
@@ -377,24 +324,38 @@ class JsonRpc20:
                 raise RPCInvalidRPC("Invalid Response, invalid error-object.")
 
             error_data = data["error"]["data"]
+            message = data["error"]["message"]
+            
             if   data["error"]["code"] == PARSE_ERROR:
-                raise RPCParseError(error_data)
+                raise RPCParseError(message,error_data)
             elif data["error"]["code"] == INVALID_REQUEST:
-                raise RPCInvalidRPC(error_data)
+                raise RPCInvalidRPC(message,error_data)
             elif data["error"]["code"] == METHOD_NOT_FOUND:
-                raise RPCMethodNotFound(error_data)
+                raise RPCMethodNotFound(message,error_data)
             elif data["error"]["code"] == INVALID_METHOD_PARAMS:
-                raise RPCInvalidMethodParams(error_data)
+                raise RPCInvalidMethodParams(message,error_data)
             elif data["error"]["code"] == INTERNAL_ERROR:
-                raise RPCInternalError(error_data)
+                raise RPCInternalError(message,error_data)
             elif data["error"]["code"] == PROCEDURE_EXCEPTION:
-                raise RPCProcedureException(error_data)
+                raise RPCProcedureException(message,error_data)
             elif data["error"]["code"] == AUTHENTIFICATION_ERROR:
-                raise RPCAuthentificationError(error_data)
+                raise RPCAuthentificationError(message,error_data)
             elif data["error"]["code"] == PERMISSION_DENIED:
-                raise RPCPermissionDenied(error_data)
+                raise RPCPermissionDenied(message,error_data)
             elif data["error"]["code"] == INVALID_PARAM_VALUES:
-                raise RPCInvalidParamValues(error_data)
+                raise RPCInvalidParamValues(message,error_data)
+            elif data["error"]["code"] == HANDLE_EXCEPTION:
+                exception = None
+                exception_obj = json.loads(data["error"]["data"])
+                assert isinstance(exception_obj['message'], unicode)
+                for exception_type in allowed_exceptions:
+                    if exception_obj['module'] == exception_type.__module__ and \
+                            exception_obj['name'] == exception_type.__name__:
+                        exception = exception_type(exception_obj['message'])
+                if not exception:
+                    raise Exception("Unknown remote exception: %s" % data["error"]["data"])
+                assert isinstance(exception, Exception)
+                raise exception
             else:
                 raise RPCFault(data["error"]["code"], data["error"]["message"], error_data)
         #result
@@ -441,158 +402,165 @@ def log_filedate( filename ):
 
 #----------------------
 
-HEADER_SIZE=17
-HEADER_MAGIC=0x12345678
-HEADER_VERSION=1
-"""
-The header has 
-"""
-def pack_header(payload_size, binary_payload_size = None):
-    has_binary_payload = True
-    if binary_payload_size == None:
-        has_binary_payload = False
-        binary_payload_size = 0
-    header_str = struct.pack("!III?I", HEADER_MAGIC, HEADER_VERSION, payload_size,\
-                                 has_binary_payload, binary_payload_size)
+HEADER_SIZE=21
+HEADER_MAGIC=0x626f6172 # "boar"
+HEADER_VERSION=5
+
+def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L):
+    assert binary_payload_size >= 0
+    assert type(has_binary_payload) == bool
+    header_str = struct.pack("!III?Q", HEADER_MAGIC, HEADER_VERSION, payload_size,\
+                                 has_binary_payload, long(binary_payload_size))
     assert len(header_str) == HEADER_SIZE
     return header_str
 
-def unpack_header(header_str):
-    assert len(header_str) == HEADER_SIZE
-    magic, version, payload_size, has_binary_payload, binary_payload_size = \
-        struct.unpack("!III?I", header_str)
-    assert magic == HEADER_MAGIC, header_str
+def read_header(stream):
+    leader = stream.read(8)
+    if len(leader) != 8:
+        raise ConnectionLost("Transport stream closed by other side.")
+    magic_number, version_number = struct.unpack("!II", leader)
+
+    if magic_number != HEADER_MAGIC:
+        raise ConnectionLost("Garbled message stream: %s..." % repr(leader))
+
+    if version_number != HEADER_VERSION:
+        raise WrongProtocolVersion("Wrong message protocol version: Expected %s, got %s" % (HEADER_VERSION, version_number))
+
+    header_data = stream.read(13)
+
+    if len(header_data) != 13:
+        raise ConnectionLost("Transport stream closed by other side after greeting.")
+
+    payload_size, has_binary_payload, binary_payload_size = \
+        struct.unpack("!I?Q", header_data)
+
     if not has_binary_payload:
         assert binary_payload_size == 0
         binary_payload_size = None
     return payload_size, binary_payload_size
 
-import socket, select
-class TransportTcpIp:
-    """Transport via socket.
-   
-    :SeeAlso:   python-module socket
-    :TODO:
-        - documentation
-        - improve this (e.g. make sure that connections are closed, socket-files are deleted etc.)
-        - exception-handling? (socket.error)
+class BoarMessageClient:
+    """This class is the client end of a connection capable of passing
+    opaque message strings and streamed data. 
     """
-    def __init__( self, addr = None, limit=4096, sock_type=socket.AF_INET, sock_prot=socket.SOCK_STREAM, timeout=1.0, logfunc=log_dummy ):
-        """
-        :Parameters:
-            - addr: socket-address
-            - timeout: timeout in seconds
-            - logfunc: function for logging, logfunc(message)
-        :Raises: socket.timeout after timeout
-        """
-        self.limit  = limit
-        self.addr   = addr
-        self.s_type = sock_type
-        self.s_prot = sock_prot
-        self.s      = None
-        self.timeout = timeout
-        self.log    = logfunc
+    def __init__( self, s_in, s_out, logfunc=log_dummy ):
+        assert s_in and s_out
+        self.s_in = s_in
+        self.s_out = s_out
+        self.call_count = 0
 
-    def connect( self ):
-        self.close()
-        self.log( "connect to %s" % repr(self.addr) )
-        self.s = socket.socket( self.s_type, self.s_prot )
-        self.s.settimeout( self.timeout )
-        self.s.connect( self.addr )
+    def log(self, s):
+        print s
 
     def close( self ):
-        if self.s is not None:
-            self.log( "close %s" % repr(self.addr) )
-            self.s.close()
-            self.s = None
+        self.s_in.close()
+        self.s_out.close()
 
     def __repr__(self):
-        return "<TransportSocket, %s>" % repr(self.addr)
+        return "<JsonrpcClient, %s, %s>" % (self.s_in, self.s_out)
     
-    def send( self, string ):
-        if self.s is None:
-            self.connect()
-        header = pack_header(len(string))
-        self.s.sendall( header )
-        self.s.sendall( string )
-        self.log( "TransportSocket.Send() --> "+repr(string) )
+    def __send( self, string, datasource = None ):
+        bin_length = 0
+        if datasource:
+            bin_length = datasource.bytes_left()
+        header = pack_header(len(string), datasource != None, bin_length)
+        self.s_out.write(header)
+        self.s_out.write(string)
+        if datasource:
+            while datasource.bytes_left() > 0:
+                self.s_out.write(datasource.read(2**14))
+        self.s_out.flush()
         
-    def recv( self ):
-        if self.s is None:
-            self.connect()
-        header = RecvNBytes(self.s, HEADER_SIZE)
-        datasize, binary_data_size = unpack_header(header)
-        data = RecvNBytes(self.s, datasize, 5.0)
-        self.log( "TransportSocket.Recv() --> "+repr(data) )
+    def __recv( self ):
+        datasize, binary_data_size = read_header(self.s_in)
+        data = self.s_in.read(datasize)
         if binary_data_size != None:            
-            return data, SocketDataSource(self.s, binary_data_size)
+            return data, StreamDataSource(self.s_in, binary_data_size)
         else:
             return data, None
 
-    def sendrecv( self, string ):
+    def sendrecv( self, string, data_source = None ):
         """send data + receive data + close"""
-        self.close()
-        data_source = None
-        try:
-            self.log("SendRecv id = " + str(id(self)))
-            self.send( string )
-            self.log("SendRecv Waiting for reply")
-            reply, data_source = self.recv()
-            self.log("SendRecv Got a reply")
-            return reply, data_source
-        finally: 
-            if data_source == None:
-                self.close()
+        self.__send( string, data_source )
+        return self.__recv()
 
+
+class BoarMessageServer:
+    """This class is the server end of a connection capable of passing
+    opaque message strings and streamed data. It is the responsibility
+    of the given 'handler' object to make sense of the received
+    messages and compose suitable replies.
+    
+    The 'handler' object must have a method named "handle" accepting
+    two parameters. The first is the received message as a string, the
+    other is a DataSource instance. The DataSource instance is only
+    given if the message contains streamed data, otherwise it is
+    None. The "handle" method must return either a string or a
+    DataSource instance, which will be sent to the client.
+    """
+    def __init__( self, s_in, s_out, handler, logfunc=log_dummy ):
+        assert s_in and s_out
+        self.s_in = s_in
+        self.s_out = s_out
+        self.call_count = 0
+        self.handler = handler
+
+    def log(self, s):
+        pass
+
+    def close( self ):
+        self.s_in.close()
+        self.s_out.close()
+
+    def __repr__(self):
+        return "<BoarMessageServer, %s, %s>" % (self.s_in, self.s_out)
+    
     def init_server(self):
-        if self.s:
-            return
-        self.close()
-        self.s = socket.socket( self.s_type, self.s_prot )
-        self.log( "Server id %s listens at %s" % (id(self),self.addr) )
-        self.s.bind( self.addr )
-        self.s.listen(1)
+        pass
+    
+    def __send_result(self, result):
+        assert result != None
+        if isinstance(result, DataSource):
+            dummy_result = jsonrpc20.dumps_response(None)
+            header = pack_header(len(dummy_result), True, result.bytes_left())
+            self.s_out.write( header )
+            self.s_out.write( dummy_result )
+            while result.bytes_left() > 0:
+                piece = result.read(2**14)
+                self.s_out.write(piece)
+        else:
+            header = pack_header(len(result))
+            self.s_out.write( header )
+            self.s_out.write( result )
+        self.s_out.flush()
 
-    def serve(self, handler, n=None):
-        """open socket, wait for incoming connections and handle them.
-        
-        :Parameters:
-            - n: serve n requests, None=forever
-        """
+    def serve(self):
         try:
-            self.init_server()
-            n_current = 0
+            self.log( "BoarMessageServer.Serve(): connected")
             while 1:
-                if n is not None  and  n_current >= n:
+                try:
+                    datasize, binary_data_size = read_header(self.s_in)
+                except WrongProtocolVersion, e:
+                    self.__send_result("['Dummy message. The response header should tell the client that the server is of an incompatible version']")
                     break
-                conn, addr = self.s.accept()
-                self.log( "TransportSocket.Serve(): %s connected" % repr(addr) )
-                header = RecvNBytes(conn, HEADER_SIZE)
-                self.log( "TransportSocket.Serve(): got an header")
-                datasize, binary_data_size = unpack_header(header)
-                assert binary_data_size == None, "Not implemented yet. Was: " + str(binary_data_size)
-                data = RecvNBytes(conn, datasize, 5.0)
-                self.log( "TransportSocket.Serve(): Got a message: %s --> %s" % (repr(addr), repr(data)) )
-                result = handler(data)
-                self.log( "TransportSocket.Serve(): Message was handled ok" )
-                assert result != None
-                self.log( "TransportSocket.Serve(): Responding to %s <-- %s" % (repr(addr), repr(result)) )  
-                if isinstance(result, DataSource):
-                    dummy_result = jsonrpc20.dumps_response(None)
-                    header = pack_header(len(dummy_result), result.bytes_left())
-                    conn.sendall( header )
-                    conn.sendall( dummy_result )
-                    while result.bytes_left() > 0:
-                        conn.sendall(result.read(2**14))
+                except ConnectionLost, e:
+                    self.log("Disconnected: %s" % e)
+                    break
+                data = self.s_in.read(datasize)
+                if binary_data_size != None:
+                    incoming_data_source = StreamDataSource(self.s_in, binary_data_size)
                 else:
-                    header = pack_header(len(result))
-                    conn.sendall( header )
-                    conn.sendall( result )
-                self.log( "TransportSocket.Serve(): Response sent" )
-                self.log( "TransportSocket.Serve(): %s close" % repr(addr) )
-                conn.close()
-                n_current += 1
+                    incoming_data_source = None
+                result = self.handler.handle(data, incoming_data_source)
+                if incoming_data_source:
+                    assert incoming_data_source.bytes_left() == 0,\
+                        "The data source object must be exhausted by the handler."
+                self.__send_result(result)
+                self.call_count += 1
+                if self.handler.dead:
+                    break
         finally:
+            #open("/tmp/call_count.txt", "w").write(str(self.call_count) + " calls\n")
             self.close()
 
 
@@ -604,8 +572,6 @@ class ServerProxy:
 
     A logical connection to a RPC server.
 
-    It works with different data/serializers and different transports.
-
     Notifications and id-handling/multicall are not yet implemented.
 
     :Example:
@@ -613,34 +579,49 @@ class ServerProxy:
 
     :TODO: verbose/logging?
     """
-    def __init__( self, data_serializer, transport ):
+    def __init__( self, transport, allowed_exceptions ):
         """
         :Parameters:
-            - data_serializer: a data_structure+serializer-instance
             - transport: a Transport instance
+            - allowed_exceptions: A list of all classes that are valid incoming exceptions.
         """
         #TODO: check parameters
-        self.__data_serializer = data_serializer
         self.__transport = transport
+        for exception_class in allowed_exceptions:
+            assert isinstance(exception_class, type)
+        self.allowed_exceptions = allowed_exceptions[:]
+        self.active_datasource = None
 
     def __str__(self):
         return repr(self)
     def __repr__(self):
-        return "<ServerProxy for %s, with serializer %s>" % (self.__transport, self.__data_serializer)
+        return "<ServerProxy for %s>" % (self.__transport)
 
     def __req( self, methodname, args=None, kwargs=None, id=0 ):
         # JSON-RPC 2.0: only args OR kwargs allowed!
+        if self.active_datasource:
+            assert self.active_datasource.bytes_left() == 0, \
+                "The data source must be exhausted before any more jsonrpc calls can be made."
+        datasource = kwargs.get("datasource", None)
+
+        if datasource:
+            assert isinstance(datasource, DataSource)
+            self.active_datasource = datasource
+            del kwargs["datasource"]
+        for arg in args:
+            assert not isinstance(arg, DataSource), "DataSource must be a keyword argument"
+
         if len(args) > 0 and len(kwargs) > 0:
             raise ValueError("Only positional or named parameters are allowed!")
         if len(kwargs) == 0:
-            req_str  = self.__data_serializer.dumps_request( methodname, args, id )
+            req_str  = JsonRpc20.dumps_request( methodname, args, id )
         else:
-            req_str  = self.__data_serializer.dumps_request( methodname, kwargs, id )
+            req_str  = JsonRpc20.dumps_request( methodname, kwargs, id )
 
-        resp_str, data_source = self.__transport.sendrecv( req_str )
-        if data_source:
-            return data_source
-        resp = self.__data_serializer.loads_response( resp_str )
+        resp_str, result_data_source = self.__transport.sendrecv( req_str, datasource)
+        if result_data_source:
+            return result_data_source
+        resp = JsonRpc20.loads_response( resp_str, self.allowed_exceptions)
         return resp[0]
 
     def __getattr__(self, name):
@@ -672,39 +653,20 @@ class _method:
 #=========================================
 # server side: Server
 
-class Server:
-    """RPC-server.
-
-    It works with different data/serializers and 
-    with different transports.
-
-    :Example:
-        see module-docstring
-
-    :TODO:
-        - mixed JSON-RPC 1.0/2.0 server?
-        - logging/loglevels?
-    """
-    def __init__( self, data_serializer, transport, logfile=None ):
+class RpcHandler:
+    def __init__( self, logfile=None ):
         """
         :Parameters:
-            - data_serializer: a data_structure+serializer-instance
-            - transport: a Transport instance
             - logfile: file to log ("unexpected") errors to
         """
         #TODO: check parameters
-        self.__data_serializer = data_serializer
-        self.__transport = transport
-        self.__transport.init_server()
+        self.dead = False
         self.logfile = logfile
         if self.logfile is not None:    #create logfile (or raise exception)
             f = codecs.open( self.logfile, 'a', encoding='utf-8' )
             f.close()
 
         self.funcs = {}
-
-    def __repr__(self):
-        return "<Server for %s, with serializer %s>" % (self.__transport, self.__data_serializer)
 
     def log(self, message):
         """write a message to the logfile (in utf-8)"""
@@ -745,8 +707,8 @@ class Server:
             self.funcs[function.__name__] = function
         else:
             self.funcs[name] = function
-    
-    def handle(self, rpcstr):
+
+    def handle(self, rpcstr, incoming_data_source):
         """Handle a RPC-Request.
 
         :Parameters:
@@ -755,46 +717,53 @@ class Server:
         :Raises:  RPCFault (and maybe others)
         """
         #TODO: id
+        assert not self.dead, "An exception has already killed the server - go away"
         try:
-            req = self.__data_serializer.loads_request( rpcstr )
+            req = JsonRpc20.loads_request( rpcstr )
             if len(req) == 2:
                 raise RPCFault("JsonRPC notifications not supported")
             method, params, id = req
         except RPCFault, err:
-            return self.__data_serializer.dumps_error( err, id=None )
+            self.dead = True
+            return JsonRpc20.dumps_error( err, id=None )
         except Exception, err:
+            self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id=None )
-
+            return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id=None )
+        
         if method not in self.funcs:
-            return self.__data_serializer.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND]), id )
+            self.dead = True
+            return JsonRpc20.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND], method), id )
 
         try:
             if isinstance(params, dict):
+                if incoming_data_source:
+                    params['datasource'] = incoming_data_source
                 result = self.funcs[method]( **params )
             else:
-                result = self.funcs[method]( *params )
+                if incoming_data_source:     
+                    result = self.funcs[method]( *params, **{'datasource': incoming_data_source} )
+                else:
+                    result = self.funcs[method]( *params )
             if isinstance(result, DataSource):
                 return result
 
         except RPCFault, err:
-            return self.__data_serializer.dumps_error( err, id=None )
+            self.dead = True
+            return JsonRpc20.dumps_error( err, id=None )
         except Exception, err:
-            print( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
+            self.dead = True
+            exception_string = json.dumps({'module': err.__class__.__module__,
+                                           'name': err.__class__.__name__,
+                                           'message': str(err)})
+            return JsonRpc20.dumps_error( RPCFault(HANDLE_EXCEPTION, traceback.format_exc(), exception_string), id )
 
         try:
-            return self.__data_serializer.dumps_response( result, id )
+            return JsonRpc20.dumps_response( result, id )
         except Exception, err:
+            self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
-            return self.__data_serializer.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
+            return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )
 
-    def serve(self, n=None):
-        """serve (forever or for n communicaions).
-        
-        :See: Transport
-        """
-        self.__transport.serve( self.handle, n )
 
-#=========================================
 

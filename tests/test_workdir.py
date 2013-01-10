@@ -40,7 +40,6 @@ import workdir
 from blobrepo import repository
 from common import get_tree, my_relpath, convert_win_path_to_unix, md5sum
 from boar_exceptions import UserError
-import server
 from front import Front
 
 class DevNull:
@@ -130,6 +129,8 @@ class TestFront(unittest.TestCase, WorkdirHelper):
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
+        self.wd.setLogOutput(DevNull())
+        self.wd.use_progress_printer(False)
         self.front = self.wd.front
         id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
@@ -151,11 +152,14 @@ class TestFront(unittest.TestCase, WorkdirHelper):
         self.assertEquals(got_list, ["ignore2"])
 
     def testSetIgnoreErrorDetect(self):
-        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+        expected_exception = AssertionError
+        if os.getenv("BOAR_TEST_REMOTE_REPO") == "1":
+            expected_exception = Exception
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
                           u"TestSession", "string must not be accepted")
-        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
                           u"TestSession", 19) # no numbers allowed
-        self.assertRaises(AssertionError, self.front.set_session_ignore_list, 
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
                           u"TestSession", None) # None not allowed
 
     def tearDown(self):
@@ -171,6 +175,8 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         repository.create_repository(self.repopath)
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
+        self.wd.setLogOutput(DevNull())
+        self.wd.use_progress_printer(False)
         id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
 
@@ -178,6 +184,8 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wdroot = self.createTmpName()
         write_tree(wdroot, tree)
         wd = workdir.Workdir(repoUrl, u"TestSession", offset, revision, wdroot)
+        wd.setLogOutput(DevNull())
+        wd.use_progress_printer(False)
         self.assertTrue(wd.get_front().find_last_revision(u"TestSession"))
         return wd
 
@@ -323,7 +331,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd_update = self.createWorkdir(self.repoUrl, 
                                        {'file2.txt': 'f2 mod1'}, 
                                        revision = rev1)
-        wd_update.update(log = DevNull())
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file2.txt': 'f2 mod1',
                                          'file3.txt': 'f3'})
@@ -346,7 +354,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'file2.txt': 'f2 v1',  # normal v1
                                         'file3.txt': 'f3 mod'},# normal modification, but not v2
                                        revision = rev1)
-        wd_update.update(log = DevNull())
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file1.txt': 'f1 v2',
                                          'file2.txt': 'f2 v2',
@@ -364,7 +372,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                        {'d/file2.txt': 'f2 mod1'}, 
                                        revision = rev1,
                                        offset = u"subdir")
-        wd_update.update(log = DevNull())
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'d/file2.txt': 'f2 mod1',
                                          'd/file3.txt': 'f3'})
@@ -384,7 +392,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'file2.txt': 'f2 mod',
                                         'file3.txt': 'f3'}, 
                                        revision = rev1)
-        wd_update.update(log = DevNull())
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'file1.txt': 'f1 mod',
                                          'file2.txt': 'f2 mod'})
@@ -405,7 +413,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                         'd/file3.txt': 'f3'}, 
                                        revision = rev1,
                                        offset = u"subdir")
-        wd_update.update(log = DevNull())
+        wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
         self.assertEquals(updated_tree, {'d/file1.txt': 'f1 mod',
                                          'd/file2.txt': 'f2 mod'})
@@ -467,7 +475,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
         wd.checkout()
         wd.checkin()
-        id = wd.checkin()
+        id = wd.checkin(allow_empty = True)
         # Need to change this test if we make non-changing commits become NOPs.
         self.assertEquals(id, 5) 
         wd = self.createWorkdir(self.repoUrl)
@@ -486,7 +494,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
 
         wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
-        wd.update(log = DevNull())
+        wd.update_to_latest()
         write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
         wd.checkin()
 
@@ -517,7 +525,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
 
         wd.front.set_session_include_list(u"TestSession", ["*.txt"])
-        wd.update(log = DevNull())
+        wd.update_to_latest()
         write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
         wd.checkin()
 
@@ -531,41 +539,14 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl, tree)
         wd.checkin()
         wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
-        wd.update(log = DevNull())
+        wd.update_to_latest()
         wd.get_changes()
         full_tree_filenames = set(read_tree(wd.root).keys())
         expected_filenames = set([u'file.txt', 
                                   u'.boar/info', 
-                                  u'.boar/bloblistcache2.bin'])
+                                  u'.boar/wd_version.txt'])
 
         self.assertEquals(expected_filenames, full_tree_filenames)
-
-
-    def testMd5Collision(self):
-        # Quoted from issue16: "There will be no attempt at making the
-        # boar repository store md5 collisions. If a collision is
-        # found during an import or checkin, boar will abort the
-        # operation and print an error message." 
-        #
-        # md5 collisions borrowed from
-        # http://www2.mat.dtu.dk/people/S.Thomsen/wangmd5/samples.html
-        coll1 = base64.b64decode("M5FHQOcdE5P1Bf/74X6spW7leee/4OvwSKh8XL+IZSrR7DJ"+
-                                 "eCLay7JP/VJaKD/kOC298GFghayjRk5Aj2v1sxOuiFyosV+"+
-                                 "MqFkadI6HaBebbj/1EVoDCTSaJJDjTVjWtTTA3bkm+esoKe"+
-                                 "l17UbQJ3M1kE4Z9zZuQxx1Lf3OTz9o=")
-        coll2 = base64.b64decode("M5FHQOcdE5P1Bf/74X6spW7leWe/4OvwSKh8XL+IZSrR7DJ"+
-                                 "eCLay7JP/VJaKj/kOC298GFghayjRk5Cj2v1sxOuiFyosV+"+
-                                 "MqFkadI6HaBebbj/3EVoDCTSaJJDjTVjWtTTA3bkm+esoKe"+
-                                 "l17UTQJ3M1kE4Z9zZuQxx1L/3OTz9o=")
-        self.assertNotEquals(coll1, coll2)
-        self.assertEquals(md5sum(coll1), md5sum(coll2))
-        wd = self.createWorkdir(self.repoUrl, 
-                                {'coll1.bin': coll1, 'coll2.bin': coll2})
-        self.assertRaises(UserError, wd.checkin)
-        wd = self.createWorkdir(self.repoUrl, {'coll1.bin': coll1})
-        wd.checkin()
-        write_tree(wd.root, {'coll2.bin': coll2}, False)
-        self.assertRaises(UserError, wd.checkin)
 
     def testExistingFileTwice(self):
         """Test derived sha256 checksum. It is only returned from the
@@ -581,34 +562,31 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         write_tree(wd.root, {'subdir/file3.txt': "data"}, False)
         wd.checkin()
                    
-                              
 
-class TestWorkdirWithServer(TestWorkdir):
-    def create_server(self):
-        for p in range(11000, 12000):
-            try:
-                self.server = server.ThreadedBoarServer(self.raw_repopath, p)
-                self.port = p
-                break
-            except socket.error, e:
-                if e.errno != errno.EADDRINUSE:
-                    raise e
+    def testWdSessionpathSimple(self):
+        wd = self.createWorkdir(self.repoUrl, offset = u"")
+        self.assertEquals(u"", wd.wd_sessionpath(u"."))
+        self.assertEquals(u"file.txt", wd.wd_sessionpath(u"file.txt"))
+        self.assertEquals(u"file.txt", wd.wd_sessionpath(u"./file.txt"))
+        self.assertEquals(u"file.txt", wd.wd_sessionpath(u".//./file.txt"))
+        self.assertEquals(u"a/c.txt", wd.wd_sessionpath(u"./a/./b/../c.txt"))
 
-    def setUp(self):
-        self.remove_at_teardown = []
-        self.workdir = self.createTmpName()
-        self.raw_repopath = self.createTmpName()
-        repository.create_repository(self.raw_repopath)
-        os.mkdir(self.workdir)
-        self.create_server()
-        self.server.serve()
-        self.repoUrl = u"boar://localhost:%s/" % (self.port)
-        self.wd = workdir.Workdir(self.repoUrl, u"TestSession", u"", 
-                                  None, self.workdir)
-        front = self.wd.get_front()
-        assert front.isRemote
-        id = self.wd.get_front().mksession(u"TestSession")
-        assert id == 1
+    def testWdSessionpathOffset(self):
+        wd = self.createWorkdir(self.repoUrl, offset = u"Räksmörgås/tjosan")
+        self.assertEquals(u"Räksmörgås/tjosan", wd.wd_sessionpath(u"."))
+        self.assertEquals(u"Räksmörgås/tjosan", wd.wd_sessionpath(u"./."))
+        self.assertEquals(u"Räksmörgås/tjosan/file.txt", wd.wd_sessionpath(u".//./file.txt"))
+        self.assertEquals(u"Räksmörgås/tjosan/a/file.txt", wd.wd_sessionpath(u".//./b/../a/file.txt"))
+
+    def testWdSessionpathOutsideOffset(self):
+        wd = self.createWorkdir(self.repoUrl, offset = u"Räksmörgås/tjosan")
+        self.assertEquals(u"Räksmörgås/a", wd.wd_sessionpath(u"../a"))
+        self.assertEquals(u"Räksmörgås", wd.wd_sessionpath(u"../"))
+        self.assertEquals(u"", wd.wd_sessionpath(u"../.."))
+        self.assertRaises(UserError, wd.wd_sessionpath, u"../../..")
+        self.assertRaises(UserError, wd.wd_sessionpath, u"../../../b")
+        self.assertRaises(UserError, wd.wd_sessionpath, u"/b")
+
 
 class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def setUp(self):
@@ -620,6 +598,8 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
     def createTestRepo(self):
         os.mkdir(self.workdir)
         wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
+        wd.setLogOutput(DevNull())
+        wd.use_progress_printer(False)
         self.addWorkdirFile("onlyintopdir.txt", "nothing")
         self.mkdir("mysubdir")
         self.addWorkdirFile("mysubdir/insubdir.txt", "nothing2")
@@ -637,10 +617,12 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         self.createTestRepo()
         os.mkdir(self.workdir)
         wd = workdir.Workdir(self.repopath, u"TestSession", u"mysubdir", None, self.workdir)
+        wd.setLogOutput(DevNull())
+        wd.use_progress_printer(False)
         wd.checkout()
         tree = get_tree(wd.root, absolute_paths = False)
         #tree = wd.get_tree(absolute_paths = True)
-        self.assertEquals(set(tree), set(["insubdir.txt", '.boar/info']))
+        self.assertEquals(set(tree), set(["insubdir.txt", '.boar/info', '.boar/wd_version.txt']))
 
 if __name__ == '__main__':
     unittest.main()

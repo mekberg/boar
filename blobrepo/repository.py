@@ -25,17 +25,20 @@ import os
 import re
 import shutil
 import sessions
+import sys
+import tempfile
+import random, time
+
 import derived
 
-#TODO: use/modify the session reader so that we don't have to use json here
-import sys
 from common import *
 from boar_common import *
 from blobreader import create_blob_reader
 from jsonrpc import FileDataSource
-from boar_exceptions import UserError
+from boar_exceptions import *
 
-LATEST_REPO_FORMAT = 2
+LATEST_REPO_FORMAT = 5
+REPOID_FILE = "repoid.txt"
 VERSION_FILE = "version.txt"
 RECOVERYTEXT_FILE = "recovery.txt"
 QUEUE_DIR = "queue"
@@ -46,10 +49,19 @@ TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
 DERIVED_SHA256_DIR = "derived/sha256"
 DERIVED_BLOCKS_DIR = "derived/blocks"
+DELETE_MARKER = "deleted.json"
 
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
-REPO_DIRS = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,
-             DERIVED_DIR, DERIVED_SHA256_DIR, DERIVED_BLOCKS_DIR)
+REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR, DERIVED_SHA256_DIR)
+REPO_DIRS_V2 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR)
+REPO_DIRS_V3 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR)
+REPO_DIRS_V4 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR)
+REPO_DIRS_V5 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR, DERIVED_BLOCKS_DIR)
 
 recoverytext = """Repository format v%s
 
@@ -115,21 +127,7 @@ value "remove". If you simply want to extract as much data as
 possible, these special entries can be ignored.
 """ % LATEST_REPO_FORMAT
 
-class MisuseError(Exception):
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
-
-class CorruptionError(Exception):
-    """A serious integrity problem of the repository that cannot be
-    repaired automatically, if at all."""
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
-
-class SoftCorruptionError(Exception):
-    """A harmless integrity problem of the repository requiring
-    rebuilding of derived information."""
-    def __init__(self, msg):
-        Exception.__init__(self, msg)
+verify_assert()
 
 def misuse_assert(test, errormsg = None):
     if not test:
@@ -142,23 +140,30 @@ def integrity_assert(test, errormsg = None):
 def create_repository(repopath):
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
-    os.mkdir(os.path.join(repopath, QUEUE_DIR))
-    os.mkdir(os.path.join(repopath, BLOB_DIR))
-    os.mkdir(os.path.join(repopath, SESSIONS_DIR))
-    os.mkdir(os.path.join(repopath, TMP_DIR))
-    os.mkdir(os.path.join(repopath, DERIVED_DIR))
-    os.mkdir(os.path.join(repopath, DERIVED_SHA256_DIR))
-    os.mkdir(os.path.join(repopath, DERIVED_BLOCKS_DIR))
+    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR:
+        os.mkdir(os.path.join(repopath, d))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
+    create_file(os.path.join(repopath, REPOID_FILE), generate_random_repoid())
 
 def is_recipe_filename(filename):
     filename_parts = filename.split(".")
     return len(filename_parts) == 2 \
         and filename_parts[1] == "recipe" \
         and is_md5sum(filename_parts[0])
-            
 
+def looks_like_repo(repo_path):
+    """Superficial check to see if the given path contains anything
+    resembling a repo of any version."""
+    assert LATEST_REPO_FORMAT == 5 # Look through this function when updating format
+    for dirname in (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR):
+        dirpath = os.path.join(repo_path, dirname)
+        if not (os.path.exists(dirpath) and os.path.isdir(dirpath)):
+            return False
+    return True
 
+def has_pending_operations(repo_path):
+    dirpath = os.path.join(repo_path, QUEUE_DIR)
+    return len(os.listdir(dirpath)) != 0
 
 class Repo:
     def __init__(self, repopath):
@@ -167,22 +172,45 @@ class Repo:
         assert isinstance(repopath, unicode)
         assert(os.path.isabs(repopath)), "The repo path must be absolute. "\
             +"Was: " + repopath
+        if not looks_like_repo(repopath):
+            raise UserError("The path %s does not exist or does not contain a valid repository" % repopath)
         self.repopath = repopath
+        if self.__get_repo_version() > LATEST_REPO_FORMAT:
+            raise UserError("Repo is from a future boar version. Upgrade your boar.")
         self.session_readers = {}
+        self.scanners = ()
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
-        self.repo_mutex.lock_with_timeout(60)
-        try:
-            self.__upgrade_repo()
-            self.__quick_check()
-            self.sha256 = derived.blobs_sha256(self, self.repopath + "/derived/sha256")
-            self.blocks = derived.blobs_blocks(self, self.repopath + "/derived/blocks")
-            self.process_queue()
-        finally:
-            self.repo_mutex.release()
+        self.readonly = False
+        if not isWritable(os.path.join(repopath, TMP_DIR)):
+            if self.get_queued_session_id() != None:
+                raise UserError("Repo is write protected with pending changes. Cannot continue.")
+            if self.__get_repo_version() not in (0, 1, 2, 3, 4, 5):
+                # Intentional explicit counting so that we'll remember to check compatability with future versions
+                raise UserError("Repo is write protected and from an unsupported older version of boar. Cannot continue.")
+            notice("Repo is write protected - only read operations can be performed")
+            self.readonly = True
+
+        if not self.readonly:
+            self.repo_mutex.lock_with_timeout(60)
+            try:
+                self.__upgrade_repo()
+                self.__quick_check()
+                self.blocks = derived.blobs_blocks(self, self.repopath + "/derived/blocks")
+                self.process_queue()
+            finally:
+                self.repo_mutex.release()
+
+    def __enter__(self):
+        self.repo_mutex.lock()
+        assert self.repo_mutex.is_locked()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.repo_mutex.release()
 
     def close(self):
-        self.sha256.close()
+        pass
 
     def __quick_check(self):
         """This method must be called after any repository upgrade
@@ -191,22 +219,42 @@ class Repo:
         exception if an error is found."""
         repo_version = self.__get_repo_version()
         assert repo_version, "Repo format obsolete. Upgrade failed?"
-        integrity_assert(repo_version == LATEST_REPO_FORMAT,
-                         ("Repo version %s can not be handled by this version of boar" % repo_version))
+        if repo_version != LATEST_REPO_FORMAT:
+            raise UserError("Repo version %s can not be handled by this version of boar" % repo_version)
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        for directory in REPO_DIRS:
+        assert LATEST_REPO_FORMAT == 5 # Check below must be updated when repo format changes
+        for directory in REPO_DIRS_V5:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
+        integrity_assert(os.path.exists(os.path.join(self.repopath, REPOID_FILE)), 
+                         "Repository at %s does not have an identity file." % self.repopath)
+
+    def allows_permanent_erase(self):
+        return os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
 
     def __upgrade_repo(self):
-        assert self.repo_mutex.locked
+        assert not self.readonly, "Repo is read only, cannot upgrade"
+        assert self.repo_mutex.is_locked()
         version = self.__get_repo_version()
         if version > LATEST_REPO_FORMAT:
             raise UserError("Repo version %s can not be handled by this version of boar" % version)
         if version == LATEST_REPO_FORMAT:
             return
         notice("Old repo format detected. Upgrading...")
-        self.__upgrade_repo_v0()
-        self.__upgrade_repo_v1()
+        if self.__get_repo_version() == 0:
+            self.__upgrade_repo_v0()
+            assert self.__get_repo_version() == 1
+        if self.__get_repo_version() == 1:
+            self.__upgrade_repo_v1()
+            assert self.__get_repo_version() == 2
+        if self.__get_repo_version() == 2:
+            self.__upgrade_repo_v2()
+            assert self.__get_repo_version() == 3
+        if self.__get_repo_version() == 3:
+            self.__upgrade_repo_v3()
+            assert self.__get_repo_version() == 4
+        if self.__get_repo_version() == 4:
+            self.__upgrade_repo_v4()
+            assert self.__get_repo_version() == 5
         try:
             self.__quick_check()
         except:
@@ -214,50 +262,172 @@ class Repo:
             raise
 
     def __upgrade_repo_v0(self):
+        """ This upgrade will upgrade a repository from before strict 
+        version numbering (v0), to a v1 format repository. It does this by 
+        performing the following actions:
+        
+        * Create directory "derived"
+        * Create directory "derived/sha256"
+        * Update "recovery.txt"
+        * Create "version.txt" with value 1
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
         version = self.__get_repo_version()
-        if version == 1:
-            return
         assert version == 0
-        recipes_dir = os.path.join(self.repopath, RECIPES_DIR)
-        if os.path.exists(recipes_dir):
-            # recipes_dir is an experimental feature and should not contain
-            # any data in a v0 repo (if it exists at all)
-            os.rmdir(recipes_dir)
-        version_file = os.path.join(self.repopath, VERSION_FILE)
-        for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
-            if dir_exists(self.repopath + "/" + directory):
-                warn("Repo upgrade confusion: a folder already existed while upgrading to v1: %s" % directory)
-                continue
-            notice("Upgrading repo - creating '%s' dir" % directory)
-            os.mkdir(self.repopath + "/" + directory)
-        replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
-        if os.path.exists(version_file):
-            warn("Version marker should not exist for repo format v0")
-            safe_delete_file(version_file)
-        create_file(version_file, "1")
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        try:
+            recipes_dir = os.path.join(self.repopath, RECIPES_DIR)
+            if os.path.exists(recipes_dir):
+                # recipes_dir is an experimental feature and should not contain
+                # any data in a v0 repo (if it exists at all)
+                try:
+                    os.rmdir(recipes_dir)
+                except:
+                    raise UserError("Problem removing obsolete 'recipes' dir. Make sure it is empty and try again.")
+            if not dir_exists(self.repopath + "/" + DERIVED_DIR):
+                os.mkdir(self.repopath + "/" + DERIVED_DIR)
+            if not dir_exists(os.path.join(self.repopath, DERIVED_SHA256_DIR)):
+                os.mkdir(os.path.join(self.repopath, DERIVED_SHA256_DIR))
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            version_file = os.path.join(self.repopath, VERSION_FILE)
+            if os.path.exists(version_file):
+                warn("Version marker should not exist for repo format v0")
+                safe_delete_file(version_file)
+            create_file(version_file, "1")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
 
     def __upgrade_repo_v1(self):
+        """ This upgrade will perform the following actions:
+        * If it exists, delete file "derived/sha256/sha256cache"
+        * Rmdir directory "derived/sha256"
+        * Update "version.txt" to 2
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
         version = self.__get_repo_version()
-        if version == 2:
-            return
         assert version == 1
-        version_file = os.path.join(self.repopath, VERSION_FILE)
-        os.mkdir(self.repopath + "/" + DERIVED_BLOCKS_DIR)
-        replace_file(version_file, "2")
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        try:
+            for directory in REPO_DIRS_V1:
+                integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                     "Repository says it is v1 format but is missing %s" % directory)
+            dbfile = os.path.join(self.repopath, DERIVED_SHA256_DIR, "sha256cache")
+            sha256_dir = os.path.join(self.repopath, DERIVED_SHA256_DIR)
+            if os.path.exists(dbfile):
+                # recipes_dir is an experimental feature and should not contain
+                # any data in a v0 repo (if it exists at all)
+                safe_delete_file(dbfile)
+            if os.path.exists(sha256_dir):
+                os.rmdir(sha256_dir)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "2")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
 
+    def __upgrade_repo_v2(self):
+        """ This upgrade will perform the following actions:
+        * Update "version.txt" to 3
+        * Restore any legally missing snapshots with a deleted snapshot definition.
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
+        version = self.__get_repo_version()
+        assert version == 2
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        for directory in REPO_DIRS_V2:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                 "Repository says it is v2 format but is missing %s" % directory)
+        for rev in range(1, self.get_highest_used_revision() + 1):
+            if os.path.exists(self.get_session_path(rev)):
+                continue
+            tmpdir = tempfile.mkdtemp(prefix = "tmp_", dir = os.path.join(self.repopath, TMP_DIR))
+            writer = sessions._NaiveSessionWriter(session_name = u"__deleted", base_session = None, path = tmpdir)
+            writer.set_fingerprint("d41d8cd98f00b204e9800998ecf8427e")
+            writer.commit()
+            del writer
+            os.rename(tmpdir, self.get_session_path(rev))
+        try:
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "3")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+
+
+    def __upgrade_repo_v3(self):
+        """ This upgrade will perform the following actions:
+        * Update "version.txt" to 4
+        * Write a random identity string to "repoid.txt"
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
+        version = self.__get_repo_version()
+        assert version == 3
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        for directory in REPO_DIRS_V3:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                 "Repository says it is v3 format but is missing %s" % directory)
+        try:
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            repoid = generate_random_repoid()
+            if not os.path.exists(os.path.join(self.repopath, REPOID_FILE)):
+                create_file(os.path.join(self.repopath, REPOID_FILE), repoid)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "4")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+
+    def __upgrade_repo_v4(self):
+        """ This upgrade will perform the following actions:
+        * Update "version.txt" to 5
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
+        version = self.__get_repo_version()
+        assert version == 4
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        for directory in REPO_DIRS_V4:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                 "Repository says it is v4 format but is missing %s" % directory)
+        try:
+            if not dir_exists(os.path.join(self.repopath, DERIVED_BLOCKS_DIR)):
+                os.mkdir(os.path.join(self.repopath, DERIVED_BLOCKS_DIR))
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "5")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+
+    def get_path(self, subdir, *parts):
+        return os.path.join(self.repopath, subdir, *parts)
+
+    def get_repo_identifier(self):
+        """Returns the identifier for the repo, or None if the
+        repository has no identifier. The latter scenarion will
+        happen when accessing write-protected old (v3 or earlier)
+        repositories."""
+        idfile = os.path.join(self.repopath, REPOID_FILE)
+        if not os.path.exists(idfile):
+            return None
+        lines = read_file(idfile).splitlines()
+        assert len(lines) == 1, "%s must contain exactly one line" % REPOID_FILE
+        identifier = lines[0].strip()
+        assert re.match("^[a-zA-Z0-9_-]+$", identifier), "illegal characters in repo identifier '%s'" % identifier
+        return identifier
+        
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
         if os.path.exists(version_file):
-            with open(version_file, "r") as f:
+            with safe_open(version_file, "rb") as f:
                 return int(f.read())
         # Repo is from before repo format numbering started.
         # Make sure it is a valid one and return v0
         for directory in REPO_DIRS_V0:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), 
                              "The repo at %s does not look like a repository (missing %s)" % (self.repopath, directory))
-        for directory in (DERIVED_DIR, DERIVED_SHA256_DIR):
-            integrity_assert(not dir_exists(os.path.join(self.repopath, directory)),
-                             "Repo is missing version.txt, but does not look like a v0 repo (has %s)" % directory)
         return 0
 
     def __str__(self):
@@ -306,14 +476,12 @@ class Repo:
     def get_blob_size(self, sum):
         blobpath = self.get_blob_path(sum)
         if os.path.exists(blobpath):
-            return os.path.getsize(blobpath)
+            # Windows always returns a Long. Let's be consistent.
+            return long(os.path.getsize(blobpath))
         recipe = self.get_recipe(sum)
         if not recipe:
             raise ValueError("No such blob or recipe exists: "+sum)
-        return recipe['size']
-
-    def get_blob_sha256(self, sum):
-        return self.sha256.get_sha256(sum)
+        return long(recipe['size'])
 
     def get_blob_reader(self, sum, offset = 0, size = -1):
         if self.has_raw_blob(sum):
@@ -322,7 +490,7 @@ class Repo:
                 size = blobsize
             assert blobsize <= offset + size
             path = self.get_blob_path(sum)
-            fo = open(path, "rb")
+            fo = safe_open(path, "rb")
             fo.seek(offset)
             return FileDataSource(fo, size)
         recipe = self.get_recipe(sum)
@@ -334,7 +502,7 @@ class Repo:
         """ Returns None if there is no such blob """
         if self.has_raw_blob(sum):
             path = self.get_blob_path(sum)
-            with open(path, "rb") as f:
+            with safe_open(path, "rb") as f:
                 f.seek(offset)
                 data = f.read(size)
             return data
@@ -350,19 +518,42 @@ class Repo:
         assert isinstance(session_id, int)
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
 
+        
     def get_all_sessions(self):
-        session_dirs = []
-        for dir in os.listdir(os.path.join(self.repopath, SESSIONS_DIR)):
-            if re.match("^[0-9]+$", dir) != None:
-                assert int(dir) > 0, "No session 0 allowed in repo"
-                session_dirs.append(int(dir))
-        session_dirs.sort()
-        return session_dirs
+        return get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
+
+    def is_deleted(self, rev):
+        return self.get_session(rev).is_deleted()
+
+    def get_deleted_snapshots(self):
+        result = []
+        for sid in self.get_all_sessions():
+            if self.get_session(sid).is_deleted():
+                result.append(sid)
+        return result
+
+    def get_highest_used_revision(self):
+        """ Returns the highest used revision id in the
+        repository. Deleted revisions are counted as well. Note that
+        this method returns 0 in the case that there are no
+        revisions. """
+        existing_sessions = get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
+        return max([0] + existing_sessions)
 
     def has_snapshot(self, id):
         assert isinstance(id, int)
         path = os.path.join(self.repopath, SESSIONS_DIR, str(id))
         return os.path.exists(path)
+
+    def verify_snapshot(self, id):
+        if self.__get_repo_version() < 3: # To make it possible to access old read-only repos
+            warn("todo: implement verify_snapshot for early versions")
+            return True
+        session_exists = self.has_snapshot(id)
+        if not session_exists:
+            raise CorruptionError("Snapshot %s is missing" % id)
+        snapshot = self.get_session(id)
+        # No exception - all is well
 
     def get_session(self, id):
         assert id, "Id was: "+ str(id)
@@ -372,13 +563,16 @@ class Repo:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]
 
-    def create_session(self, session_name, base_session = None, session_id = None):
+    def create_session(self, session_name, base_session = None, session_id = None, force_base_snapshot = False):
+        misuse_assert(not self.readonly, "Cannot create a session in a write protected repo")
         assert isinstance(session_name, unicode)
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
-        return sessions.SessionWriter(self, session_name = session_name, \
-                                          base_session = base_session, \
-                                          session_id = session_id)
+        assert isinstance(force_base_snapshot, bool)
+        return sessions.SessionWriter(self, session_name = session_name, 
+                                      base_session = base_session, 
+                                      session_id = session_id,
+                                      force_base_snapshot = force_base_snapshot)
 
     def find_last_revision(self, session_name):
         """ Returns the id of the latest snapshot in the specified
@@ -395,10 +589,7 @@ class Repo:
         return None
 
     def find_next_session_id(self):
-        assert os.path.exists(self.repopath)
-        session_dirs = self.get_all_sessions()
-        session_dirs.append(0)
-        return max(session_dirs) + 1            
+        return self.get_highest_used_revision() + 1
 
     def get_blob_names(self):
         blobpattern = re.compile("/([0-9a-f]{32})$")
@@ -409,24 +600,39 @@ class Repo:
             m = blobpattern.search(f)
             if m:
                 matches.add(m.group(1))
-        blobpattern = re.compile("([0-9a-f]{32})\\.recipe$")
-        tree = get_tree(os.path.join(self.repopath, RECIPES_DIR))
-        for f in tree:
-            m = blobpattern.search(f)
-            if m:
-                matches.add(m.group(1))
         return list(matches)
+
+    def get_orphan_blobs(self):
+        used_blobs = set()
+        for sid in self.get_all_sessions():
+            snapshot = self.get_session(sid)
+            for blobinfo in snapshot.get_raw_bloblist():
+                if 'md5sum' in blobinfo:
+                    used_blobs.add(blobinfo['md5sum'])
+        if self.get_queued_session_id():
+            # Must ensure that any queued new snapshot is considered as well
+            queued_session = sessions.SessionReader(None, self.get_path(QUEUE_DIR, str(self.get_queued_session_id())))
+            for blobinfo in queued_session.get_raw_bloblist():
+                if 'md5sum' in blobinfo:
+                    used_blobs.add(blobinfo['md5sum'])
+        orphans = set(self.get_blob_names()) - used_blobs
+        return orphans
 
     def verify_blob(self, sum):
         recipe = self.get_recipe(sum)
         if recipe:
-            reader = create_blob_reader(recipe, self)
-            verified_ok = (sum == md5sum_file(reader))
-        elif self.has_raw_blob(sum):
-            path = self.get_blob_path(sum)
-            verified_ok = (sum == md5sum_file(path))
-        else:
+            assert False, "recipes not implemented"
+            #reader = create_blob_reader(recipe, self)
+            #verified_ok = (sum == md5sum_file(reader))
+        if not self.has_raw_blob(sum):
             raise ValueError("No such blob or recipe: " + sum)
+        path = self.get_blob_path(sum)
+        with safe_open(path, "rb") as f:
+            md5_summer = hashlib.md5()
+            for block in file_reader(f):
+                md5_summer.update(block)
+            md5 = md5_summer.hexdigest()
+            verified_ok = (sum == md5)
         return verified_ok 
 
     def find_redundant_raw_blobs(self):
@@ -434,55 +640,6 @@ class Repo:
         for blob in all_blobs:
             if self.has_recipe_blob(blob) and self.has_raw_blob(blob):
                 yield blob
-
-    def isIdentical(self, other_repo):
-        """ Returns True iff the other repo contains the same sessions
-        with the same fingerprints as this repo."""
-        if not other_repo.isContinuation(self):
-            return False
-        return set(self.get_all_sessions()) == set(other_repo.get_all_sessions())
-
-    def isContinuation(self, other_repo):
-        """ Returns True if the other repo is a continuation of this
-        one. That is, the other repo contains all the sessions of this
-        repo, and then zero of more additional sessions."""
-        if set(self.get_all_sessions()) > set(other_repo.get_all_sessions()):
-            # Not same sessions - cannot be successor
-            return False
-        for session_id in self.get_all_sessions():
-            self_session = self.get_session(session_id)
-            other_session = other_repo.get_session(session_id)
-            if self_session.get_fingerprint() != other_session.get_fingerprint():
-                return False
-        return True
-
-    def pullFrom(self, other_repo):
-        """Updates this repository with changes from the other
-        repo. The other repo must be a continuation of this repo."""
-        print "Pulling updates from %s into %s" % (other_repo, self)
-        # Check that other repo is a continuation of this one
-        assert self.isContinuation(other_repo), \
-            "Cannot pull: %s is not a continuation of %s" % (other_repo, self)
-
-        # Copy all new blobs
-        self_blobs = set(self.get_blob_names())
-        other_blobs = set(other_repo.get_blob_names())
-        assert set(self_blobs) <= set(other_blobs), \
-            "Other repo is missing some blobs that are present in this repo. Corrupt repository?"
-
-        for blobname in other_blobs - self_blobs:
-            assert other_repo.has_raw_blob(blobname), "Cloning of recipe blobs not yet implemented"
-
-        # Copy all new sessions
-        self_sessions = set(self.get_all_sessions())
-        other_sessions = set(other_repo.get_all_sessions())
-        sessions_to_copy = list(other_sessions - self_sessions)
-        sessions_to_copy.sort()
-        for session_id in sessions_to_copy:
-            reader = other_repo.get_session(session_id)
-            base_session = reader.get_properties().get('base_session', None)
-            writer = self.create_session(reader.get_properties()['client_data']['name'], base_session, session_id)
-            writer.commitClone(reader)
 
     def get_queued_session_id(self):
         path = os.path.join(self.repopath, QUEUE_DIR)
@@ -497,6 +654,7 @@ class Repo:
     def consolidate_snapshot(self, session_path, forced_session_id = None):
         assert isinstance(session_path, unicode)
         assert forced_session_id == None or isinstance(forced_session_id, int)
+        assert not self.readonly, "Cannot consolidate because repo is read-only"
         self.repo_mutex.lock_with_timeout(60)
         try:
             return self.__consolidate_snapshot(session_path, forced_session_id)
@@ -507,19 +665,96 @@ class Repo:
         assert isinstance(session_path, unicode)
         assert self.repo_mutex.is_locked()
         assert not self.get_queued_session_id()
-        if forced_session_id: 
+        assert not self.readonly, "Cannot consolidate because repo is read-only"
+        if forced_session_id:
             session_id = forced_session_id
         else:
             session_id = self.find_next_session_id()
         assert session_id > 0
         assert session_id not in self.get_all_sessions()
         queue_dir = self.get_queue_path(session_id)
+        assert not os.path.exists(queue_dir), "Queue entry collision: %s" % queue_dir
         shutil.move(session_path, queue_dir)
         self.process_queue()
         return session_id
 
+    def get_referring_snapshots(self, rev):
+        """ Returns a (possibly empty) list of all the snapshots that
+        has the given rev as base snapshot. """
+        assert isinstance(rev, int)
+        result = []
+        for sid in self.get_all_sessions():
+            snapshot = self.get_session(sid)
+            if snapshot.get_base_id() == rev:
+                result.append(rev)
+        return result
+
+    def __erase_snapshots(self, snapshot_ids):
+        assert self.repo_mutex.is_locked()
+        if not snapshot_ids:
+            # Avoid check for erase permissions if not erasing anything
+            return
+        if not self.allows_permanent_erase():
+            raise MisuseError("Not allowed for this repo")
+        misuse_assert(not self.readonly, "Cannot erase snapshots from a write protected repo")
+        snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
+        snapshot_ids.sort()
+        snapshot_ids.reverse()
+
+        trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_snapshots_", dir = self.get_path(TMP_DIR))
+        for rev in snapshot_ids:
+            try:
+                self.__erase_snapshot(rev, trashdir)
+            except OSError, e:
+                if e.errno == 13:
+                    raise UserError("Snapshot %s is write protected, cannot erase. Change your repository file permissions and try again." % rev)
+
+    def __erase_snapshot(self, rev, trashdir):
+        # Carefully here... We must allow for a resumed operation 
+        if not self.allows_permanent_erase():
+            raise MisuseError("Not allowed for this repo")
+        misuse_assert(not self.readonly, "Cannot erase snapshots from a write protected repo")
+        if self.get_referring_snapshots(rev):
+            raise MisuseError("Erasing rev %s would create orphan snapshots" % rev)
+        if rev in self.session_readers:
+            del self.session_readers[rev]
+
+        session_path = self.get_session_path(rev)
+        delete_copy = os.path.join(session_path, "deleted")
+        if not os.path.exists(delete_copy):
+            tmpcopy = tempfile.mktemp(prefix ="deleted_", dir = self.get_path(TMP_DIR))
+            shutil.copytree(session_path, tmpcopy)
+            os.rename(tmpcopy, delete_copy)
+
+        session_data = read_json(os.path.join(delete_copy, "session.json"))        
+
+        for filename in "session.json", "bloblist.json", "session.md5", session_data['fingerprint'] + ".fingerprint":
+            full_path = os.path.join(session_path, filename)
+            if os.path.exists(full_path):
+                os.unlink(full_path)
+
+        _snapshot_delete_test_hook(rev)
+
+        writer = sessions._NaiveSessionWriter(session_name = u"__deleted", base_session = None, path = session_path)
+        writer.delete(deleted_session_name = session_data['client_data']['name'], deleted_fingerprint = session_data['fingerprint'])
+        writer.set_fingerprint("d41d8cd98f00b204e9800998ecf8427e")
+        writer.commit()
+        os.rename(delete_copy, os.path.join(trashdir, str(rev) + ".deleted"))
+
+    def erase_orphan_blobs(self):
+        assert self.repo_mutex.is_locked()
+        if not self.allows_permanent_erase():
+            raise MisuseError("Not allowed for this repo")
+        misuse_assert(not self.readonly, "Cannot erase blobs from a write protected repo")
+        orphan_blobs = self.get_orphan_blobs()
+        trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_blobs_", dir = self.get_path(TMP_DIR))
+        for blob in orphan_blobs:
+            os.rename(self.get_blob_path(blob), os.path.join(trashdir, blob))
+        return len(orphan_blobs)
+
     def process_queue(self):
         assert self.repo_mutex.is_locked()
+        assert not self.readonly, "Repo is read only, cannot process queue"
         session_id = self.get_queued_session_id()
         if session_id == None:
             return
@@ -538,6 +773,8 @@ class Repo:
         meta_info = read_json(os.path.join(queued_item, "session.json"))
         
         contents = os.listdir(queued_item)
+        snapshots_to_delete = []
+
         # Check that there are no unexpected files in the snapshot,
         # and perform a simple test for json well-formedness
         for filename in contents:
@@ -553,6 +790,9 @@ class Repo:
             if is_recipe_filename(filename):
                 read_json(os.path.join(queued_item, filename)) # Check if malformed
                 continue
+            if filename == "delete.json":
+                snapshots_to_delete = read_json(os.path.join(queued_item, "delete.json"))
+                continue
             assert False, "Unexpected file in new session:" + filename
 
         # Check that all necessary files are present in the snapshot
@@ -566,7 +806,13 @@ class Repo:
             if is_md5sum(filename):
                 blob_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_blob_path(filename)
-                move_file(blob_to_move, destination_path, mkdirs = True)
+                # Check for existence before moving. Another
+                # snapshot might have checked in this same file
+                # concurrently, see issue 70.
+                if os.path.exists(destination_path):
+                    os.remove(blob_to_move)
+                else:
+                    move_file(blob_to_move, destination_path, mkdirs = True)
             elif is_recipe_filename(filename):
                 recipe_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_recipe_path(filename)
@@ -574,8 +820,35 @@ class Repo:
             else:
                 pass # The rest becomes a snapshot definition directory
 
+        if snapshots_to_delete:
+            # Intentionally redundant check for erase enable flag
+            assert os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
+            self.__erase_snapshots(snapshots_to_delete)
+        if os.path.exists(os.path.join(queued_item, "delete.json")):
+            self.erase_orphan_blobs()
+            safe_delete_file(os.path.join(queued_item, "delete.json"))
+
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
+        assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
         shutil.move(queued_item, session_path)
         assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
 
 
+def get_all_ids_in_directory(path):
+    result = []
+    for dir in os.listdir(path):
+        if re.match("^[0-9]+$", dir) != None:
+            assert int(dir) > 0, "No session 0 allowed in repo"
+            result.append(int(dir))
+    assert len(result) == len(set(result))
+    result.sort()
+    return result
+
+def _snapshot_delete_test_hook(rev):
+    """ This method is intended to be replaced during testing to
+    simulate an interrupted operation."""
+    pass
+
+def generate_random_repoid():
+    # Nothing fancy here, just a reasonably unique string.
+    return "repo_" + md5sum(str(random.random()) + "!" + str(time.time()))

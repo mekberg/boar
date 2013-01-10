@@ -17,12 +17,14 @@
 from __future__ import with_statement
 
 import os
-from front import Front, DryRunFront, RevisionFront
-from blobrepo.repository import Repo
+from front import Front, DryRunFront
+import blobrepo.repository as repository
 from treecomp import TreeComparer
 from common import *
 from boar_exceptions import *
 from boar_common import *
+from jsonrpc import FileDataSource
+
 import client
 
 from base64 import b64decode, b64encode
@@ -36,28 +38,19 @@ import fnmatch
 import sqlite3
 import atexit
 
-# shelve and dbhash are only imported as a workaround for py2exe,
-# which otherwise for some reason will forget to include a dbm implementation
-import shelve
-import dbhash
-
-if sys.version_info >= (2, 6):
-    import json
-else:
-    import simplejson as json
-
-class FakeFile:
-    def write(self, s):
-        pass
+json = get_json_module()
 
 VERSION_FILE = "wd_version.txt"
+CURRENT_VERSION = 3
 METADIR = ".boar"
+CCACHE_FILE = "ccache.db"
 
 class Workdir:
     def __init__(self, repoUrl, sessionName, offset, revision, root):
         assert repoUrl == None or isinstance(repoUrl, unicode)
         assert isinstance(sessionName, unicode)
         assert isinstance(offset, unicode)
+        assert not offset.endswith("/") or offset.endswith("\\")
         assert revision == None or isinstance(revision, int)
         assert isinstance(root, unicode)
         assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
@@ -69,7 +62,7 @@ class Workdir:
         self.root = root
         self.metadir = os.path.join(self.root, METADIR)
         self.front = None
-
+        self.use_progress_printer(True)
         self.__upgrade()
 
         if self.repoUrl:
@@ -77,14 +70,15 @@ class Workdir:
 
         self.sqlcache = None
         if os.path.exists(self.metadir):
-            self.sqlcache = ChecksumCache(self.metadir + "/" + 'ccache.db')
+            self.sqlcache = ChecksumCache(self.metadir + "/" + CCACHE_FILE)
         else:
             self.sqlcache = ChecksumCache(":memory:")
 
         assert self.revision == None or self.revision > 0
+        self.revision_fronts = {}
         self.tree_csums = None
         self.tree = None
-        self.output = FakeFile()
+        self.output = encoded_stdout()
 
     def __upgrade(self):
         v0_metadir = os.path.join(self.root, ".meta")
@@ -93,18 +87,59 @@ class Workdir:
         if not os.path.exists(self.metadir):
             return
         version = self.__get_workdir_version()
-        if version > 1:
+        if version > 3:
             raise UserError("This workdir is created by a future version of boar.")
-        if version == 0:
+
+        if version in (0, 1, 2):
+            notice("Upgrading file checksum cache - rescan necessary, next operation will take longer than usual.")
+        if version == 0 or version == 1:
             if os.path.exists(self.metadir + "/" + 'md5sumcache'):
-                notice("Upgrading file checksum cache - rescan necessary, may take some time.")
                 safe_delete_file(self.metadir + "/" + 'md5sumcache')
-            self.__set_workdir_version(1)
+            if os.path.exists(self.metadir + "/" + CCACHE_FILE):
+                safe_delete_file(self.metadir + "/" + CCACHE_FILE)
+            self.__set_workdir_version(2)
+        del version
+        if self.__get_workdir_version() == 2:
+            files = os.listdir(self.metadir)
+            for fn in files:
+                if re.match("^bloblistcache\d+\.bin$", fn):
+                    safe_delete_file(os.path.join(self.metadir, fn))
+            self.__set_workdir_version(3)
 
     def __reload_tree(self):
-        self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False)
+        progress = self.ScanProgressPrinter()
+        self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False, \
+                                 progress_printer = progress)
         self.tree_csums == None
-
+        self.__reload_manifests()
+        
+    def __reload_manifests(self):
+        self.manifest = {}
+        for fn in self.tree:
+            if not fn.endswith((".txt", ".TXT", ".md5", ".MD5")):
+                # About 5% faster than doing the regexp every time
+                continue
+            hashname, manifest_hash = parse_manifest_name(fn)
+            if not hashname:
+                continue
+            if hashname not in ("md5"):
+                warn("Found manifest file %s, but hash type '%s' is not supported yet. Ignoring." % (fn, hashname))
+                continue
+            dirname = self.wd_sessionpath(os.path.dirname(fn))
+            try:
+                manifest_md5sums = read_md5sum(self.wd_abspath(fn), manifest_hash)
+            except ContentViolation:
+                raise UserError("Contents of manifest file '%s' does not match the expected checksum" % fn)
+            notice("Using manifest file %s" % fn)
+            for md5, filename in manifest_md5sums:
+                filename = tounicode(filename)
+                session_filename = posix_path_join(dirname, filename)
+                if session_filename in self.manifest:
+                    if self.manifest[session_filename] != md5:
+                        raise UserError("Conflicting manifests for file "+os.path.join(dirname, filename))
+                else:
+                    self.manifest[session_filename] = md5                    
+                
     def __get_workdir_version(self):
         version_file = os.path.join(self.metadir, VERSION_FILE)
         if os.path.exists(version_file):
@@ -115,6 +150,16 @@ class Workdir:
         assert type(new_version) == int
         version_file = os.path.join(self.metadir, VERSION_FILE)
         replace_file(version_file, str(new_version))
+
+    def use_progress_printer(self, enabled):
+        if enabled:
+            self.ChecksumProgressPrinter = ChecksumProgressPrinter
+            self.ScanProgressPrinter = ScanProgressPrinter
+            self.SingleTaskProgressPrinter = SingleTaskProgressPrinter
+        else:
+            self.ChecksumProgressPrinter = DummyChecksumProgressPrinter
+            self.ScanProgressPrinter = DummyScanProgressPrinter
+            self.SingleTaskProgressPrinter = DummySingleTaskProgressPrinter
 
     def setLogOutput(self, fout):
         self.output = fout
@@ -135,7 +180,7 @@ class Workdir:
         assert not os.path.exists("md5sum.txt")
         front = self.get_front()
         with StreamEncoder(open("md5sum.txt", "w"), errors = "strict") as f:
-            for info in front.get_session_bloblist(self.revision):
+            for info in self.get_bloblist(self.revision):
                 f.write(info['md5sum'] +" *" + info['filename'] + "\n")
 
     def checkout(self, write_meta = True):
@@ -145,31 +190,55 @@ class Workdir:
             self.revision = front.find_last_revision(self.sessionName)
         if write_meta:
             self.write_metadata()
-        for info in front.get_session_bloblist(self.revision):
+            self.__set_workdir_version(CURRENT_VERSION)
+        for info in sorted_bloblist(self.get_bloblist(self.revision)):
             if not is_child_path(self.offset, info['filename']):
                 continue
-            target = strip_path_offset(self.offset, info['filename'])
-            target_path = os.path.join(self.root, target)
-            fetch_blob(front, info['md5sum'], target_path, overwrite = False)
+            self.fetch_file(info['filename'], info['md5sum'], overwrite = False)
 
-    def update(self, new_revision = None, log = None, ignore_errors = False):
-        assert self.revision, "Cannot update. Current revision is unknown: '%s'" % self.revision
-        if not log:
-            # Don't do this as a default argument, as sys.stdout may
-            # have been redirected (see issue 18)
-            log = StreamEncoder(sys.stdout)
-        unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
-            self.get_changes(self.revision)
+    def fetch_file(self, session_path, md5, overwrite = False):
+        assert is_child_path(self.offset, session_path)
+        target = strip_path_offset(self.offset, session_path)
+        target_path = os.path.join(self.root, target)
+        print >>self.output, target
+        fetch_blob(self.get_front(), md5, target_path, overwrite = overwrite)        
+
+    def update_revision(self, new_revision = None):
+        assert new_revision == None or isinstance(new_revision, int)
         front = self.get_front()
         if new_revision:
             if not front.has_snapshot(self.sessionName, new_revision):
                 raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
         else:
             new_revision = front.find_last_revision(self.sessionName)
-        old_bloblist = self.get_bloblist(self.revision)
-        new_bloblist = front.get_session_bloblist(new_revision)
+        self.revision = new_revision
+        self.write_metadata()
+
+    def update_to_latest(self, ignore_errors = False):
+        """ Updates to the latest revision. Equivalent to using
+        self.update(<current revision>, <latest revision>), """
+        assert self.revision, "Cannot update - unknown current revision"
+        new_revision = self.front.find_last_revision(self.sessionName)
+        assert not self.front.is_deleted(new_revision) # Should not be possible, but could potentially cause deletion of workdir files
+        return self.update(self.revision, new_revision, ignore_errors)
+
+    def update(self, old_revision, new_revision, ignore_errors = False):
+        """ Apply the changes from old_revision to
+        new_revision. Differences in the workdir from old_revision
+        will be considered modifications and will not be
+        overwritten. Old_revision should typically be self.revision. """
+        assert type(new_revision) == int and new_revision > 0
+        assert type(old_revision) == int and old_revision > 0
+        unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
+            self.get_changes(old_revision)
+        front = self.get_front()
+        log = self.output
+        if not front.has_snapshot(self.sessionName, new_revision):
+            raise UserError("No such session or snapshot: %s@%s" % (self.sessionName, new_revision))
+        old_bloblist = self.get_bloblist(old_revision)
+        new_bloblist = self.get_bloblist(new_revision)
         new_bloblist_dict = bloblist_to_dict(new_bloblist)
-        for b in new_bloblist:
+        for b in sorted_bloblist(new_bloblist):
             if not is_child_path(self.offset, b['filename']):
                 continue
             if b['filename'] in modified_files:
@@ -200,11 +269,11 @@ class Workdir:
         self.revision = new_revision
         self.tree = None
         self.write_metadata()
-        print >>log, "Workdir now at revision", self.revision
+        self.__set_workdir_version(CURRENT_VERSION)
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
-                    log_message = None, ignore_errors = False):
+                    log_message = None, ignore_errors = False, allow_empty = False):
         front = self.get_front()
         if dry_run:
             front = DryRunFront(front)
@@ -220,7 +289,29 @@ class Workdir:
 
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes(self.revision, ignore_errors = ignore_errors)
+
+        stats = self.front.get_session_load_stats(self.revision)
+        if stats and stats['total_count'] == 0:
+            # If the previoys snapshot is empty, there's no use pointing to it
+            force_base_snapshot = True
+        elif stats:
+            # Add the impact of this new snapshot
+            stats['remove_count'] += len(deleted_files)            
+            stats['add_count'] += len(new_files) + len(modified_files)
+            stats['total_count'] += len(new_files) - len(deleted_files)
+            # If there are more removals than actual files, let's make
+            # things faster by creating a new base snapshot.
+            force_base_snapshot = stats['remove_count'] + stats['add_count']  >= 2 * stats['total_count']
+        else:
+            force_base_snapshot = False
+
         assert base_snapshot or (not unchanged_files and not modified_files and not deleted_files)
+
+        if not allow_empty and (len(new_files) + len(modified_files) + len(deleted_files) == 0):
+            if write_meta:
+                self.write_metadata()
+                self.__set_workdir_version(CURRENT_VERSION)
+            return None
 
         if fail_on_modifications and modified_files:
             raise UserError("This import would replace some existing files")
@@ -229,54 +320,62 @@ class Workdir:
             deleted_files = ()
             modified_files = ()
 
-        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message, ignore_errors)
+        self.verify_manifest(unchanged_files + new_files + modified_files)
+
+        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message, ignore_errors, force_base_snapshot)
 
         if write_meta:
             self.write_metadata()
+            self.__set_workdir_version(CURRENT_VERSION)
+
         return self.revision
 
-    def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors):
+    def verify_manifest(self, included_files):
+        """Verify that the given set of files does not conflict with
+        any present manifest files. If a problem is found, a suitable
+        UserError is raised."""
+        if not self.manifest:
+            return
+        all_files = set(included_files)
+        for fn in self.manifest.keys():
+            if fn not in all_files:
+                raise UserError("File is described in a manifest but is not present in the workdir: %s" % fn)
+            wd_path = strip_path_offset(self.offset, fn)
+            if self.manifest[fn] != self.cached_md5sum(wd_path):
+                raise UserError("File %s contents conflicts with manifest" % wd_path)
+
+
+    def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors, force_base_snapshot):
         """ Creates a new snapshot of the files in this
         workdir. Modified and new files are passed in the 'files'
         argument, deleted files in the 'deleted_files' argument. The
         new snapshot will be created as a modification of the snapshot
         given in the 'base_snapshot' argument."""
 
-        print "All checksums:", front.get_all_rolling()
+        #print "All checksums:", front.get_all_rolling()
+        # To increase the chance of detecting spurious reading errors,
+        # all the files should at this point have been scanned and had
+        # their checksums stored in the checksum cache. The
+        # self.get_changes() call will do that.
 
-        for f in files:
-            # A little hackish to store up the md5sums in one sweep
-            # before starting to check them in. An attempt to reduce
-            # the chance that the file is in disk cache when we read
-            # it again for check-in later. (To avoid the problem that
-            # a corrupted disk read is cached and not detected) TODO:
-            # This is really a broken way to do it, and it should be
-            # replaced with proper system-calls to read the file raw
-            # from disk. But that's complicated.
-            self.cached_md5sum(strip_path_offset(self.offset, f))
+        assert isinstance(force_base_snapshot, bool)
+        assert isinstance(ignore_errors, bool)
+
         try:
-            front.create_session(session_name = self.sessionName, base_session = base_snapshot)
+            front.create_session(session_name = self.sessionName, base_session = base_snapshot, force_base_snapshot = force_base_snapshot)
         except FileMutex.MutexLocked, e:
             raise UserError("The session '%s' is in use (lockfile %s)" % (self.sessionName, e.mutex_file))
 
-        # md5 -> sha256 for all files that has been checked into this new snapshot
-        seen_checksums = {}
-
-        for sessionpath in files:
+        for sessionpath in sorted(files):
             wd_path = strip_path_offset(self.offset, sessionpath)
             abspath = self.abspath(sessionpath)
             expected_md5sum = self.cached_md5sum(wd_path)
-            sha256_checksum = self.cached_sha256(wd_path)
-            if expected_md5sum in seen_checksums and seen_checksums[expected_md5sum] != sha256_checksum:
-                front.cancel_snapshot()
-                raise UserError("Local md5 checksum collision detected on %s. md5 collisions are not supported." % abspath)
-            if front.has_blob(expected_md5sum):
-                if sha256_checksum != front.get_blob_sha256(expected_md5sum):
-                    front.cancel_snapshot()
-                    raise UserError("Remote md5 checksum collision detected on %s. md5 collisions are not supported." % abspath)
-            seen_checksums[expected_md5sum] = sha256_checksum
+            if sessionpath in self.manifest and self.manifest[sessionpath] != expected_md5sum:
+                raise UserError("File %s contents conflicts with manifest" % wd_path)
             try:
-                check_in_file(front, abspath, sessionpath, expected_md5sum, sha256_checksum, seen_checksums, log = self.output)
+                check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
+            except ConstraintViolation:
+                raise UserError("File changed during commit: %s" % wd_path)
             except EnvironmentError, e:
                 if ignore_errors:
                     warn("Ignoring unreadable file: %s" % abspath)
@@ -285,16 +384,10 @@ class Workdir:
                     raise UserError("Unreadable file: %s" % abspath)
 
         for f in deleted_files:
+            print >>self.output, "Deleting", f
             front.remove(f)
 
-        session_info = {}
-        session_info["name"] = self.sessionName
-        session_info["timestamp"] = int(time.time())
-        session_info["date"] = time.ctime()
-        if log_message != None:
-            assert type(log_message) == unicode, "Log message must be in unicode"
-            session_info["log_message"] = log_message
-        self.revision = front.commit(session_info)
+        self.revision = front.commit(self.sessionName, log_message)
         return self.revision
 
 
@@ -304,32 +397,9 @@ class Workdir:
         self.front = create_front(self.repoUrl)
         return self.front
 
-    def get_revision_front(self, revision):
-        front = self.get_front()
-        return RevisionFront(front, revision, 
-                             self.__load_cached_bloblist, 
-                             self.__save_cached_bloblist)
-
-    def __load_cached_bloblist(self, revision):
-        assert type(revision) == int and revision > 0
-        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
-        if os.path.exists(bloblist_file):
-            try:
-                return cPickle.load(open(bloblist_file, "rb"))
-            except: 
-                warn("Exception while accessing bloblist cache - ignoring")
-                return None
-        return None
-
-    def __save_cached_bloblist(self, revision, bloblist):
-        assert type(revision) == int and revision > 0
-        bloblist_file = os.path.join(self.metadir, "bloblistcache"+str(revision)+".bin")
-        if os.path.exists(self.metadir):
-            cPickle.dump(bloblist, open(bloblist_file, "wb"))        
-
     def get_bloblist(self, revision):
         assert type(revision) == int, "Revision was '%s'" % revision
-        return self.get_revision_front(revision).get_bloblist()
+        return self.front.get_session_bloblist(revision)
 
     def exists_in_workdir(self, csum):
         """ Returns true if at least one file with the given checksum exists
@@ -351,9 +421,10 @@ class Workdir:
                 return info
         return None
 
-    def __get_cached_checksums(self, relative_path):
-        """Return a list consisting of the md5 and sha256 checksums of
-        the given file as hex encoded strings."""
+
+    def get_cached_md5sum(self, relative_path):
+        """Returns the cached md5 sum of the given file if it is
+        current, otherwise returns None."""
         assert not os.path.isabs(relative_path), "Path must be relative to the workdir. Was: "+relative_path
         assert self.sqlcache
         abspath = self.wd_abspath(relative_path)
@@ -362,19 +433,37 @@ class Workdir:
         recent_change = abs(time.time() - stat.st_mtime) < 5.0
         if sums and not recent_change:
             return sums
-        md5, sha256 = checksum_file(abspath, ("md5", "sha256"))
-        self.sqlcache.set(relative_path, stat.st_mtime, md5, sha256)
-        assert len(md5) == 32 and len(sha256) == 64
-        return md5, sha256
+        return None
+        
 
     def cached_md5sum(self, relative_path):
-        md5, sha256 = self.__get_cached_checksums(relative_path)
+        """Return the md5 checksum of the given file as hex encoded
+        string. If the checksum is not already cached, it is
+        calculated and stored."""
+        md5 = self.get_cached_md5sum(relative_path)
+        if md5 == None:
+            abspath = self.wd_abspath(relative_path)
+            stat = os.stat(abspath)
+            md5, = checksum_file(abspath, ("md5",))
+            self.sqlcache.set(relative_path, stat.st_mtime, md5)
         assert is_md5sum(md5)
         return md5
 
-    def cached_sha256(self, relative_path):
-        md5, sha256 = self.__get_cached_checksums(relative_path)
-        return sha256
+    def wd_sessionpath(self, wdpath):
+        """Transforms a workdir path to a session path"""
+        if os.path.isabs(wdpath):
+            raise UserError("Given workdir subpath points outside current session: '%s'" % wdpath)
+        if self.offset != "":
+            wdpath = os.path.join(self.offset, wdpath)
+        wdpath = convert_win_path_to_unix(wdpath)
+        result = posix_normpath(wdpath)
+        if result == ".":
+            result = u""
+        parts = result.split("/")
+        if ".." in parts:
+            raise UserError("Given workdir subpath contains parental references: '%s'" % wdpath)
+        assert not "." in parts
+        return result
 
     def wd_abspath(self, wd_path):
         """Transforms the given workdir path into a system absolute
@@ -398,18 +487,45 @@ class Workdir:
         """ Compares the work dir with given revision, or the latest
             revision if no revision is given. Returns a tuple of five
             lists: unchanged files, new files, modified files, deleted
-            files, ignored files."""
+            files, ignored files.
+            """
+
+        assert revision == None or type(revision) == int
+        assert ignore_errors in (True, False)
+
         front = self.get_front()
+
         self.__reload_tree()
         existing_files_list = copy.copy(self.tree)
         prefix = ""
         if self.offset:
             prefix = self.offset + "/"
         filelist = {}
+
+        scan_progress = self.ScanProgressPrinter("Verifying checksum cache:")
+
+        files_to_checksum = []
+        files_to_checksum_sizes = {}
         for fn in existing_files_list:
+            md5 = self.get_cached_md5sum(fn)
+            if md5 == None:
+                files_to_checksum.append(fn)
+                files_to_checksum_sizes[fn] = os.path.getsize(self.wd_abspath(fn))
+            else:
+                filelist[prefix + fn] = md5
+            scan_progress.update()
+        scan_progress.finished()
+
+        total_files = len(files_to_checksum)
+        total_bytes = sum(files_to_checksum_sizes.values())
+        remaining_files = total_files
+        remaining_bytes = total_bytes
+
+        progress = self.ChecksumProgressPrinter()        
+        progress.update(total_files, remaining_files, total_bytes, remaining_bytes)
+
+        for fn in files_to_checksum:
             f = prefix + fn
-            assert not is_windows_path(f), "Was:" + f
-            assert not os.path.isabs(f)
             try:
                 filelist[f] = self.cached_md5sum(fn)
             except EnvironmentError, e:
@@ -417,7 +533,17 @@ class Workdir:
                     warn("Ignoring unreadable file: %s" % f)
                 else:
                     raise UserError("Unreadable file: %s" % f)
-        
+            remaining_files -= 1
+            remaining_bytes -= files_to_checksum_sizes[fn]
+            progress.update(total_files, remaining_files, total_bytes, remaining_bytes)
+
+        progress.finished()
+
+        for f in filelist.keys():
+            assert not is_windows_path(f), "Was:" + f
+            assert not os.path.isabs(f)
+
+        progress = self.SingleTaskProgressPrinter("Loading session...")
         if revision != None:
             bloblist = self.get_bloblist(revision)
         else:
@@ -427,12 +553,13 @@ class Workdir:
                 if not self.revision:
                     raise UserError("No session found named '%s'" % (self.sessionName))
             bloblist = self.get_bloblist(self.revision)
+        progress.finished()
 
+        progress = self.SingleTaskProgressPrinter("Calculating changes...")
         bloblist_dict = {}
         for i in bloblist:
             if is_child_path(self.offset, i['filename']):
                 bloblist_dict[i['filename']] = i['md5sum']
-
         comp = TreeComparer(bloblist_dict, filelist)
         unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
 
@@ -455,6 +582,8 @@ class Workdir:
             assert not modified_files
             assert not deleted_files, deleted_files
         result = unchanged_files, new_files, modified_files, deleted_files, ignored_files
+        progress.finished()
+        self.last_get_changes = result # A little bit of a hack for update()... User experience trumps code beauty
         return result
 
 def fnmatch_multi(patterns, filename):
@@ -463,46 +592,56 @@ def fnmatch_multi(patterns, filename):
             return True
     return False
 
-def check_in_file(front, abspath, sessionpath, expected_md5sum, sha256_checksum, seen_checksums, log = FakeFile()):
+def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()):
     """ Checks in the file found at the given "abspath" into the
     active "front" with the path in the session given as
     "sessionpath". The md5sum of the file has to be provided. The
     checksum is compared to the file while it is read, to ensure it is
     consistent."""
     assert os.path.isabs(abspath), \
-        "abspath must be absolute. Was: '%s'" % (path)
+        "abspath must be absolute. Was: '%s'" % (abspath)
     assert ".." not in sessionpath.split("/"), \
            "'..' not allowed in paths or filenames. Was: " + sessionpath
-    assert "\\" not in sessionpath, "Was: '%s'" % (path)
+    assert "\\" not in sessionpath, "Was: '%s'" % (sessionpath)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
-    log.write("Checking in %s => %s\n" % (abspath, sessionpath))
+    print >>log, "Sending", sessionpath
     if not front.has_blob(expected_md5sum) and not front.new_snapshot_has_blob(expected_md5sum):
         # File does not exist in repo or previously in this new snapshot. Upload it.
+        _send_file_hook(abspath) # whitebox testing
         with open_raw(abspath) as f:
-            m = hashlib.md5()
-            freader = file_reader(f, blocksize = 1048576) # 1048576 = 2^20
-            for block in freader:
-                m.update(block)
-                front.add_blob_data(expected_md5sum, b64encode(block))
-            front.add_blob_data(expected_md5sum, b64encode(""))
-            assert m.hexdigest() == expected_md5sum, \
-                "File changed during checkin process: " + path
+            front.init_new_blob(expected_md5sum, blobinfo["size"])
+            datasource = FileDataSource(f, os.path.getsize(abspath))
+            front.add_blob_data_streamed(expected_md5sum, datasource = datasource)
+            front.blob_finished(expected_md5sum)
     front.add(blobinfo)
 
 def init_workdir(path):
     """ Tries to find a workdir root directory at the given path or
     above. Returns a workdir object if successful, or None if not. """
-    metapath = find_meta(tounicode(os.getcwd()))
-    info = load_meta_info(metapath)
-    root = os.path.split(metapath)[0]
-    wd = Workdir(repoUrl=info['repo_path'], 
-                 sessionName=info['session_name'], 
-                 offset=info.get("offset", ""), 
-                 revision=info['session_id'],
-                 root=root) 
+    assert isinstance(path, unicode)
+    wdparams = load_workdir_parameters(path)
+    if wdparams == None:
+        return None
+    wd = Workdir(repoUrl = wdparams["repoUrl"],
+                 sessionName = wdparams["sessionName"],
+                 offset = wdparams["offset"],
+                 revision = wdparams["revision"],
+                 root = wdparams["root"]) 
     return wd
 
+def load_workdir_parameters(path):
+    metapath = find_meta(path)
+    if not metapath:
+        return None
+    info = load_meta_info(metapath)
+    root = os.path.split(metapath)[0]
+    return {"repoUrl": info['repo_path'], 
+            "sessionName": info['session_name'], 
+            "offset": info.get("offset", ""), 
+            "revision": info['session_id'],
+            "root": root}
+    
 
 def find_meta(path):
     meta = os.path.join(path, METADIR)
@@ -517,18 +656,11 @@ def find_meta(path):
     return find_meta(head)
 
 def load_meta_info(metapath):
-    with open(os.path.join(metapath, "info"), "rb") as f:
-        info = json.load(f)
-    return info
+    assert metapath
+    return read_json(os.path.join(metapath, "info"))
 
 def create_front(repoUrl):
-    if repoUrl.startswith("boar://"):
-        front = client.connect(repoUrl)
-        front.isRemote = True
-    else:
-        front = Front(Repo(repoUrl))
-        front.isRemote = False
-    return front
+    return client.connect(repoUrl)
 
 def init_repo_from_meta(path):
     front = None
@@ -570,14 +702,16 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
         # TODO: some kind of garbage bin instead of deletion
         os.remove(target_path)
     tmpfile_fd, tmpfile = tempfile.mkstemp(dir = target_dir)
+    os.close(tmpfile_fd)
     try:
-        with os.fdopen(tmpfile_fd, "wb") as f:
+        with StrictFileWriter(tmpfile, blobname, size, overwrite = True) as f:
             while datareader.bytes_left() > 0:
                 f.write(datareader.read(2**14))
         os.rename(tmpfile, target_path)
-    finally:
+    except:
         if os.path.exists(tmpfile):
             os.remove(tmpfile)
+        raise
 
 def bloblist_to_dict(bloblist):
     d = {}
@@ -586,38 +720,115 @@ def bloblist_to_dict(bloblist):
     assert(len(d) == len(bloblist)), \
         "All filenames must be unique in the revision"
     return d
-    
-    
+
+def _send_file_hook(path):
+    pass
+
+class SingleTaskProgressPrinter:
+    def __init__(self, start_msg = "Doing stuff...", end_msg = "done"):
+        self.end_msg = end_msg
+        print start_msg,
+        sys.stdout.flush()
+
+    def finished(self):
+        print self.end_msg
+
+class DummySingleTaskProgressPrinter:
+    def __init__(self, start_msg = "", end_msg = ""): pass
+    def finished(self): pass
+
+class ScanProgressPrinter:
+    def __init__(self, msg = "Looking for files:"):
+        self.count = 0
+        self.last_t = 0
+        self.msg = msg
+
+    def __print(self):
+        print self.msg, self.count, "\r",
+
+    def update(self):
+        self.count += 1
+        now = time.time()
+        if now - self.last_t < 0.1:
+            return
+        self.__print()
+        sys.stdout.flush()
+        self.last_t = now
+
+    def finished(self):
+        self.__print()
+        print
+
+class DummyScanProgressPrinter:
+    def __init__(self, msg = ""): pass
+    def update(self): pass
+    def finished(self): pass
+
+
+class ChecksumProgressPrinter:
+    def __init__(self):
+        self.last_t = 0
+        self.start_t = time.time()
+        self.active = False
+        self.last_string = ""
+
+    def update(self, total_files, remaining_files, total_bytes, remaining_bytes):
+        if total_bytes == 0:
+            # Nothing to do
+            return
+        self.active = True
+        now = time.time()
+        if now - self.last_t < 0.5 and remaining_bytes > 0 and remaining_bytes != total_bytes:
+            # Rate limit printouts, unless first or last progress call, always print those.
+            return
+        elapsed_time = now - self.start_t + 1.0
+        processed_bytes = total_bytes - remaining_bytes
+        print (" " * len(self.last_string)) + "\r",
+        self.last_string = "Scanning: %s files and %s Mb remaining (%s%% complete, %s Mb/s)" % \
+            (remaining_files, int(remaining_bytes/2**20), \
+             round(100 * (1.0 - 1.0 * remaining_bytes / total_bytes), 1), \
+             round((processed_bytes/2**20)/elapsed_time, 1))
+        print self.last_string + "\r",
+        sys.stdout.flush()
+        self.last_t = now
+
+    def finished(self):
+        if self.active:
+            print
+
+class DummyChecksumProgressPrinter:
+    def update(self, total_files, remaining_files, total_bytes, remaining_bytes): pass
+    def finished(self): pass
+        
 class ChecksumCache:
     def __init__(self, dbpath):
-        # Use a proxy to avoid circular reference to the repo,
-        # allowing this object to be garbed at shutdown and triggering
-        # the __del__ function.
         assert dbpath == ":memory:" or os.path.isabs(dbpath)
         assert dbpath == ":memory:" or os.path.exists(os.path.dirname(dbpath))
         self.dbpath = dbpath
         self.conn = None
         self.__init_db()
         atexit.register(self.sync)
-        self.rate_limiter = RateLimiter(1.0)
+        self.rate_limiter = RateLimiter(hz = 1.0/60.0)
 
     def __init_db(self):
         if self.conn:
             return
         try:
             self.conn = sqlite3.connect(self.dbpath, check_same_thread = False)
-            self.conn.execute("CREATE TABLE IF NOT EXISTS ccache (path text, mtime unsigned int, md5 char(32), sha256 char(64) NOT NULL, row_md5 char(32))")
+            self.conn.execute("CREATE TABLE IF NOT EXISTS ccache (path text, mtime unsigned int, md5 char(32), row_md5 char(32))")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ccache_index ON ccache (path, mtime)")
             self.conn.commit()
+            # Exclusive mode seems to make operations a lot faster
+            self.conn.execute("PRAGMA locking_mode = EXCLUSIVE")
+            self.conn.execute("BEGIN")
         except sqlite3.DatabaseError, e:
             raise
-            #raise repository.SoftCorruptionError("Exception while accessing the sha256 cache: "+str(e))
 
-    def set(self, path, mtime, md5, sha256):
+    def set(self, path, mtime, md5):
         assert type(path) == unicode
-        md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5 + "!" + sha256)
+        md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5)
         try:
-            self.conn.execute("REPLACE INTO ccache (path, mtime, md5, sha256, row_md5) VALUES (?, ?, ?, ?, ?)", (path, mtime, md5, sha256, md5_row))
+            self.conn.execute("REPLACE INTO ccache (path, mtime, md5, row_md5) VALUES (?, ?, ?, ?)", (path, mtime, md5, md5_row))
             if self.rate_limiter.ready():
                 self.sync()
         except sqlite3.DatabaseError, e:
@@ -627,20 +838,21 @@ class ChecksumCache:
         assert type(path) == unicode
         try:
             c = self.conn.cursor()
-            c.execute("SELECT md5, sha256, row_md5 FROM ccache WHERE path = ? AND mtime = ?", (path, mtime))
+            c.execute("SELECT md5, row_md5 FROM ccache WHERE path = ? AND mtime = ?", (path, mtime))
             rows = c.fetchall()
         except sqlite3.DatabaseError, e:
             raise
         if not rows:
             return None
         assert len(rows) == 1
-        md5, sha256, row_md5 = rows[0]
-        expected_md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5.encode("utf8") + "!" + sha256.encode("utf8"))
-        if row_md5 != expected_md5_row:
-            raise
-        return md5, sha256
+        md5, row_md5 = rows[0]
+        expected_md5_row = md5sum(path.encode("utf8") + "!" + str(mtime) + "!" + md5.encode("utf8"))
+        # TODO: use a nice exception for cache corruption
+        assert row_md5 == expected_md5_row, "Workdir cache corrupted"
+        return md5
 
     def sync(self):
         if self.conn:
             self.conn.commit()
+            self.conn.execute("BEGIN")
 

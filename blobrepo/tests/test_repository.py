@@ -37,7 +37,7 @@ from common import tounicode
 
 class TestBlobRepo(unittest.TestCase):
     def setUp(self):
-        self.repopath = tounicode(tempfile.mktemp(dir=TMPDIR))
+        self.repopath = tounicode(tempfile.mktemp(prefix="boar_test_repository_", dir=TMPDIR))
         repository.create_repository(self.repopath)
         self.repo = repository.Repo(self.repopath)
         self.sessioninfo1 = {"foo": "bar",
@@ -50,8 +50,7 @@ class TestBlobRepo(unittest.TestCase):
                           "md5sum": DATA3_MD5}
 
     def tearDown(self):
-        #shutil.rmtree(self.repopath, ignore_errors = True)
-        pass
+        shutil.rmtree(self.repopath, ignore_errors = True)
 
     def assertListsEqualAsSets(self, lst1, lst2):
         self.assertEqual(len(lst1), len(lst2))
@@ -85,8 +84,10 @@ class TestBlobRepo(unittest.TestCase):
     def test_simple_blob(self):
         committed_info = copy(self.fileinfo1)
         writer = self.repo.create_session(SESSION_NAME)
+        writer.init_new_blob(DATA1_MD5, len(DATA1))
         writer.add_blob_data(DATA1_MD5, DATA1)
         writer.add(committed_info)
+        writer.blob_finished(DATA1_MD5)
         self.assertEqual(committed_info, self.fileinfo1)
         id = writer.commit()
         reader = self.repo.get_session(id)
@@ -95,12 +96,16 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_secondary_session(self):
         writer1 = self.repo.create_session(SESSION_NAME)
+        writer1.init_new_blob(DATA1_MD5, len(DATA1))
         writer1.add_blob_data(DATA1_MD5, DATA1)
         writer1.add(self.fileinfo1)
+        writer1.blob_finished(DATA1_MD5)
         id1 = writer1.commit()
         writer2 = self.repo.create_session(SESSION_NAME, base_session = id1)
+        writer2.init_new_blob(DATA2_MD5, len(DATA2))
         writer2.add_blob_data(DATA2_MD5, DATA2)
         writer2.add(self.fileinfo2)
+        writer2.blob_finished(DATA2_MD5)
         id2 = writer2.commit()
         reader = self.repo.get_session(id2)
         blobinfos = list(reader.get_all_blob_infos())
@@ -108,8 +113,10 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_remove(self):
         writer1 = self.repo.create_session(SESSION_NAME)
+        writer1.init_new_blob(DATA1_MD5, len(DATA1))
         writer1.add_blob_data(DATA1_MD5, DATA1)
         writer1.add(self.fileinfo1)
+        writer1.blob_finished(DATA1_MD5)
         id1 = writer1.commit()
         writer2 = self.repo.create_session(SESSION_NAME, base_session = id1)
         writer2.remove(self.fileinfo1['filename'])
@@ -123,51 +130,17 @@ class TestBlobRepo(unittest.TestCase):
         writer1 = self.repo.create_session(SESSION_NAME)
         self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")        
 
-    def test_split(self):
-        #  0          1        2         3
-        #  0123456789012345678901234567890123456789
-        # "tjosan hejsan tjosan hejsan hejsan"
-        # cafa2ed1e085869b3bfe9e43b60e7a5a
+    def test_find_orphan_blobs(self):
+        committed_info = copy(self.fileinfo1)
         writer = self.repo.create_session(SESSION_NAME)
-        writer.add_blob_data(DATA3_MD5, DATA3)
-        writer.add(self.fileinfo3)
+        writer.init_new_blob(DATA1_MD5, len(DATA1))
+        writer.add_blob_data(DATA1_MD5, DATA1)
+        writer.add(committed_info)
+        writer.blob_finished(DATA1_MD5)
         writer.commit()
-        writer = self.repo.create_session(SESSION_NAME)
-        writer.split_blob("cafa2ed1e085869b3bfe9e43b60e7a5a", [14,28])
-        split_snapshot = writer.commit()
-        redundant = list(self.repo.find_redundant_raw_blobs())
-        self.assertEquals(redundant, ["cafa2ed1e085869b3bfe9e43b60e7a5a"])
-        os.remove(self.repo.get_blob_path("cafa2ed1e085869b3bfe9e43b60e7a5a"))
-        reader = self.repo.get_session(split_snapshot)
-        blobinfos = reader.get_all_blob_infos()
-        for bi in blobinfos:
-            self.assertTrue(self.repo.verify_blob(bi['md5sum']))
-
-    def testSha256(self):
-        writer = self.repo.create_session(SESSION_NAME)
-        writer.add_blob_data(DATA3_MD5, DATA3)
-        writer.add(self.fileinfo3)
-        writer.commit()
-        sha256 = self.repo.sha256.get_sha256(DATA3_MD5)
-        self.assertEquals(sha256, "c61711eee86561d24bba9b541f2c3621a39f0e80e36a6407abfb68bc51264c10")
-
-    def testSha256CacheCorruption(self):
-        expected_sha256 = "c61711eee86561d24bba9b541f2c3621a39f0e80e36a6407abfb68bc51264c10"
-        writer = self.repo.create_session(SESSION_NAME)
-        writer.add_blob_data(DATA3_MD5, DATA3)
-        writer.add(self.fileinfo3)
-        writer.commit()
-        sha256 = self.repo.sha256.get_sha256(DATA3_MD5)
-        self.assertEquals(sha256, expected_sha256)
-        self.repo.close()
-        dbname = os.path.join(self.repopath, "derived/sha256/sha256cache")
-        dbfile = open(dbname, "w")        
-        dbfile.write("hejsanhoppsan")
-        print "Db file at %s successfully mangled" % dbname
-        self.repo = repository.Repo(self.repopath)
-        sha256 = self.repo.sha256.get_sha256(DATA3_MD5)
-        self.assertEquals(sha256, expected_sha256)
-        
+        self.assertEqual(self.repo.get_orphan_blobs(), set())
+        open(os.path.join(self.repo.repopath, "blobs", "55", "551d8cd98f00b204e9800998ecf8427e"), "w")
+        self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
 
 if __name__ == '__main__':
     unittest.main()

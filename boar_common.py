@@ -16,9 +16,11 @@
 
 from __future__ import with_statement
 
-import os
+import os, re
 
 from common import *
+
+from treecomp import TreeComparer
 
 def safe_delete_file(path):
     """This function behaves like os.remove(), except for filenames
@@ -32,3 +34,57 @@ def safe_delete_file(path):
     assert not filename.endswith(".fingerprint"), "safe_delete prevented deletion of session fingerprint"
     assert not filename.endswith(".recipe"), "safe_delete prevented deletion of recipe data"
     os.remove(path)
+
+def bloblist_to_dict(bloblist):
+    """Returns the bloblist as a dict on the form filename ->
+    blobinfo."""
+    blobdict = {}
+    for b in bloblist:
+        blobdict[b['filename']] = b
+    assert len(blobdict) == len(bloblist), "Duplicate filename in bloblist"
+    return blobdict
+
+def treecompare_bloblists(from_bloblist, to_bloblist):
+    """Constructs and returns a TreeComparer instance using the
+    filenames and md5sums found in the given bloblist entries."""
+    def bloblist_to_dict(bloblist):
+        cmpdict = {}
+        for b in bloblist:
+            cmpdict[b['filename']] = b['md5sum']
+        assert len(cmpdict) == len(bloblist), "Duplicate filename in bloblist"
+        return cmpdict
+
+    from_dict = bloblist_to_dict(from_bloblist)
+    to_dict = bloblist_to_dict(to_bloblist)
+    return TreeComparer(from_dict, to_dict)
+
+def invert_bloblist(bloblist):
+    """ Returns a dictionary on the form md5sum -> [blobinfo,
+    blobinfo, ...] """    
+    result = {}
+    for bi in bloblist:
+        if bi['md5sum'] not in result:
+            result[bi['md5sum']] = []
+        result[bi['md5sum']].append(bi)
+    return result
+
+
+def sorted_bloblist(bloblist):
+    def info_comp(x, y):
+        return cmp(x['filename'], y['filename'])
+    return sorted(bloblist, info_comp)
+
+def parse_manifest_name(path):
+    """Returns a tuple (lowercase hash name, hash). Both are None if
+    the path is not a valid manifest filename."""
+    m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5)", path, flags=re.IGNORECASE)
+    if not m:
+        return None, None
+    if m.group(3):
+        hashname = m.group(3).lower()
+        return hashname, None
+    else:
+        hashname = "md5"
+        manifest_hash = m.group(4).lower()
+        return hashname, manifest_hash
+

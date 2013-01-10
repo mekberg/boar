@@ -24,20 +24,55 @@ import platform
 import locale
 import codecs
 import time
+import textwrap
 
-if sys.version_info >= (2, 6):
-    import json
-else:
+from tempfile import TemporaryFile
+from threading import current_thread
+
+try: 
+    # Simplejson can be a lot faster, but has some odd optimization
+    # that makes the result mix str and unicode instances. By
+    # converting the argument string into unicode
     import simplejson as json
+    original_loads = json.loads
+    def unicode_loads(s, *args, **kw):
+        if type(s) == str:
+            s = unicode(s, "utf-8")
+        return original_loads(s, *args, **kw)
+    json.loads = unicode_loads
+except ImportError: 
+    import json
+
+del json.load # Let's not use this
+
+def get_json_module():
+    return json
+
+# Something like sys.maxsize, but works pre-2.6
+VERY_LARGE_NUMBER = 9223372036854775807L
+
+def verify_assert():
+    try:
+        assert False
+        raise Exception("This module requires asserts to be enabled (don't use python -O flag)")
+    except AssertionError:
+        # Asserts are enabled
+        pass
+
+verify_assert() # This module uses assert to check for external conditions.
+
+def dumps_json(obj):
+    return json.dumps(obj, indent = 4)
 
 def write_json(filename, obj):
     assert not os.path.exists(filename), "File already exists: " + filename
-    with open(filename, "wb") as f:
-        json.dump(obj, f, indent = 4)
+    data = dumps_json(obj)
+    with StrictFileWriter(filename, md5sum(data), len(data)) as f:
+        f.write(data)
 
 def read_json(filename):
-    with open(filename, "rb") as f:
-        return json.load(f)
+    with safe_open(filename, "rb") as f:
+        return json.loads(f.read())
 
 """ This file contains code that is generally useful, without being
 specific for any project """
@@ -48,42 +83,97 @@ def is_md5sum(str):
     except TypeError:
         return False
 
+def is_sha256(str):
+    try:
+        return re.match("^[a-f0-9]{64}$", str) != None    
+    except TypeError:
+        return False
+
 assert is_md5sum("7df642b2ff939fa4ba27a3eb4009ca67")
 
-def warn(s):
-    sys.stderr.write("WARNING: ")
-    sys.stderr.write(s)
-    sys.stderr.write("\n")
+def prefixwrap(prefix, text, rowlen = 80):
+    rows = textwrap.wrap(text, width = rowlen - len(prefix))
+    result = [prefix + rows.pop(0)]
+    while rows:
+        result.append(" " * len(prefix) + rows.pop(0))
+    return result
 
-def notice(s):
-    sys.stderr.write("NOTICE: ")
-    sys.stderr.write(s)
-    sys.stderr.write("\n")
+def prefixprint(prefix, text, stream = None):
+    if stream == None:
+        stream = sys.stderr
+    for row in prefixwrap(prefix, text):
+        stream.write(row)
+        stream.write("\n")
 
-def read_file(path):
-    """Reads and returns the contents of the given filename."""
-    with open(path) as f:
-        return f.read()
+def error(s, stream = None):
+    prefixprint("ERROR: ", s, stream)
 
-#
+def warn(s, stream = None):
+    prefixprint("WARNING: ", s, stream)
+
+def notice(s, stream = None):
+    prefixprint("NOTICE: ", s, stream)
+
+def read_file(path, expected_md5 = None):
+    """Reads and returns the contents of the given filename. If
+    expected_md5 is given, the contents of the file will be verified
+    before they are returned. If there is a mismatch, a
+    ContentViolation error will be raised."""
+    with safe_open(path) as f:
+        data = f.read()
+    if expected_md5 and md5sum(data) != expected_md5:
+        raise ContentViolation("File '%s' did not have expected checksum '%s'" % (path, expected_md5))
+    return data
+
+def parse_md5sum(text):
+    """Expects a sting containing a classic md5sum.exe output format,
+    and returns the data on the form [(md5, filename), ...]. Note that
+    the data must be utf-8 encoded, or an UnicodeDecodeError will be
+    raised. One notable source of such non-utf-8 files is md5sum.exe
+    on Windows."""
+    result = []
+    for line in text.splitlines():
+        line = line.rstrip("\r\n")
+        filename = line[34:]
+        filename = filename.decode("utf-8")
+        result.append((line[0:32], convert_win_path_to_unix(filename)))
+    return result
+
+def read_md5sum(path, expected_md5 = None):
+    """Reads a classic md5sum.exe output file and returns the data on
+    the form [(md5, filename), ...]. Note that the data must be utf-8 encoded,
+    or an UnicodeDecodeError will be raised. One notable source of such
+    non-utf-8 files is md5sum.exe on Windows."""
+    data = read_file(path, expected_md5)
+    if data.startswith('\xef\xbb\xbf'):
+        data = data[3:] # Remove unicode BOM
+    return parse_md5sum(data)
+
 _file_reader_sum = 0
 def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
-    """Accepts a file object and yields the specified part of the file
-    as a sequence of blocks with length <= blocksize."""
+    """Accepts a file object and yields the specified part of
+    the file as a sequence of blocks with length <= blocksize."""
     global _file_reader_sum
     f.seek(0, os.SEEK_END)
     real_end = f.tell()
-    assert end == None or end <= real_end, "Can't checksum past end of file"
+    assert end == None or end <= real_end, "Can't read past end of file"
     f.seek(start)
     if end == None:
         end = real_end
     bytes_left = end - start
     while bytes_left > 0:
         data = f.read(min(bytes_left, blocksize))
-        assert data != "", "Unexpected failed read"
+        if data == "":
+            raise IOError("Unexpected failed read")
         bytes_left -= len(data)
         _file_reader_sum += len(data)
         yield data
+
+def safe_open(path, flags = "rb"):
+    """Returns a read-only file handle for the given path."""
+    if flags != "rb":
+        raise ValueError("only mode 'rb' allowed")
+    return open(path, "rb")
 
 def md5sum(data):
     m = hashlib.md5()
@@ -110,7 +200,8 @@ def checksum_fileobj(f, checksum_names, start = 0, end = None):
     checksummers = []
     for name in checksum_names:
         assert name in ("md5", "sha256", "sha512")
-        checksummers.append(eval("hashlib.%s()" % name))
+        summer = hashlib.__dict__[name]()
+        checksummers.append(summer)
     for block in file_reader(f, start, end):
         assert block != "", "Got an empty read"
         for m in checksummers:
@@ -126,24 +217,9 @@ def checksum_file(f, checksum_names, start = 0, end = None):
     in the 'checksum_names' argument."""
     assert f, "File must not be None"
     if isinstance(f, basestring):
-        with open(f, "rb") as fobj:
+        with safe_open(f, "rb") as fobj:
             return checksum_fileobj(fobj, checksum_names, start, end)
     return checksum_fileobj(f, checksum_names, start, end)
-
-def copy_file(source, destination, start = 0, end = None, expected_md5sum = None):
-    assert os.path.exists(source), "Source doesn't exist"
-    assert not os.path.exists(destination), "Destination already exist"
-    m = hashlib.md5()
-    with open(source, "rb") as sobj:
-        reader = file_reader(sobj, start, end)
-        with open(destination, "wb") as dobj:
-            for block in reader:
-                if expected_md5sum:
-                    m.update(block)
-                dobj.write(block)
-    if expected_md5sum:
-        assert m.hexdigest() == expected_md5sum, \
-            "Copied file did not have expected md5sum"
 
 def move_file(source, destination, mkdirs = False):
     assert not os.path.exists(destination)
@@ -158,9 +234,9 @@ def create_file(destination, content, tmp_suffix = ".tmp"):
     a temporary file in the destination directory, with the given
     suffix, and then moved to its destination. The suffix file may
     exist and will in that case be overwritten and lost."""
-    assert not os.path.exists(destination)
+    assert not os.path.exists(destination), "File already exists: %s" % destination
     tmpfile = destination + tmp_suffix
-    with open(tmpfile, "w") as f:
+    with StrictFileWriter(tmpfile, md5sum(content), len(content)) as f:
         f.write(content)
     os.rename(tmpfile, destination)
 
@@ -173,7 +249,7 @@ def replace_file(destination, content, tmp_suffix = ".tmp"):
     atomic, the destination file may just be deleted if the operation
     fails half-way."""
     tmpfile = destination + tmp_suffix
-    with open(tmpfile, "w") as f:
+    with StrictFileWriter(tmpfile, md5sum(content), len(content)) as f:
         f.write(content)
     if os.path.exists(destination):
         os.remove(destination)
@@ -242,69 +318,92 @@ def get_relative_path(p):
 
 # This method avoids an infinite loop when add_path_offset() and
 # strip_path_offset() verfies the results of each other.
-def __add_path_offset(offset, p):
-    return offset + "/" + p
+def __add_path_offset(offset, p, separator="/"):
+    assert separator in ("/", "\\")
+    return offset + separator + p
 
-def add_path_offset(offset, p):
-    result = __add_path_offset(offset, p)
-    assert strip_path_offset(offset, result) == p
+def add_path_offset(offset, p, separator="/"):
+    assert separator in ("/", "\\")
+    result = __add_path_offset(offset, p, separator)
+    assert strip_path_offset(offset, result, separator) == p
     return result
 
-def strip_path_offset(offset, p):
-    """ Removes the initial part of pathname p that is identical to
-    the given offset. Example: strip_path_offset("myfiles",
+def strip_path_offset(offset, path, separator="/"):
+    """ Removes the initial part of pathname 'path' that is identical to
+    the given 'offset'. Example: strip_path_offset("myfiles",
     "myfiles/dir1/file.txt") => "dir1/file.txt" """
     # TODO: For our purposes, this function really is a dumber version
     # of my_relpath(). One should replace the other.
     if offset == "":
-        return p
-    assert not offset.endswith("/"), "Offset must be given without ending slash. Was: "+offset
-    assert p.startswith(offset), "'%s' does not begin with offset '%s'" % (p, offset)
-    assert p[len(offset)] == "/", "Offset was: "+offset+" Path was: "+p
-    result = p[len(offset)+1:]
-    assert __add_path_offset(offset, result) == p
+        return path
+    if offset == path:
+        return u""
+    assert separator in ("/", "\\")
+    assert not offset.endswith(separator), "Offset must be given without ending slash. Was: "+offset
+    assert is_child_path(offset, path, separator), "Path %s is not a child of offset %s" % (path, offset)
+    result = path[len(offset)+1:]
+    assert __add_path_offset(offset, result, separator) == path
     return result
 
-def is_child_path(parent, child):
-    assert type(parent) == unicode
-    assert type(child) == unicode
+def is_child_path(parent, child, separator="/"):    
+    # We don't want any implicit conversions to unicode. That might
+    # cause decoding errors.
+    assert type(parent) == type(child)
+
+    assert separator in ("/", "\\")
     if parent == "":
         return True
-    result = child.startswith(parent + "/")
+    result = child.startswith(parent + separator)
     #print "is_child_path('%s', '%s') => %s" % (parent, child, result)
     return result
-    
-def remove_first_dirname(p):
-    assert isinstance(p, unicode)
-    rel_path = get_relative_path(p)
-    firstslash = rel_path.find("/")
-    if firstslash == -1:
-        return None
-    rest = rel_path[firstslash+1:]
-    # Let's just trim any double slashes
-    rest = get_relative_path(rest)
-    return rest
 
-assert remove_first_dirname(u"tjosan/hejsan") == "hejsan"
+def split_path_from_start(path):
+    """Works like os.path.split(), but splits from the beginning of
+    the path instead. /var/tmp/junk returns ("var",
+    "tmp/junk"). Windows style paths will be converted and returned
+    unix-style."""
+    assert type(path) == unicode
+    path = convert_win_path_to_unix(path)
+    path = path.lstrip("/")
+    if "/" in path:
+        pieces = path.split("/")
+    else:
+        pieces = [path]
+    head, tail = pieces[0], u"/".join(pieces[1:])
+    assert type(head) == unicode
+    assert type(tail) == unicode
+    return head, tail
 
+assert split_path_from_start(u"junk") == ("junk", "")
+assert split_path_from_start(u"") == ("", "")
+assert split_path_from_start(u"/var/tmp/junk") == ("var", "tmp/junk")
+assert split_path_from_start(u"var\\tmp\\junk") == ("var", "tmp/junk")
 
-import os.path as posixpath
-from os.path import curdir, sep, pardir, join
+def posix_path_join(*parts):
+    """This function works similar to os.path.join() on posix
+    platforms (using "/" as separator)."""
+    parts = [p for p in parts if p != ""]
+    return "/".join(parts)
+
+assert posix_path_join("", "/tmp") == "/tmp"
+assert posix_path_join("", "tmp") == "tmp"
+assert posix_path_join("a", "b") == "a/b"
+
 # Python 2.5 compatible relpath(), Based on James Gardner's relpath
 # function.
 # http://www.saltycrane.com/blog/2010/03/ospathrelpath-source-code-python-25/
-def my_relpath(path, start=curdir):
+def my_relpath(path, start=os.path.curdir):
     """Return a relative version of a path"""
     assert os.path.isabs(path)
     if not path:
         raise ValueError("no path specified")
     assert isinstance(path, unicode)
     assert isinstance(start, unicode)
-    absstart = posixpath.abspath(start)
-    abspath = posixpath.abspath(path)
+    absstart = os.path.abspath(start)
+    abspath = os.path.abspath(path)
     if absstart[-1] != os.path.sep:
         absstart += os.path.sep
-    assert abspath.startswith(absstart), abspath + " " + absstart    
+    assert abspath.startswith(absstart), abspath + " " + absstart
     return abspath[len(absstart):]
 
 def open_raw(filename):
@@ -321,11 +420,32 @@ def open_raw(filename):
     #     print "Failed using O_DIRECT", e
     #     return open(filename, "rb")
 
-def get_tree(root, skip = [], absolute_paths = False):
+class __DummyProgressPrinter:
+    """Dummy progress printer for use in get_tree"""
+    def update(self): pass
+    def finished(self): pass
+
+def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     """ Returns a simple list of all the files under the given root
     directory. Any files or directories given in the skip argument
-    will not be returned or scanned."""
+    will not be returned or scanned.
+
+    The progress printer, if given, must be an object with two methods
+    "update()" and "finished()", neither accepting any
+    parameters. Update will be called once for every file seen, and
+    then finished will be called.
+    """
     assert isinstance(root, unicode) # type affects os.path.walk callback args
+    assert type(skip) == type([]), "skip list must be a list"
+
+    if not progress_printer:
+        progress_printer = __DummyProgressPrinter()
+
+    if not absolute_paths:
+        post_process = lambda fn: convert_win_path_to_unix(my_relpath(fn, root))
+    else:
+        post_process = convert_win_path_to_unix
+
     def visitor(out_list, dirname, names):
         for file_to_skip in skip:
             if file_to_skip in names:
@@ -334,25 +454,38 @@ def get_tree(root, skip = [], absolute_paths = False):
             assert type(name) == unicode, "All filenames should be unicode"
             try:
                 fullpath = os.path.join(dirname, name)
-            except:
+                unc_path = unc_abspath(fullpath)
+                assert os.path.exists(unc_path), "File was removed during scan"
+                if os.path.isdir(unc_path):
+                    continue
+            except OSError:
                 print "Failed on file:", dirname, name
                 raise
-            if not os.path.isdir(fullpath):
-                out_list.append(fullpath)
+
+            f = post_process(fullpath)
+            assert not is_windows_path(f), "Was:" + f
+            assert not ".." in f.split("/"), "Was:" + f
+            assert not "\\" in f, "Was:" + f
+            out_list.append(f)
+            progress_printer.update()
+
     all_files = []
     os.path.walk(root, visitor, all_files)
-    remove_rootpath = lambda fn: convert_win_path_to_unix(my_relpath(fn, root))
-    if not absolute_paths:
-        all_files = map(remove_rootpath, all_files)
-    for f in all_files:
-        assert not is_windows_path(f), "Was:" + f
-        assert not ".." in f.split("/"), "Was:" + f
-        assert not "\\" in f, "Was:" + f
+    progress_printer.finished()
     return all_files
 
-
-
 class FileMutex:
+    """ The purpose of this class is to protect a shared resource from
+    other processes. It accomplishes this by using the atomicity of
+    the mkdir system call.
+
+    This class allows any number of concurrent locks within a single
+    process, and hence does not work as a mutex in that
+    context. Access from multiple threads is not supported and will
+    cause an assertion error. The mutex must only be accessed from the
+    same thread that created it.
+    """
+
     class MutexLocked(Exception):
         def __init__(self, mutex_name, mutex_file):
             self.mutex_name = mutex_name
@@ -363,48 +496,87 @@ class FileMutex:
             return self.value
 
     def __init__(self, mutex_dir, mutex_name):
+        """The mutex will be created in the mutex_dir directory, which
+        must exist and be writable. The actual name of the mutex will
+        be a hash of the mutex_name, and therefore the mutex_name does
+        not need to be a valid filename.
+        """
         assert isinstance(mutex_name, basestring)
-        self.mutex_dir = mutex_dir
+        self.owner_thread = current_thread()
         self.mutex_name = mutex_name
         self.mutex_id = md5sum(mutex_name.encode("utf-8"))
-        self.mutex_file = os.path.join(self.mutex_dir, "mutex-" + self.mutex_id)
-        self.locked = False
+        self.mutex_file = os.path.join(mutex_dir, "mutex-" + self.mutex_id)
+        self.owner_id = md5sum(str(time.time()) + str(os.getpid())) + "-" + str(os.getpid())
+        self.mutex_owner_file = os.path.join(self.mutex_file, self.owner_id)
+        self.lock_levels = 0
     
     def lock(self):
-        assert not self.locked, "Tried to lock a mutex twice"
+        """ Lock the mutex. Throws a FileMutex.MutexLocked exception
+        if the lock is already locked by another process. If the lock
+        is free, it will be acquired.
+        """
+        assert self.owner_thread.ident == current_thread().ident, "FileMutex does not support threading"
+        if self.is_locked():
+            assert os.path.exists(self.mutex_owner_file)
+            # This thread already owns the lock
+            self.lock_levels += 1
+            return
         try:
             os.mkdir(self.mutex_file)
-            self.locked = True
-        except OSError:
+            with open(self.mutex_owner_file, "w"): pass
+            self.lock_levels += 1
+        except OSError, e:
+            if e.errno != 17: # errno 17 = directory already exists
+                raise
+            #lockpid = int(os.listdir(self.mutex_file)[0].split("-")[1])
+            #print "Lock already taken by", lockpid, "(not necessarily a local pid)"
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
 
     def lock_with_timeout(self, timeout):
-        assert not self.locked, "Tried to lock a mutex twice"
+        """ Lock the mutex. If the lock is already taken by another
+        process, it will be retried until 'timeout' seconds have
+        passed. If the lock is still not available, a
+        FileMutex.MutexLocked exception is thrown.
+        """
+        assert self.owner_thread.ident == current_thread().ident, "FileMutex does not support threading" + str(self.owner_thread.ident) + " " + str(current_thread().ident)
+        if self.is_locked() and os.path.exists(self.mutex_owner_file):
+            # This thread already owns the lock
+            self.lock_levels += 1
+            return
         t0 = time.time()
         while True:
             try:
                 self.lock()
                 break
-            except MutexLocked:                
+            except FileMutex.MutexLocked:                
                 if time.time() - t0 > timeout:
                     break
                 time.sleep(1)
-        if not self.locked:
+        if not self.is_locked():
             raise FileMutex.MutexLocked(self.mutex_name, self.mutex_file)
 
     def is_locked(self):
-        return self.locked
+        """ Returns True iff the lock is acquired by the current process. """
+        return self.lock_levels > 0
     
     def release(self):
-        assert self.locked, "Tried to release unlocked mutex"
+        """ Releases the lock. Actual mutex release will happen only
+        when all users in the current process has released their
+        locks. If release is called when the mutex is not locked, an
+        assertion error will be raised."""
+        assert self.owner_thread.ident == current_thread().ident, "FileMutex does not support threading"
+        assert self.is_locked(), "Tried to release unlocked mutex"
+        self.lock_levels -= 1
+        if self.lock_levels > 0:
+            return
         try:
+            os.unlink(self.mutex_owner_file)
             os.rmdir(self.mutex_file)
-            self.locked = False
         except OSError:
             print "Warning: could not remove lockfile", self.mutex_file
 
     def __del__(self):
-        if self.locked:
+        if self.is_locked():
             print "Warning: lockfile %s was forgotten. Cleaning up..." % self.mutex_name
             self.release()
 
@@ -420,6 +592,32 @@ def tounicode(s):
     assert type(s) == unicode
     return s
 
+def dedicated_stdout():
+    """ This function replaces the sys.stdout with sys.stderr and
+    returns sys.stdout so that the caller gets exclusive
+    access. (unless someone else has made a local copy). This function
+    is aware of StreamEncoder and will make sure that nothing has been
+    written to stdout at the time of the call, otherwise an
+    AssertionError will be raised. This function will always return
+    the original sys.stdout, even if it has been wrapped in a
+    StreamEncoder."""
+    if isinstance(sys.stdout, StreamEncoder):
+        assert sys.stdout.bytecount == 0, "Cannot dedicate stdout, some data has already been written"
+        real_stdout = sys.stdout.stream
+    else:
+        real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    return real_stdout
+
+def encoded_stdout():
+    """Returns the sys.stdout stream wrapped in a StreamEncoder. Makes
+    sure that there is no accidential nesting of StreamEncoder due to
+    globally replacing sys.stdout with a wrapped version."""
+    if isinstance(sys.stdout, StreamEncoder):
+        return sys.stdout
+    else:
+        return StreamEncoder(sys.stdout)
+
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all
     written strings according to the current preferred encoding, with
@@ -428,9 +626,15 @@ class StreamEncoder:
 
     def __init__(self, stream, errors = "backslashreplace"):
         assert errors in ("strict", "replace", "ignore", "backslashreplace")
+        assert not type(stream) == type(self), "Cannot nest StreamEncoders"
         self.errors = errors
+        self.bytecount = 0
         self.stream = stream
-        self.codec_name = locale.getpreferredencoding()
+        
+        if os.name == "nt":
+            self.codec_name = "cp437"
+        else:
+            self.codec_name = locale.getpreferredencoding()
 
     def write(self, s):
         if type(s) != unicode:
@@ -438,9 +642,13 @@ class StreamEncoder:
             return
         encoded_s = s.encode(self.codec_name, self.errors)
         self.stream.write(encoded_s)
+        self.bytecount += len(encoded_s)
 
     def close(self):
         self.stream.close()
+
+    def flush(self):
+        self.stream.flush()
 
     def __enter__(self):
         """ Support for the 'with' statement """
@@ -453,6 +661,55 @@ class StreamEncoder:
 def dir_exists(path):
     return os.path.exists(path) and os.path.isdir(path)
 
+def posix_normpath(path):
+    """This function works similar to os.path.normpath(). The
+    difference is that the behaviour of this function is guaranteed to
+    be the same as os.path.normpath() on Linux, no matter what
+    platform it is currently executing on. The argument must be
+    unicode and must not contain backslash."""
+    assert not "\\" in path, "expected posix style paths, was: %s" % path
+    assert isinstance(path, unicode), "argument must be unicode"
+    result = tounicode(os.path.normpath(path).replace("\\", "/"))
+    assert not "\\" in result
+    assert isinstance(result, unicode)
+    return result
+
+
+def unc_abspath(s):
+    """This method works as os.abspath() except on Windows. On windows, it
+    converts the path to an UNC path without using the broken python 2.x os.path
+    tools."""
+    if os.name != "nt":
+        return os.path.abspath(s)
+    if s.startswith(r"\\"):
+        assert not "/" in s
+        return s
+    assert not s.startswith("\\")
+    s = s.replace("/", "\\")
+    if len(s) > 2 and s[1] == ":":
+        # Likely a windows non-UNC absolute path
+        return "\\\\?\\" + s
+    return "\\\\?\\" + os.getcwd() + "\\" + s
+
+def unc_makedirs(s):
+    """This method works as os.makedirs() except on Windows. On windows, it
+    first converts the path to an UNC path, thereby avoiding some limits on path
+    length."""
+    if os.name != "nt":
+        return os.makedirs(s)
+    unc_path = unc_abspath(s)
+    unc_mount, unc_tail = os.path.splitunc(unc_path)
+    unc_tail = unc_tail.lstrip("\\")
+    dirnames = unc_tail.split("\\")
+    path_to_mkdir = unc_mount
+    for part in dirnames:
+        path_to_mkdir += "\\" + part
+        if not os.path.exists(path_to_mkdir):
+            os.mkdir(path_to_mkdir)
+
+def FakeFile():
+    """ Behaves like a file object, but does not actually do anything."""
+    return open(os.path.devnull, "w")
 
 class RateLimiter:
     """This class makes it easy to perform some action only when a
@@ -460,8 +717,8 @@ class RateLimiter:
     may be a float. The first call to ready() will always return
     True, and then the timer starts ticking."""
 
-    def __init__(self, maxrate):
-        self.min_period = 1.0 / maxrate
+    def __init__(self, hz):
+        self.min_period = 1.0 / hz
         self.last_trig = 0.0
     
     def ready(self):
@@ -470,3 +727,98 @@ class RateLimiter:
             self.last_trig = now
             return True
         return False
+
+def isWritable(path):
+    """Performs a write test to check if it is possible to create new
+    files and directories under the given path. The given path must
+    exist and be a directory."""
+    assert os.path.exists(path)
+    assert os.path.isdir(path)
+    try:
+        with TemporaryFile(dir=path):
+            pass
+    except OSError, e:
+        return False
+    return True
+
+class ConstraintViolation(Exception):
+    """This exception is thrown by a StrictFileWriter when there is a
+    violation of a usage contract."""
+    pass
+
+class SizeViolation(ConstraintViolation):
+    """This exception is thrown by a StrictFileWriter when the written
+    file has more or less content than expected."""
+    pass
+
+class ContentViolation(ConstraintViolation):
+    """This exception is thrown by a StrictFileWriter when the written
+    file has a different content than expected."""
+    pass
+
+
+class StrictFileWriter:
+    """This class will work as a file object when created, but with
+    the additional functionality that it will not allow the file to
+    exceed the given size. Also, the file must not exist before, and
+    it must have the given md5 checksum when finished. If any of the
+    contraints are violated, an ConstraintViolation exception is
+    thrown.
+
+    A sparse file with the given size will be created, which will
+    reduce fragmentation on some platforms (NTFS). """
+    def __init__(self, filename, md5, size, overwrite = False):
+        assert is_md5sum(md5)
+        assert type(size) == int or type(size) == long
+        assert size >= 0
+        self.filename = filename
+        self.expected_md5 = md5
+        self.expected_size = size
+        if not overwrite and os.path.exists(filename):
+            raise ConstraintViolation("Violation of file contract (file already exists): "+str(filename))
+        self.f = open(self.filename, "wb")
+        self.f.seek(0)
+        self.f.truncate() # Erase any existing file content
+        self.f.seek(size)
+        self.f.truncate() # Create a sparse file to reduce file fragmentation on NTFS
+        self.f.seek(0)
+        self.md5summer = hashlib.md5()
+        self.written_bytes = 0
+
+    def write(self, buf):
+        if self.written_bytes + len(buf) > self.expected_size:
+            self.__close()
+            raise SizeViolation("Violation of file contract (too big) detected: "+str(self.filename))
+        self.md5summer.update(buf)
+        if self.written_bytes + len(buf) == self.expected_size:
+            if self.md5summer.hexdigest() != self.expected_md5:
+                self.__close()
+                raise ContentViolation("Violation of file contract (checksum) detected: "+str(self.filename))
+        self.f.write(buf)
+        self.written_bytes += len(buf)
+    
+    def close(self):
+        if self.is_closed():
+            return
+        self.__close()
+        if self.written_bytes != self.expected_size:
+            raise SizeViolation("Violation of file contract (too small, %s < %s) detected: %s" %
+                                   (self.written_bytes, self.expected_size, self.filename))
+
+    def __close(self):
+        """Closes the file without doing any constraint checks."""
+        if not self.f:
+            return
+        self.f.close()
+        self.f = None
+
+    def is_closed(self):
+        return self.f == None
+        
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, type, value, traceback):
+        self.close()
+
+ 
