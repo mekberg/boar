@@ -196,7 +196,7 @@ class Repo:
             try:
                 self.__upgrade_repo()
                 self.__quick_check()
-                self.blocks = derived.blobs_blocks(self, self.repopath + "/derived/blocks")
+                self.blocksdb = derived.blobs_blocks(self, self.repopath + "/derived/blocks")
                 self.process_queue()
             finally:
                 self.repo_mutex.release()
