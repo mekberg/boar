@@ -196,8 +196,6 @@ class SessionWriter:
         self.session_path = None
         self.force_base_snapshot = force_base_snapshot
         self.metadatas = {}
-        # Summers for new blobs. { blobname: summer, ... }
-        self.blob_checksummers = {}
         self.blob_blocks = {}
         self.blob_writer = {}
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
@@ -249,25 +247,26 @@ class SessionWriter:
         assert not self.blob_writer.keys(), "Another new blob is already in progress"
         fname = os.path.join(self.session_path, blob_md5)
         self.blob_writer[blob_md5] = StrictFileWriter(fname, blob_md5, blob_size)
-        
+        self.blob_blocks[blob_md5] = BlockChecksum(2**12)
+
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""
         assert is_md5sum(blob_md5)
-        assert not self.repo.has_blob(blob_md5), "blob already exists"
-        if not self.blob_checksummers.has_key(blob_md5):
-            assert blob_md5 not in self.blob_blocks
-            self.blob_checksummers[blob_md5] = hashlib.md5()
-            #self.blob_blocks[blob_md5] = BlockChecksum(2**17)
-            self.blob_blocks[blob_md5] = BlockChecksum(2**12)
         assert not self.dead
-        self.blob_checksummers[blob_md5].update(fragment)
-        self.blob_blocks[blob_md5].feed_string(fragment)
         self.blob_writer[blob_md5].write(fragment)
+        self.blob_blocks[blob_md5].feed_string(fragment)
 
     def blob_finished(self, blob_md5):
         self.blob_writer[blob_md5].close()
-        del self.blob_writer[blob_md5]
+        del self.blob_writer[blob_md5]        
 
+        seq = 0
+        for blockdata in self.blob_blocks[blob_md5].harvest():
+            offset, rolling, sha256 = blockdata
+            self.repo.blocksdb.add_block(blob_md5, seq, offset, rolling, sha256)
+            seq += 1
+        del self.blob_blocks[blob_md5]
+                
     def has_blob(self, csum):
         assert is_md5sum(csum)
         fname = os.path.join(self.session_path, csum)
@@ -313,12 +312,7 @@ class SessionWriter:
         assert not self.dead
         assert self.session_path != None
         assert not self.blob_writer, "Commit while blob writer is active"
-        for name, blocksummer in self.blob_blocks.items():
-            seq = 0
-            for blockdata in blocksummer.blocks:
-                offset, rolling, sha256 = blockdata
-                self.repo.blocks.add_block(name, seq, offset, rolling, sha256)
-                seq += 1
+
         if "name" in sessioninfo:
             assert self.session_name == sessioninfo['name'], \
                 "Committed session name '%s' did not match expected name '%s'" % \
@@ -338,6 +332,10 @@ class SessionWriter:
             else:
                 self.writer.add_blobinfo(blobitem)
         self.writer.commit()
+
+        # Not safe, but the only consequence of a failed transaction
+        # is degradation of deduplication.
+        self.repo.blocksdb.commit() 
 
         # This is a fail-safe to reduce the risk of lockfile problems going undetected. 
         # It is not meant to be 100% safe. That responsibility lies with the lockfile.
