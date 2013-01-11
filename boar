@@ -247,13 +247,15 @@ def cmd_locate(args):
 
 def cmd_scanblocks(args):
     WINDOW_SIZE = 2**12
-    front = init_repo_from_env(cmdline_repo)
+    front = connect_to_repo(get_repo_url())
     filename, = args
-    rs = deduplication.RollingChecksum(WINDOW_SIZE)
     all_rolling = set(front.get_all_rolling())
     #print all_rolling
     hits = []
     block_checksums = {}
+    import mmap
+    rs = deduplication.RollingChecksum(WINDOW_SIZE)
+
     with open(filename, "r") as f:
         size = 0
         while True:
@@ -264,7 +266,7 @@ def cmd_scanblocks(args):
             rs.feed_byte(ord(byte))
             rolling = rs.value()
             if rolling == None:
-                continue            
+                continue
             if rolling in all_rolling:
                 sha = rs.sha256()
                 if front.has_block(rolling, sha):
@@ -274,6 +276,20 @@ def cmd_scanblocks(args):
                 else:
                     print "False hit at", rs.offset()
 
+    """
+    with open(filename, "rb") as f:
+        bytes = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
+        size = len(bytes)
+        rs.feed_string(bytes)
+        for offset in rs.harvest():
+            sha = sha256(bytes[offset:offset+WINDOW_SIZE])
+            if front.has_block(rolling, sha):
+                print "True hit at", rs.offset()
+                hits.append(rs.offset())
+                block_checksums[rs.offset()] = (rolling, sha)
+            else:
+                print "False hit at", rs.offset()
+    """
     print "Thinking..."
     hits = deduplication.remove_overlapping_blocks(hits, WINDOW_SIZE)
     # Lets take a look at that list
