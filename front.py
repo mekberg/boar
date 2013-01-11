@@ -407,10 +407,10 @@ class Front:
         self.new_session.init_new_blob(blob_md5, size)
 
     def get_all_rolling(self):
-        return self.repo.blocks.get_all_rolling()
+        return self.repo.blocksdb.get_all_rolling()
 
     def has_block(self, rolling, sha256):
-        return self.repo.blocks.has_block(rolling, sha256)
+        return self.repo.blocksdb.has_block(rolling, sha256)
 
     def add_blob_data(self, blob_md5, b64data):
         """ Must be called after a create_session()  """
