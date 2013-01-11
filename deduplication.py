@@ -40,46 +40,32 @@ class BlockChecksum:
             self.position += self.window_size
             self.buffer = self.buffer[self.window_size:]
             
-    def harvest(self):
-        result = self.blocks
-        self.blocks = []
-        return result
 
 class RollingChecksum:
-    def __init__(self, window_size, check_callback):
+    def __init__(self, window_size):
         self.buffer = []
         self.window_size = window_size
         self.position = 0
         self.algo = RsyncRolling(window_size)
-        self.check_callback = check_callback
-        self.positive_blocks = []
 
     def feed_string(self, s):
-        for i in range(0, len(s)):
-            b = ord(s[i])
-            assert type(b) == int and b <= 255 and b >= 0
-            self.buffer.append(b)
-            if len(self.buffer) > self.window_size:
-                self.algo.update(self.buffer[-self.window_size-1], b)
-                rolling_checksum = self.algo.value()
-                if self.check_callback(rolling_checksum):
-                    self.positive_blocks.append(self.position)
-                self.position += 1
-                #self.buffer.pop(0)
-            elif len(self.buffer) < self.window_size: 
-                self.algo.update(0, b)
-            elif len(self.buffer) == self.window_size: 
-                self.algo.update(0, b)
-            else:
-                assert False, "Unexpected buffer size"
-        if len(self.buffer) > 10 * self.window_size:
-            del self.buffer[:-self.window_size]
+        for c in s:
+            self.feed_byte(ord(c))
 
-    def harvest(self):
-        result = self.positive_blocks
-        self.positive_blocks = []
-        return result
-            
+    def feed_byte(self, b):
+        #assert type(b) == int and b <= 255 and b >= 0
+        self.buffer.append(b)
+        if len(self.buffer) == self.window_size + 1:
+            self.algo.update(self.buffer[0], b)
+            self.position += 1
+            self.buffer.pop(0)
+        elif len(self.buffer) < self.window_size: 
+            self.algo.update(None, b)
+        elif len(self.buffer) == self.window_size: 
+            self.algo.update(None, b)
+        else:
+            assert False, "Unexpected buffer size"
+
     def value(self):
         if len(self.buffer) < self.window_size:
             return None
@@ -90,20 +76,18 @@ class RollingChecksum:
         return self.position
 
     def sha256(self):
-        #assert len(self.buffer) == self.window_size
-        data = "".join(map(chr, self.buffer[-self.window_size:]))
-        assert len(data) == self.window_size
+        assert len(self.buffer) == self.window_size
+        data = "".join(map(chr, self.buffer))
         return sha256(data)
 
 
-"""
 def RollingChecksum_self_test():
     rs = RollingChecksum(3)
     result = []
     for c in (0,1,2,3,0,1,2,3):
         rs.feed_byte(c)
         result.append(rs.value())
-
+"""
     assert result == [None, None, (0, 6), (1, 9), (2, 12), (3, 15), (4, 18), (5, 21), (6, 24)]
 
     rs = RollingChecksum(3)
@@ -132,8 +116,12 @@ class RsyncRolling:
                 self.b += (window_size - n) * ord(initial_data[n])
 
     def update(self, remove, add):
-        self.a = self.a - remove + add
-        self.b = self.b - self.window_size * remove + self.a
+        if remove == None:
+            remove = 0
+        self.a -= remove
+        self.a += add
+        self.b -= self.window_size * remove
+        self.b += self.a
 
     def value(self):
         return self.a * self.b
@@ -202,7 +190,7 @@ def remove_overlapping_blocks(offsets, block_size):
 assert remove_overlapping_blocks([0,2,3,5,6,7,10,15], 5) == [0, 5, 10, 15]
 assert remove_overlapping_blocks([0,2,3,5,6,7,10,15, 21, 22, 23], 5) == [0, 5, 10, 15, 21]
 
-#RollingChecksum_self_test()
+RollingChecksum_self_test()
 
 """
 import sys
