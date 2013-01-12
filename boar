@@ -256,6 +256,7 @@ def cmd_scanblocks(args):
     import mmap
     rs = deduplication.RollingChecksum(WINDOW_SIZE)
 
+    raw_addresses = []
     with open(filename, "r") as f:
         size = 0
         while True:
@@ -270,28 +271,39 @@ def cmd_scanblocks(args):
             if rolling in all_rolling:
                 sha = rs.sha256()
                 if front.has_block(rolling, sha):
-                    print "True hit at", rs.offset()
+                    #address = [rs.offset()] + front.repo.blocksdb.get_blob_location(rolling, sha) + [WINDOW_SIZE]
+                    blob, blob_offset = front.repo.blocksdb.get_blob_location(rolling, sha)
+                    address = {'offset': rs.offset(), 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
+                    print "True hit at", address
+                    raw_addresses.append(address)
                     hits.append(rs.offset())
                     block_checksums[rs.offset()] = (rolling, sha)
                 else:
                     print "False hit at", rs.offset()
 
-    """
-    with open(filename, "rb") as f:
-        bytes = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
-        size = len(bytes)
-        rs.feed_string(bytes)
-        for offset in rs.harvest():
-            sha = sha256(bytes[offset:offset+WINDOW_SIZE])
-            if front.has_block(rolling, sha):
-                print "True hit at", rs.offset()
-                hits.append(rs.offset())
-                block_checksums[rs.offset()] = (rolling, sha)
-            else:
-                print "False hit at", rs.offset()
-    """
     print "Thinking..."
     hits = deduplication.remove_overlapping_blocks(hits, WINDOW_SIZE)
+    raw_addresses = [t for t in raw_addresses if t['offset'] in hits]
+
+    polished_addresses = []
+    polished_addresses.append(raw_addresses.pop(0))
+    # TODO: handle case with 0 raw_addresses
+
+    for address in raw_addresses:
+        if address['blob'] == polished_addresses[-1]['blob'] and \
+                address['blob_offset'] == polished_addresses[-1]['blob_offset'] + polished_addresses[-1]['size']:
+            polished_addresses[-1]['size'] += address['size']
+        else:
+            polished_addresses.append(address)
+
+    pos = 0
+    for address in polished_addresses:
+        if address['offset'] != pos:
+            #print "Unique data", pos, "+", address['size']
+            print "%s-%s Original data (%s)" % (pos,  address['offset'], address['offset'] - pos)
+            pos = address['offset'] + address['size']
+        #print address['offset'], address['blob'], address['blob_offset'], address['size']
+        print "%s-%s %s %s+%s" % (address['offset'], address['offset']+address['size'], address['blob'], address['blob_offset'], address['size'])
     # Lets take a look at that list
     redundant_bytes = 0
     unique_bytes = 0
