@@ -255,31 +255,29 @@ def cmd_scanblocks(args):
     block_checksums = {}
     import mmap
     rs = deduplication.RollingChecksum(WINDOW_SIZE)
-
+    
     raw_addresses = []
-    with open(filename, "r") as f:
-        size = 0
-        while True:
-            byte = f.read(1)
-            if byte == "":
-                break
-            size += 1
-            rs.feed_byte(ord(byte))
-            rolling = rs.value()
-            if rolling == None:
-                continue
-            if rolling in all_rolling:
-                sha = rs.sha256()
-                if front.has_block(rolling, sha):
-                    #address = [rs.offset()] + front.repo.blocksdb.get_blob_location(rolling, sha) + [WINDOW_SIZE]
-                    blob, blob_offset = front.repo.blocksdb.get_blob_location(rolling, sha)
-                    address = {'offset': rs.offset(), 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
-                    print "True hit at", address
-                    raw_addresses.append(address)
-                    hits.append(rs.offset())
-                    block_checksums[rs.offset()] = (rolling, sha)
-                else:
-                    print "False hit at", rs.offset()
+    f = open(filename, "r")
+    bytearray = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
+    size = 0
+    for byte in bytearray:
+        size += 1
+        rs.feed_byte(ord(byte))
+        rolling = rs.value()
+        if rolling == None:
+            continue
+        if rolling in all_rolling:
+            sha = rs.sha256()
+            if front.has_block(rolling, sha):
+                #address = [rs.offset()] + front.repo.blocksdb.get_blob_location(rolling, sha) + [WINDOW_SIZE]
+                blob, blob_offset = front.repo.blocksdb.get_blob_location(rolling, sha)
+                address = {'offset': rs.offset(), 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
+                print "True hit at", address
+                raw_addresses.append(address)
+                hits.append(rs.offset())
+                block_checksums[rs.offset()] = (rolling, sha)
+            else:
+                print "False hit at", rs.offset()
 
     print "Thinking..."
     hits = deduplication.remove_overlapping_blocks(hits, WINDOW_SIZE)
@@ -295,6 +293,9 @@ def cmd_scanblocks(args):
             polished_addresses[-1]['size'] += address['size']
         else:
             polished_addresses.append(address)
+
+    for address in polished_addresses:
+        grow_address(front, bytearray, address)
 
     pos = 0
     for address in polished_addresses:
@@ -320,6 +321,23 @@ def cmd_scanblocks(args):
     print unique_bytes, "unique bytes"
     print redundant_bytes, "redundant bytes"
     print len(hits), "overlaps"
+    f.close()
+
+def grow_address(front, bytearray, address):
+    grow_bite = 4096
+    blob_size = front.get_blob_size(address['blob'])
+    upper_block_start = address['blob_offset'] + address['size']
+    upper_block_end = min(blob_size, upper_block_start+grow_bite)
+    upper_block_size = upper_block_end - upper_block_start
+    upper_block = front.get_blob(address['blob'], address['blob_offset'] + address['size'], upper_block_size).read()
+    growth = 0
+    while address['offset'] + address['size'] < len(bytearray) and growth < upper_block_size:
+        #print address
+        if bytearray[address['offset'] + address['size']] != upper_block[growth]:
+            break
+        growth += 1
+        address['size'] += 1
+    print blob_size, len(upper_block)
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
