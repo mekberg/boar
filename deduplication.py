@@ -39,6 +39,11 @@ class BlockChecksum:
             self.blocks.append((self.position, rs_fast, block_sha256))
             self.position += self.window_size
             self.buffer = self.buffer[self.window_size:]
+
+    def harvest(self):
+        result = self.blocks
+        self.blocks = []
+        return result
             
 
 class RollingChecksum:
