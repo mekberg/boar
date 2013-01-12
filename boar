@@ -295,7 +295,8 @@ def cmd_scanblocks(args):
             polished_addresses.append(address)
 
     for address in polished_addresses:
-        grow_address(front, bytearray, address)
+        grow_address_upwards(front, bytearray, address)
+        grow_address_downwards(front, bytearray, address)
 
     pos = 0
     for address in polished_addresses:
@@ -323,13 +324,13 @@ def cmd_scanblocks(args):
     print len(hits), "overlaps"
     f.close()
 
-def grow_address(front, bytearray, address):
+def grow_address_upwards(front, bytearray, address):
     grow_bite = 4096
     blob_size = front.get_blob_size(address['blob'])
     upper_block_start = address['blob_offset'] + address['size']
     upper_block_end = min(blob_size, upper_block_start+grow_bite)
     upper_block_size = upper_block_end - upper_block_start
-    upper_block = front.get_blob(address['blob'], address['blob_offset'] + address['size'], upper_block_size).read()
+    upper_block = front.get_blob(address['blob'], upper_block_start, upper_block_size).read()
     growth = 0
     while address['offset'] + address['size'] < len(bytearray) and growth < upper_block_size:
         #print address
@@ -337,7 +338,24 @@ def grow_address(front, bytearray, address):
             break
         growth += 1
         address['size'] += 1
-    print blob_size, len(upper_block)
+
+def grow_address_downwards(front, bytearray, address):
+    grow_bite = 4096
+    blob_size = front.get_blob_size(address['blob'])
+    lower_block_start = max(0, address['blob_offset'] - grow_bite)
+    lower_block_end = address['blob_offset']
+    lower_block_size = lower_block_end - lower_block_start
+    print lower_block_start, lower_block_end, lower_block_size
+    lower_block = front.get_blob(address['blob'], lower_block_start, lower_block_size).read()
+    growth = 0
+    while address['offset'] > 0 and growth < lower_block_size:
+        #print address
+        if bytearray[address['offset'] - 1] != lower_block[-(growth+1)]:
+            break
+        growth += 1
+        address['offset'] -= 1
+        address['size'] += 1
+    print "Grown downwards by size", growth
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
