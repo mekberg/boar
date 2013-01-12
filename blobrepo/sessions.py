@@ -247,7 +247,7 @@ class SessionWriter:
         assert not self.blob_writer.keys(), "Another new blob is already in progress"
         fname = os.path.join(self.session_path, blob_md5)
         self.blob_writer[blob_md5] = StrictFileWriter(fname, blob_md5, blob_size)
-        self.blob_blocks[blob_md5] = BlockChecksum(2**12)
+        self.blob_blocks[blob_md5] = BlockChecksum(repository.DEDUP_BLOCK_SIZE)
 
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""

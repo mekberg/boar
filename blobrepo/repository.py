@@ -63,6 +63,8 @@ REPO_DIRS_V4 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
 REPO_DIRS_V5 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR, DERIVED_BLOCKS_DIR)
 
+DEDUP_BLOCK_SIZE = 2**12
+
 recoverytext = """Repository format v%s
 
 This is a versioned repository of files. It is designed to be easy to
