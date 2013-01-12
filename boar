@@ -296,26 +296,33 @@ def cmd_scanblocks(args):
             polished_addresses.append(address)
 
     for address in polished_addresses:
-        grow_address_upwards(front, bytearray, address)
-        grow_address_downwards(front, bytearray, address)
+        while grow_address_upwards(front, bytearray, address): pass
+        while grow_address_downwards(front, bytearray, address): pass
 
-    print "Verifying..."
+    print "*** Recipe follows:"
     pos = 0
     output = open("restored_file.bin", "w")
     for address in polished_addresses:
         if address['offset'] != pos:
             #print "Unique data", pos, "+", address['size']
             print "%s-%s Original data (%s)" % (pos,  address['offset'], address['offset'] - pos)
-            output.write(bytearray[address['offset']:address['offset'] - pos])
-            pos = address['offset'] + address['size']
+            output.write(bytearray[pos:address['offset']])
+            pos = address['offset']
         #print address['offset'], address['blob'], address['blob_offset'], address['size']
         print "%s-%s %s %s+%s" % (address['offset'], address['offset']+address['size'], address['blob'], address['blob_offset'], address['size'])
+        pos += address['size']
         block = front.get_blob(address['blob'], address['blob_offset'], address['size']).read()
         output.write(block)
+    if pos != len(bytearray):
+        print "%s-%s Original data (%s)" % (pos, len(bytearray), len(bytearray) - pos)
+        output.write(bytearray[pos:])
+    print "*** End of recipe"
     # Lets take a look at that list
     output.close()
-    print "Restored file checksum is", md5sum_file("restored_file.bin")
-    print "Restored file size is", os.path.getsize("restored_file.bin")
+    if md5sum_file(filename) == md5sum_file("restored_file.bin"):
+        print "Restored file matches original"
+    else:
+        print "Restored file DOES NOT match original"
     redundant_bytes = 0
     unique_bytes = 0
     n = 0
@@ -327,10 +334,10 @@ def cmd_scanblocks(args):
         else:
             n += 1
             unique_bytes += 1
-    print "Filesize:", size
-    print unique_bytes, "unique bytes"
-    print redundant_bytes, "redundant bytes"
-    print len(hits), "overlaps"
+    #print "Filesize:", size
+    #print unique_bytes, "unique bytes"
+    #print redundant_bytes, "redundant bytes"
+    #print len(hits), "overlaps"
     f.close()
 
 def grow_address_upwards(front, bytearray, address):
@@ -347,6 +354,7 @@ def grow_address_upwards(front, bytearray, address):
             break
         growth += 1
         address['size'] += 1
+    return growth
 
 def grow_address_downwards(front, bytearray, address):
     grow_bite = 4096
@@ -365,7 +373,7 @@ def grow_address_downwards(front, bytearray, address):
         address['blob_offset'] -= 1
         address['offset'] -= 1
         address['size'] += 1
-    print "Grown downwards by size", growth
+    return growth
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
