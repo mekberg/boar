@@ -52,6 +52,12 @@ class blobs_blocks:
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError(e)
 
+    def get_blob_location(self, rolling, sha):
+        c = self.conn.cursor()
+        c.execute("SELECT blob, offset FROM blocks WHERE rolling = ? AND sha256 = ?", [rolling, sha])
+        row, = c.fetchall()
+        return [row[0], row[1]]
+
     def get_all_rolling(self):
         c = self.conn.cursor()
         c.execute("SELECT DISTINCT rolling FROM blocks")
