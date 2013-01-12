@@ -362,6 +362,7 @@ def grow_address_downwards(front, bytearray, address):
         if bytearray[address['offset'] - 1] != lower_block[-(growth+1)]:
             break
         growth += 1
+        address['blob_offset'] -= 1
         address['offset'] -= 1
         address['size'] += 1
     print "Grown downwards by size", growth
