@@ -488,7 +488,7 @@ class Repo:
             blobsize = self.get_blob_size(sum)
             if size == -1:
                 size = blobsize
-            assert blobsize <= offset + size
+            assert offset + size <= blobsize
             path = self.get_blob_path(sum)
             fo = safe_open(path, "rb")
             fo.seek(offset)
