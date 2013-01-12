@@ -246,7 +246,8 @@ def cmd_locate(args):
 
 
 def cmd_scanblocks(args):
-    WINDOW_SIZE = 2**12
+    import hashlib
+    WINDOW_SIZE = repository.DEDUP_BLOCK_SIZE
     front = connect_to_repo(get_repo_url())
     filename, = args
     all_rolling = set(front.get_all_rolling())
@@ -298,15 +299,23 @@ def cmd_scanblocks(args):
         grow_address_upwards(front, bytearray, address)
         grow_address_downwards(front, bytearray, address)
 
+    print "Verifying..."
     pos = 0
+    output = open("restored_file.bin", "w")
     for address in polished_addresses:
         if address['offset'] != pos:
             #print "Unique data", pos, "+", address['size']
             print "%s-%s Original data (%s)" % (pos,  address['offset'], address['offset'] - pos)
+            output.write(bytearray[address['offset']:address['offset'] - pos])
             pos = address['offset'] + address['size']
         #print address['offset'], address['blob'], address['blob_offset'], address['size']
         print "%s-%s %s %s+%s" % (address['offset'], address['offset']+address['size'], address['blob'], address['blob_offset'], address['size'])
+        block = front.get_blob(address['blob'], address['blob_offset'], address['size']).read()
+        output.write(block)
     # Lets take a look at that list
+    output.close()
+    print "Restored file checksum is", md5sum_file("restored_file.bin")
+    print "Restored file size is", os.path.getsize("restored_file.bin")
     redundant_bytes = 0
     unique_bytes = 0
     n = 0
