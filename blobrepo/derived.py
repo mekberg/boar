@@ -47,7 +47,7 @@ class blobs_blocks:
             self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, seq int NOT NULL, offset long NOT NULL, rolling char(32), sha256 char(64) NOT NULL, row_md5 char(32))")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_offset ON blocks (blob, offset)")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_seq ON blocks (blob, seq)")
-            self.conn.execute("CREATE INDEX IF NOT EXISTS rolling ON blocks (rolling)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS rolling_sha256 ON blocks (rolling, sha256)")
             self.conn.commit()
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError(e)
