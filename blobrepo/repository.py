@@ -773,6 +773,7 @@ class Repo:
         if session_id == None:
             return
         queued_item = self.get_queue_path(session_id)
+
         items = os.listdir(queued_item)
 
         # Check the checksums of all blobs
@@ -781,7 +782,9 @@ class Repo:
                 continue
             blob_path = os.path.join(queued_item, filename)
             assert filename == md5sum_file(blob_path), "Invalid blob found in queue dir:" + blob_path
-        
+
+        # TODO: check recipes for validity
+
         # Check the existence of all required files
         # TODO: check the contents for validity
         meta_info = read_json(os.path.join(queued_item, "session.json"))

@@ -17,6 +17,8 @@
 from __future__ import with_statement
 
 from common import *
+from jsonrpc import FileDataSource
+
 import sys
 
 class BlockChecksum:
@@ -151,13 +153,13 @@ class SimpleSumRolling:
 
 
 
-def grow_address_upwards(front, bytearray, address):
+def grow_address_upwards(blob_source, bytearray, address):
     grow_bite = 4096
-    blob_size = front.get_blob_size(address['blob'])
+    blob_size = blob_source.get_blob_size(address['blob'])
     upper_block_start = address['blob_offset'] + address['size']
     upper_block_end = min(blob_size, upper_block_start+grow_bite)
     upper_block_size = upper_block_end - upper_block_start
-    upper_block = front.get_blob(address['blob'], upper_block_start, upper_block_size).read()
+    upper_block = blob_source.get_blob(address['blob'], upper_block_start, upper_block_size).read()
     growth = 0
     while address['offset'] + address['size'] < len(bytearray) and growth < upper_block_size:
         #print address
@@ -167,14 +169,14 @@ def grow_address_upwards(front, bytearray, address):
         address['size'] += 1
     return growth
 
-def grow_address_downwards(front, bytearray, address):
+def grow_address_downwards(blob_source, bytearray, address):
     grow_bite = 4096
-    blob_size = front.get_blob_size(address['blob'])
+    blob_size = blob_source.get_blob_size(address['blob'])
     lower_block_start = max(0, address['blob_offset'] - grow_bite)
     lower_block_end = address['blob_offset']
     lower_block_size = lower_block_end - lower_block_start
-    print lower_block_start, lower_block_end, lower_block_size
-    lower_block = front.get_blob(address['blob'], lower_block_start, lower_block_size).read()
+    # print lower_block_start, lower_block_end, lower_block_size
+    lower_block = blob_source.get_blob(address['blob'], lower_block_start, lower_block_size).read()
     growth = 0
     while address['offset'] > 0 and growth < lower_block_size:
         #print address
@@ -186,8 +188,31 @@ def grow_address_downwards(front, bytearray, address):
         address['size'] += 1
     return growth
 
+class UniformBlobGetter:
+    def __init__(self, front, local_blob_dir = None):
+        self.front = front
+        self.local_blob_dir = local_blob_dir
 
-def recepify(front, filename):
+    def get_blob_size(self, blob_name):
+        assert is_md5sum(blob_name)
+        if self.local_blob_dir:
+            local_path = os.path.join(self.local_blob_dir, blob_name)
+            if os.path.exists(local_path):
+                return long(os.path.getsize(local_path))
+        return self.front.get_blob_size(blob_name)
+
+    def get_blob(self, blob_name, offset, size):
+        assert is_md5sum(blob_name)
+        if self.local_blob_dir:
+            local_path = os.path.join(self.local_blob_dir, blob_name)
+            if os.path.exists(local_path):
+                fo = safe_open(local_path, "rb")
+                fo.seek(offset)                
+                return FileDataSource(fo, size)
+        return self.front.get_blob(blob_name, offset, size)
+
+def recepify(front, filename, local_blob_dir = None):
+    print "Recepifying", filename
     WINDOW_SIZE = front.get_dedup_block_size()
     all_rolling = set(front.get_all_rolling())
     hits = []
@@ -195,8 +220,9 @@ def recepify(front, filename):
     import mmap
     rs = RollingChecksum(WINDOW_SIZE)
     
+    blob_source = UniformBlobGetter(front, local_blob_dir)
     raw_addresses = []
-    f = open(filename, "r")
+    f = safe_open(filename, "rb")
     bytearray = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
     size = 0
 
@@ -212,20 +238,22 @@ def recepify(front, filename):
                 #address = [rs.offset()] + front.repo.blocksdb.get_blob_location(rolling, sha) + [WINDOW_SIZE]
                 blob, blob_offset = front.get_dedup_block_location(rolling, sha)
                 address = {'offset': rs.offset(), 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
-                #print "True hit at", address
+                print "True hit at", address
                 raw_addresses.append(address)
                 hits.append(rs.offset())
                 block_checksums[rs.offset()] = (rolling, sha)
             else:
                 pass
-                #print "False hit at", rs.offset()
+                print "False hit at", rs.offset()
 
     hits = remove_overlapping_blocks(hits, WINDOW_SIZE)
     raw_addresses = [t for t in raw_addresses if t['offset'] in hits]
 
+    if not raw_addresses:
+        return None # No deduplication is possible
+
     polished_addresses = []
     polished_addresses.append(raw_addresses.pop(0))
-    # TODO: handle case with 0 raw_addresses
 
     for address in raw_addresses:
         if address['blob'] == polished_addresses[-1]['blob'] and \
@@ -235,8 +263,8 @@ def recepify(front, filename):
             polished_addresses.append(address)
 
     for address in polished_addresses:
-        while grow_address_upwards(front, bytearray, address): pass
-        while grow_address_downwards(front, bytearray, address): pass
+        while grow_address_upwards(blob_source, bytearray, address): pass
+        while grow_address_downwards(blob_source, bytearray, address): pass
 
     pieces = []
     expected_md5 = md5sum(bytearray)
@@ -249,27 +277,33 @@ def recepify(front, filename):
     
     result_md5 = hashlib.md5()
     #output = open("restored_file.bin", "w")
+    for p in polished_addresses:
+        print p
     for address in polished_addresses:
         if address['offset'] != pos:
-            #print "%s-%s Original data (%s)" % (pos,  address['offset'], address['offset'] - pos)
+            print "%s-%s Original data (size %s)" % (pos,  address['offset'], address['offset'] - pos)
             #output.write(bytearray[pos:address['offset']])
             result_md5.update(bytearray[pos:address['offset']])
-            pieces.append({"source": None, "offset": address['offset'], "size":  address['offset'] - pos})
+            pieces.append({"source": None, "offset": pos, "size":  address['offset'] - pos})
             pos = address['offset']
         #print address['offset'], address['blob'], address['blob_offset'], address['size']
-        #print "%s-%s %s %s+%s" % (address['offset'], address['offset']+address['size'], address['blob'], address['blob_offset'], address['size'])
+        print "%s-%s %s %s+%s" % (address['offset'], address['offset']+address['size'], address['blob'], address['blob_offset'], address['size'])
         pieces.append({"source": address['blob'], "offset": address['offset'], "size":  address['size']})
         pos += address['size']
-        block = front.get_blob(address['blob'], address['blob_offset'], address['size']).read()
+        block = blob_source.get_blob(address['blob'], address['blob_offset'], address['size']).read()
         #output.write(block)
         result_md5.update(block)
     if pos != len(bytearray):
-        #print "%s-%s Original data (%s)" % (pos, len(bytearray), len(bytearray) - pos)
+        print "%s-%s Original data (%s)" % (pos, len(bytearray), len(bytearray) - pos)
         pieces.append({"source": None, "offset": pos, "size":  len(bytearray) - pos})
         #output.write(bytearray[pos:])
         result_md5.update(bytearray[pos:])
     #print "*** End of recipe"
     assert expected_md5 == result_md5.hexdigest()
+    if len(pieces) == 1:
+        print pieces
+        return None # No deduplication possible
+    assert len(recipe['pieces']) > 1
     return recipe
 
 
