@@ -33,7 +33,7 @@ import derived
 
 from common import *
 from boar_common import *
-from blobreader import create_blob_reader
+import blobreader
 from jsonrpc import FileDataSource
 from boar_exceptions import *
 
@@ -472,7 +472,7 @@ class Repo:
         recpath = self.get_recipe_path(sum)
         if not os.path.exists(recpath):
             return None
-        recipe = read_json(f)
+        recipe = read_json(recpath)
         return recipe
 
     def get_blob_size(self, sum):
@@ -497,7 +497,8 @@ class Repo:
             return FileDataSource(fo, size)
         recipe = self.get_recipe(sum)
         if recipe:
-            assert False, "Recipes not implemented yet"
+            print "Returning recipe reader"
+            return blobreader.RecipeReader(recipe, self)
         raise ValueError("No such blob or recipe exists: "+sum)
 
     def get_blob(self, sum, offset = 0, size = -1):
@@ -600,6 +601,17 @@ class Repo:
         matches = set()
         for f in tree:
             m = blobpattern.search(f)
+            if m:
+                matches.add(m.group(1))
+        return list(matches)
+
+    def get_recipe_names(self):
+        recipepattern = re.compile("([0-9a-f]{32})([.]recipe)$")
+        assert recipepattern.search("b5fb453aeaaef8343353cc1b641644f9.recipe")
+        tree = get_tree(os.path.join(self.repopath, RECIPES_DIR))
+        matches = set()
+        for f in tree:
+            m = recipepattern.search(f)
             if m:
                 matches.add(m.group(1))
         return list(matches)

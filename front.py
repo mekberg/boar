@@ -507,6 +507,9 @@ class Front:
     def get_all_blobs(self):
         return self.repo.get_blob_names()
 
+    def get_all_recipes(self):
+        return self.repo.get_recipe_names()
+
     def new_snapshot_has_blob(self, sum):
         assert self.new_session, "new_snapshot_has_blob() must only be called when a new snapshot is underway"
         return self.new_session.has_blob(sum)

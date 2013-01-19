@@ -1,4 +1,5 @@
 from common import *
+from jsonrpc import DataSource
 
 """ A recipe has the following format:
 
@@ -23,7 +24,7 @@ def create_blob_reader(recipe, repo):
     assert recipe
     return RecipeReader(recipe, repo)
 
-class RecipeReader:
+class RecipeReader(DataSource):
     def __init__(self, recipe, repo):
         self.repo = repo
         self.pieces = recipe['pieces']
@@ -36,7 +37,11 @@ class RecipeReader:
         self.pos = 0
         self.seek(0)
 
+    def bytes_left(self):
+        return self.size - self.pos
+
     def seek(self, pos):
+        print "Reader seeking to", pos
         offset = 0
         if pos > self.size:
             raise Exception("Illegal position %s" % (pos))
@@ -63,6 +68,7 @@ class RecipeReader:
         return readable
 
     def read(self, readsize, pos = None):
+        print "Read at", pos, "+", readsize
         if pos != None:
             self.seek(pos)
         readsize = min(readsize, self.size - self.pos)
@@ -78,4 +84,5 @@ class RecipeReader:
             result += bytes
             self.seek(self.pos + len(bytes))
         assert readsize == len(result)
+        print "Read returning", len(result), "bytes"
         return result
