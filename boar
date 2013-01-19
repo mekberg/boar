@@ -175,7 +175,7 @@ def verify_repo(front, verify_blobs = True):
         front.repo_verify_snapshot(rev)
     session_ids = front.get_session_ids()
     print "Verifying %s snapshots" % (len(session_ids))
-    existing_blobs = set(front.get_all_blobs())
+    existing_blobs = set(front.get_all_blobs()) | set(front.get_all_recipes())
     for i in range(0, len(session_ids)):
         id = session_ids[i]
         bloblist = front.get_session_bloblist(id) # We must not use a
@@ -261,6 +261,7 @@ def cmd_scanblocks(args):
     f = open(filename, "r")
     bytearray = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
     size = 0
+
     for byte in bytearray:
         size += 1
         rs.feed_byte(ord(byte))
@@ -273,12 +274,13 @@ def cmd_scanblocks(args):
                 #address = [rs.offset()] + front.repo.blocksdb.get_blob_location(rolling, sha) + [WINDOW_SIZE]
                 blob, blob_offset = front.repo.blocksdb.get_blob_location(rolling, sha)
                 address = {'offset': rs.offset(), 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
-                print "True hit at", address
+                #print "True hit at", address
                 raw_addresses.append(address)
                 hits.append(rs.offset())
                 block_checksums[rs.offset()] = (rolling, sha)
             else:
-                print "False hit at", rs.offset()
+                pass
+                #print "False hit at", rs.offset()
 
     print "Thinking..."
     hits = deduplication.remove_overlapping_blocks(hits, WINDOW_SIZE)
@@ -300,6 +302,12 @@ def cmd_scanblocks(args):
         while grow_address_downwards(front, bytearray, address): pass
 
     print "*** Recipe follows:"
+    pieces = []
+    recipe = {"method": "concat",
+              "md5sum": md5sum(bytearray),
+              "size": len(bytearray),
+              "pieces": pieces}
+
     pos = 0
     output = open("restored_file.bin", "w")
     for address in polished_addresses:
@@ -307,16 +315,22 @@ def cmd_scanblocks(args):
             #print "Unique data", pos, "+", address['size']
             print "%s-%s Original data (%s)" % (pos,  address['offset'], address['offset'] - pos)
             output.write(bytearray[pos:address['offset']])
+            pieces.append({"source": None, "offset": address['offset'], "size":  address['offset'] - pos})
             pos = address['offset']
         #print address['offset'], address['blob'], address['blob_offset'], address['size']
         print "%s-%s %s %s+%s" % (address['offset'], address['offset']+address['size'], address['blob'], address['blob_offset'], address['size'])
+        pieces.append({"source": address['blob'], "offset": address['offset'], "size":  address['size']})
         pos += address['size']
         block = front.get_blob(address['blob'], address['blob_offset'], address['size']).read()
         output.write(block)
     if pos != len(bytearray):
         print "%s-%s Original data (%s)" % (pos, len(bytearray), len(bytearray) - pos)
+        pieces.append({"source": None, "offset": pos, "size":  len(bytearray) - pos})
         output.write(bytearray[pos:])
+    print json.dumps(recipe, indent=4)
     print "*** End of recipe"
+
+    """
     # Lets take a look at that list
     output.close()
     if md5sum_file(filename) == md5sum_file("restored_file.bin"):
@@ -339,6 +353,7 @@ def cmd_scanblocks(args):
     #print redundant_bytes, "redundant bytes"
     #print len(hits), "overlaps"
     f.close()
+    """
 
 def grow_address_upwards(front, bytearray, address):
     grow_bite = 4096
