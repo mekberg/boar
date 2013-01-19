@@ -197,6 +197,7 @@ class SessionWriter:
         self.force_base_snapshot = force_base_snapshot
         self.metadatas = {}
         self.blob_blocks = {}
+        self.found_uncommitted_blocks = []
         self.blob_writer = {}
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
@@ -263,7 +264,7 @@ class SessionWriter:
         seq = 0
         for blockdata in self.blob_blocks[blob_md5].harvest():
             offset, rolling, sha256 = blockdata
-            self.repo.blocksdb.add_block(blob_md5, seq, offset, rolling, sha256)
+            self.found_uncommitted_blocks.append((blob_md5, seq, offset, rolling, sha256))
             seq += 1
         del self.blob_blocks[blob_md5]
                 
@@ -308,6 +309,42 @@ class SessionWriter:
         finally:
             self.session_mutex.release()
 
+    def __deduplicate(self):
+        contents = os.listdir(self.session_path)
+        import front, deduplication
+        front = front.Front(self.repo)
+        session_blobs = [filename for filename in contents if is_md5sum(filename) ]
+        for filename in contents:
+            assert not repository.is_recipe_filename(filename), "Not supposed to be any recipies here yet"
+            if not is_md5sum(filename):
+                continue
+            if front.has_blob(filename):
+                continue
+            path = os.path.join(self.session_path, filename)
+            recipe = deduplication.recepify(front, path, self.session_path)
+            if not recipe:
+                print filename, "could not be deduplicated"
+                continue
+            assert len(recipe['pieces']) > 1
+            print "Deduplicated", filename, ":"
+            for piece in recipe['pieces']:
+                if not piece['source']:
+                    new_blob_md5 = md5sum_file(path, piece['offset'], piece['offset'] + piece['size'])
+                    new_blob_path = os.path.join(self.session_path, new_blob_md5)
+                    piece['source'] = new_blob_md5
+                    if os.path.exists(new_blob_path):
+                        continue
+                    with StrictFileWriter(new_blob_path, new_blob_md5, piece['size']) as new_blob:
+                        for block in file_reader(path, piece['offset'], piece['offset'] + piece['size']):
+                            new_blob.write(block)
+            recipe_json = json.dumps(recipe, indent = 4)
+            recipe_md5 = md5sum(recipe_json)
+            recipe_path = os.path.join(self.session_path, filename + ".recipe")
+            with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
+                recipe_file.write(recipe_json)
+            print recipe
+                        
+
     def __commit(self, sessioninfo):
         assert not self.dead
         assert self.session_path != None
@@ -319,6 +356,8 @@ class SessionWriter:
                 (sessioninfo['name'], self.session_name)
         self.writer.set_fingerprint(bloblist_fingerprint(self.resulting_blobdict.values()))
         self.writer.set_client_data(sessioninfo)
+
+        self.__deduplicate()
 
         if self.force_base_snapshot:
             bloblist = self.resulting_blobdict.values()
@@ -335,6 +374,8 @@ class SessionWriter:
 
         # Not safe, but the only consequence of a failed transaction
         # is degradation of deduplication.
+        for block_spec in self.found_uncommitted_blocks:
+            self.repo.blocksdb.add_block(*block_spec)
         self.repo.blocksdb.commit() 
 
         # This is a fail-safe to reduce the risk of lockfile problems going undetected. 

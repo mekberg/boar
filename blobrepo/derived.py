@@ -55,7 +55,7 @@ class blobs_blocks:
     def get_blob_location(self, rolling, sha):
         c = self.conn.cursor()
         c.execute("SELECT blob, offset FROM blocks WHERE rolling = ? AND sha256 = ?", [rolling, sha])
-        row, = c.fetchall()
+        row = c.fetchone()
         return [row[0], row[1]]
 
     def get_all_rolling(self):
