@@ -313,7 +313,7 @@ class SessionWriter:
         contents = os.listdir(self.session_path)
         import front, deduplication
         front = front.Front(self.repo)
-        session_blobs = [filename for filename in contents if is_md5sum(filename) ]
+        session_blobs = [filename for filename in contents if is_md5sum(filename)]
         for filename in contents:
             assert not repository.is_recipe_filename(filename), "Not supposed to be any recipies here yet"
             if not is_md5sum(filename):
@@ -342,6 +342,7 @@ class SessionWriter:
             recipe_path = os.path.join(self.session_path, filename + ".recipe")
             with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
                 recipe_file.write(recipe_json)
+            os.remove(path)
             print recipe
                         
 
@@ -357,7 +358,18 @@ class SessionWriter:
         self.writer.set_fingerprint(bloblist_fingerprint(self.resulting_blobdict.values()))
         self.writer.set_client_data(sessioninfo)
 
+        snapshot_blobs = [filename for filename in os.listdir(self.session_path) if is_md5sum(filename)]
+
         self.__deduplicate()
+
+        for blob_name in snapshot_blobs:
+            # Verify that all blobs still are there - as raw blobs or as recipes
+            blob_path = os.path.join(self.session_path, blob_name)
+            recipe_path = os.path.join(self.session_path, blob_name + ".recipe")
+            assert os.path.exists(blob_path) or os.path.exists(recipe_path),\
+                "a blob in the commit disappeared after deduplication"
+            assert not(os.path.exists(blob_path) and os.path.exists(recipe_path)),\
+                "a blob in the commit exists as both raw blob and recipe"
 
         if self.force_base_snapshot:
             bloblist = self.resulting_blobdict.values()

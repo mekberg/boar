@@ -222,6 +222,10 @@ def recepify(front, filename, local_blob_dir = None):
     
     blob_source = UniformBlobGetter(front, local_blob_dir)
     raw_addresses = []
+    if os.path.getsize(filename) == 0:
+        # mmap has problems with zero size files, and anyway they
+        # don't deduplicate well...
+        return None
     f = safe_open(filename, "rb")
     bytearray = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
     size = 0

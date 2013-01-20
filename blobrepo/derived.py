@@ -56,6 +56,7 @@ class blobs_blocks:
         c = self.conn.cursor()
         c.execute("SELECT blob, offset FROM blocks WHERE rolling = ? AND sha256 = ?", [rolling, sha])
         row = c.fetchone()
+        assert self.repo.has_raw_blob(row[0])
         return [row[0], row[1]]
 
     def get_all_rolling(self):

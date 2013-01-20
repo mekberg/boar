@@ -527,7 +527,7 @@ class Front:
 
     def init_verify_blobs(self):
         assert self.blobs_to_verify == []
-        self.blobs_to_verify = self.repo.get_blob_names()
+        self.blobs_to_verify = self.repo.get_blob_names() + self.repo.get_recipe_names()
         for scanner in self.repo.scanners:
             scanner.scan_init()
         return len(self.blobs_to_verify)
