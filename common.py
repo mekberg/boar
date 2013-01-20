@@ -820,5 +820,4 @@ class StrictFileWriter:
     
     def __exit__(self, type, value, traceback):
         self.close()
-
  
