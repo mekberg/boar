@@ -785,7 +785,6 @@ class Repo:
         import deduplication
         from front import Front
         # Check the checksums of all blobs
-        blob_getter = deduplication.UniformBlobGetter(Front(self), queued_item)
         for filename in items:
             full_path = os.path.join(queued_item, filename)
             if is_md5sum(filename):
@@ -793,14 +792,12 @@ class Repo:
             elif is_recipe_filename(filename):
                 md5summer = hashlib.md5()
                 recipe = read_json(full_path)
-                reader = create_blob_reader(recipe, blob_getter)
+                reader = blobreader.RecipeReader(recipe, self, queued_item)
                 while reader.bytes_left():
                     md5summer.update(reader.read(4096))
-                assert filename == md5summer.hexdigest + ".recipe"
+                assert filename == md5summer.hexdigest() + ".recipe"
             else:
                 pass
-
-        # TODO: check recipes for validity
 
         # Check the existence of all required files
         # TODO: check the contents for validity
