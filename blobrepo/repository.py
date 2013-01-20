@@ -36,6 +36,7 @@ from boar_common import *
 import blobreader
 from jsonrpc import FileDataSource
 from boar_exceptions import *
+from blobreader import create_blob_reader
 
 LATEST_REPO_FORMAT = 5
 REPOID_FILE = "repoid.txt"
@@ -486,6 +487,8 @@ class Repo:
         return long(recipe['size'])
 
     def get_blob_reader(self, sum, offset = 0, size = -1):
+        """ Returns a blob reader object that can be used to stream
+        the requested data. """
         if self.has_raw_blob(sum):
             blobsize = self.get_blob_size(sum)
             if size == -1:
@@ -497,12 +500,15 @@ class Repo:
             return FileDataSource(fo, size)
         recipe = self.get_recipe(sum)
         if recipe:
-            print "Returning recipe reader"
-            return blobreader.RecipeReader(recipe, self)
+            reader = blobreader.RecipeReader(recipe, self)
+            reader.seek(offset)
+            return reader
         raise ValueError("No such blob or recipe exists: "+sum)
 
     def get_blob(self, sum, offset = 0, size = -1):
-        """ Returns None if there is no such blob """
+        """ Returns the full blob as a single buffer. This method must
+        only be used on known small-ish blobs, as it may otherwise
+        cause OOM situations. Returns None if there is no such blob"""
         if self.has_raw_blob(sum):
             path = self.get_blob_path(sum)
             with safe_open(path, "rb") as f:
@@ -634,15 +640,16 @@ class Repo:
 
     def verify_blob(self, sum):
         recipe = self.get_recipe(sum)
+        md5_summer = hashlib.md5()
         if recipe:
-            assert False, "recipes not implemented"
-            #reader = create_blob_reader(recipe, self)
-            #verified_ok = (sum == md5sum_file(reader))
+            reader = create_blob_reader(recipe, self)
+            while reader.bytes_left():
+                md5_summer.update(reader.read(4096))
+            return sum == md5_summer.hexdigest()
         if not self.has_raw_blob(sum):
             raise ValueError("No such blob or recipe: " + sum)
         path = self.get_blob_path(sum)
         with safe_open(path, "rb") as f:
-            md5_summer = hashlib.md5()
             for block in file_reader(f):
                 md5_summer.update(block)
             md5 = md5_summer.hexdigest()
@@ -775,13 +782,23 @@ class Repo:
         queued_item = self.get_queue_path(session_id)
 
         items = os.listdir(queued_item)
-
+        import deduplication
+        from front import Front
         # Check the checksums of all blobs
+        blob_getter = deduplication.UniformBlobGetter(Front(self), queued_item)
         for filename in items:
-            if not is_md5sum(filename):
-                continue
-            blob_path = os.path.join(queued_item, filename)
-            assert filename == md5sum_file(blob_path), "Invalid blob found in queue dir:" + blob_path
+            full_path = os.path.join(queued_item, filename)
+            if is_md5sum(filename):
+                assert filename == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
+            elif is_recipe_filename(filename):
+                md5summer = hashlib.md5()
+                recipe = read_json(full_path)
+                reader = create_blob_reader(recipe, blob_getter)
+                while reader.bytes_left():
+                    md5summer.update(reader.read(4096))
+                assert filename == md5summer.hexdigest + ".recipe"
+            else:
+                pass
 
         # TODO: check recipes for validity
 
