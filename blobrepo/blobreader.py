@@ -25,8 +25,9 @@ def create_blob_reader(recipe, repo):
     return RecipeReader(recipe, repo)
 
 class RecipeReader(DataSource):
-    def __init__(self, recipe, repo):
+    def __init__(self, recipe, repo, local_path = None):
         self.repo = repo
+        self.local_path = local_path
         self.pieces = recipe['pieces']
         self.size = recipe['size']
         # Where it is safe to read without switching source (virtual position)
@@ -74,7 +75,11 @@ class RecipeReader(DataSource):
         readsize = min(readsize, self.size - self.pos)
         result = ""
         while len(result) < readsize:
-            blobpath = self.repo.get_blob_path(self.source)
+            blobpath = None
+            if self.local_path:
+                blobpath = os.path.join(self.local_path, self.source)
+            if not blobpath or not os.path.exists(blobpath):
+                blobpath = self.repo.get_blob_path(self.source)
             bytes_left = readsize - len(result)
             bytes_to_read = min(self.__readable_bytes_without_seek(), bytes_left)
             with open(blobpath, "rb") as f:
