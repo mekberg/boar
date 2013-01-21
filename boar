@@ -381,16 +381,17 @@ class _ChangePrinter:
                     return True
         return affected
 
-def _parse_range(s):
+def _parse_range(s, default_lower, default_upper):
+    assert default_lower <= default_upper
     try:
         return int(s), int(s)
     except ValueError:
         pass
     m = re.match("^(\d*):(\d*)$", s)
     if not m:
-        raise UserError("Ranges must be given as N:M where N and M may be an empty string or an integer > 0")
-    lower = int(m.group(1)) if m.group(1) else 1
-    upper = int(m.group(2)) if m.group(2) else VERY_LARGE_NUMBER
+        raise UserError("Ranges must be given as N:M where N and M may be an empty string or an integer")
+    lower = int(m.group(1)) if m.group(1) else default_lower
+    upper = int(m.group(2)) if m.group(2) else default_upper
     return lower, upper
 
 def cmd_log(args):
@@ -430,7 +431,7 @@ def cmd_log(args):
         raise UserError("You must use this command in a workdir or specify a repository to operate on")
 
     if options.revision_range:
-        range_start, range_end = _parse_range(options.revision_range)
+        range_start, range_end = _parse_range(options.revision_range, 1, VERY_LARGE_NUMBER)
     else:
         range_start, range_end = 1, front.get_highest_used_revision()
 
@@ -919,8 +920,8 @@ def cmd_cat(args):
     globals()["suppress_finishmessage"] = True
     front = connect_to_repo(get_repo_url())
 
-    blobids = []
     if not options.blob:
+        blobids = []
         while args:
             path = args.pop(0)
             if options.punycode:
@@ -938,23 +939,37 @@ def cmd_cat(args):
             if not blobid:
                 raise UserError("No such file exists in the given session/revision: %s" % (session_path))
             blobids.append(blobid)
+            for blobid in blobids:
+                datasource = front.get_blob(blobid)
+                while datasource.bytes_left():
+                    stdout.write(datasource.read(4096))
+
     else:
+        blob_parts = []
         if options.revision:
             raise UserError("--revision option can not be combined with --blob option")
         if options.punycode:
             raise UserError("--punycode option can not be combined with --blob option")
         while args:
-            blobid = args.pop(0)
+            blobspec = args.pop(0)
+            m = re.match(r"^(.{32})(\[(\d*:\d*)\])?$", blobspec)
+            if not m:
+                raise UserError("Illegal blob specification")
+            blobid = m.group(1)
+            range_spec = m.group(3)
             if not is_md5sum(blobid):
                 raise UserError("Not a valid blobid: %s" % blobid)
             if not front.has_blob(blobid):
                 raise UserError("Blob does not exist in repository: %s" % blobid)
-            blobids.append(blobid)
+            lower_bound, upper_bound = _parse_range(range_spec, 0, front.get_blob_size(blobid))
+            blob_parts.append((blobid, lower_bound, upper_bound - lower_bound))
+        for blob_part in blob_parts:
+            blobid, offset, size = blob_part
+            print "Catting", blobid, offset, size
+            datasource = front.get_blob(blobid, offset, size)
+            while datasource.bytes_left():
+                stdout.write(datasource.read(4096))
 
-    for blobid in blobids:
-        datasource = front.get_blob(blobid)
-        while datasource.bytes_left():
-            stdout.write(datasource.read(4096))
 
 def _get_blobid(front, revision, session_path):
     """Convenience function to fetch the id of a blob given a revision
