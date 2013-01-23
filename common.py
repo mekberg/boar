@@ -763,10 +763,12 @@ class StrictFileWriter:
     exceed the given size. Also, the file must not exist before, and
     it must have the given md5 checksum when finished. If any of the
     contraints are violated, an ConstraintViolation exception is
-    thrown.
+    thrown will be thrown when the StrictFileWriter is closed, or when
+    too much data is written.
 
     A sparse file with the given size will be created, which will
-    reduce fragmentation on some platforms (NTFS). """
+    reduce fragmentation on some platforms (NTFS). 
+    """
     def __init__(self, filename, md5, size, overwrite = False):
         assert is_md5sum(md5)
         assert type(size) == int or type(size) == long
@@ -819,5 +821,10 @@ class StrictFileWriter:
         return self
     
     def __exit__(self, type, value, traceback):
-        self.close()
+        if type:
+            # An exception has occured within the "with" clause. Let's
+            # not hide it.
+            self.__close()
+        else:
+            self.close()
  
