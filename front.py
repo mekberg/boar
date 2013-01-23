@@ -503,7 +503,7 @@ class Front:
     def get_blob_size(self, sum):
         return self.repo.get_blob_size(sum)
 
-    def get_blob(self, sum, offset = 0, size = -1):
+    def get_blob(self, sum, offset = 0, size = None):
         datasource = self.repo.get_blob_reader(sum, offset, size)
         return datasource
 
@@ -606,7 +606,7 @@ class DryRunFront:
     def get_blob_size(self, sum):
         return self.realfront.get_blob_size(sum)
 
-    def get_blob_b64(self, sum, offset = 0, size = -1):
+    def get_blob_b64(self, sum, offset = 0, size = None):
         return self.realfront.get_blob_b64(sum, offset, size)
 
     def has_blob(self, sum):
