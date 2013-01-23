@@ -486,12 +486,12 @@ class Repo:
             raise ValueError("No such blob or recipe exists: "+sum)
         return long(recipe['size'])
 
-    def get_blob_reader(self, sum, offset = 0, size = -1):
+    def get_blob_reader(self, sum, offset = 0, size = None):
         """ Returns a blob reader object that can be used to stream
         the requested data. """
         if self.has_raw_blob(sum):
             blobsize = self.get_blob_size(sum)
-            if size == -1:
+            if size == None:
                 size = blobsize
             assert offset + size <= blobsize
             path = self.get_blob_path(sum)
@@ -500,33 +500,13 @@ class Repo:
             return FileDataSource(fo, size)
         recipe = self.get_recipe(sum)
         if recipe:
-            reader = blobreader.RecipeReader(recipe, self)
-            reader.seek(offset)
+            reader = blobreader.RecipeReader(recipe, self, offset=offset, size=size)
             return reader
         raise ValueError("No such blob or recipe exists: "+sum)
-
-    def get_blob(self, sum, offset = 0, size = -1):
-        """ Returns the full blob as a single buffer. This method must
-        only be used on known small-ish blobs, as it may otherwise
-        cause OOM situations. Returns None if there is no such blob"""
-        if self.has_raw_blob(sum):
-            path = self.get_blob_path(sum)
-            with safe_open(path, "rb") as f:
-                f.seek(offset)
-                data = f.read(size)
-            return data
-        recipe = self.get_recipe(sum)
-        if recipe:
-            reader = create_blob_reader(recipe, self)
-            reader.seek(offset)
-            return reader.read(size)
-        else:
-            raise ValueError("No such blob or recipe exists: "+sum)
 
     def get_session_path(self, session_id):
         assert isinstance(session_id, int)
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
-
         
     def get_all_sessions(self):
         return get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
@@ -792,7 +772,7 @@ class Repo:
             elif is_recipe_filename(filename):
                 md5summer = hashlib.md5()
                 recipe = read_json(full_path)
-                reader = blobreader.RecipeReader(recipe, self, queued_item)
+                reader = blobreader.RecipeReader(recipe, self, local_path=queued_item)
                 while reader.bytes_left():
                     md5summer.update(reader.read(4096))
                 assert filename == md5summer.hexdigest() + ".recipe"
