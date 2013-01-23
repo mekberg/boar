@@ -212,7 +212,6 @@ class UniformBlobGetter:
         return self.front.get_blob(blob_name, offset, size)
 
 def recepify(front, filename, local_blob_dir = None):
-    print "Recepifying", filename
     WINDOW_SIZE = front.get_dedup_block_size()
     all_rolling = set(front.get_all_rolling())
     hits = []
