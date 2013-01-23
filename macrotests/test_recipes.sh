@@ -29,11 +29,10 @@ $BOAR --repo=$REPO co Dedup || exit 1
 
 rm -r Dedup || exit 1
 
+$BOAR --repo=$REPO verify || { echo "Verify 2 failed"; exit 1; }
+
 $BOAR --repo=$REPO co Dedup || { echo "Check-out 2 failed"; exit 1; }
 
 (cd Dedup && md5sum -c manifest.md5 ) || exit 1
 
-ls $REPO/recipes
 exit 0
-
-
