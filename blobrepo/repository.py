@@ -62,7 +62,7 @@ REPO_DIRS_V3 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
 REPO_DIRS_V4 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
 REPO_DIRS_V5 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
-    DERIVED_DIR, DERIVED_BLOCKS_DIR)
+    DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR)
 
 DEDUP_BLOCK_SIZE = 4096
 
@@ -143,7 +143,7 @@ def integrity_assert(test, errormsg = None):
 def create_repository(repopath):
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
-    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR:
+    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR:
         os.mkdir(os.path.join(repopath, d))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
     create_file(os.path.join(repopath, REPOID_FILE), generate_random_repoid())
@@ -398,6 +398,8 @@ class Repo:
         try:
             if not dir_exists(os.path.join(self.repopath, DERIVED_BLOCKS_DIR)):
                 os.mkdir(os.path.join(self.repopath, DERIVED_BLOCKS_DIR))
+            if not dir_exists(os.path.join(self.repopath, RECIPES_DIR)):
+                os.mkdir(os.path.join(self.repopath, RECIPES_DIR))
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "5")
         except OSError, e:
@@ -827,7 +829,7 @@ class Repo:
             elif is_recipe_filename(filename):
                 recipe_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_recipe_path(filename)
-                move_file(recipe_to_move, destination_path, mkdirs = True)
+                move_file(recipe_to_move, destination_path, mkdirs = False)
             else:
                 pass # The rest becomes a snapshot definition directory
 
