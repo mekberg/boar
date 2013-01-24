@@ -28,29 +28,34 @@ import struct
 def main():
     args = sys.argv[1:]
     if len(args) != 3:
-        print "mkrandfile.py <seed integer> <filesize in kb> <filename>"
+        print "mkrandfile.py <seed integer> <filesize in bytes> <filename>"
         sys.exit(1)
 
     seed = int(args.pop(0))
     filesize_kbytes = int(args.pop(0))
     filename = tounicode(args.pop(0))
-    random.seed(seed)
-    md5 = mkrandfile(filename, filesize_kbytes)
+    md5 = mkrandfile_deterministic(filename, filesize_kbytes, seed=seed)
     print md5 + "  " + filename
 
-def mkrandfile_deterministic(path, filesize_kbytes):
+def mkrandfile_deterministic(path, filesize_bytes, seed=0):
+    import math
     assert not os.path.exists(path)
+    random.seed(seed)
     md5 = hashlib.md5()
     f = open(path, "wb")
+    filesize_kbytes = int(math.ceil(1.0 * filesize_bytes / 1024))
     for n in xrange(0, filesize_kbytes*128):
         byte_val = random.randint(0, 2**32-1)
         buf = struct.pack("Q", byte_val)
         f.write(buf)
         md5.update(buf)
-    f.close()
+    f.flush()
     assert md5sum_file(path) == md5.hexdigest()
-    assert os.path.getsize(path) == filesize_kbytes * 1024
-    return md5.hexdigest()
+    f.seek(filesize_bytes)
+    f.truncate()
+    f.close()
+    assert os.path.getsize(path) == filesize_bytes
+    return md5sum_file(path)
 
 def mkrandfile_fast(path, filesize_kbytes):
     assert not os.path.exists(path)
