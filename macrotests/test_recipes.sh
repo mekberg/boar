@@ -62,7 +62,6 @@ $BOAR --repo=$REPO co Dedup || exit 1
 ls $REPO/recipes || exit 1
 cat $REPO/recipes/028a14413856fee90edd49ad9f8af9c4.recipe || exit 1
 rm -r Dedup || exit 1
-exit 1
 
 $BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
 $BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }

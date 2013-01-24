@@ -161,9 +161,9 @@ def grow_address_upwards(blob_source, bytearray, address):
     upper_block_size = upper_block_end - upper_block_start
     upper_block = blob_source.get_blob(address['blob'], upper_block_start, upper_block_size).read()
     growth = 0
-    while address['offset'] + address['size'] < len(bytearray) and growth < upper_block_size:
+    while address['match_start'] + address['size'] < len(bytearray) and growth < upper_block_size:
         #print address
-        if bytearray[address['offset'] + address['size']] != upper_block[growth]:
+        if bytearray[address['match_start'] + address['size']] != upper_block[growth]:
             break
         growth += 1
         address['size'] += 1
@@ -178,13 +178,13 @@ def grow_address_downwards(blob_source, bytearray, address):
     # print lower_block_start, lower_block_end, lower_block_size
     lower_block = blob_source.get_blob(address['blob'], lower_block_start, lower_block_size).read()
     growth = 0
-    while address['offset'] > 0 and growth < lower_block_size:
+    while address['match_start'] > 0 and growth < lower_block_size:
         #print address
-        if bytearray[address['offset'] - 1] != lower_block[-(growth+1)]:
+        if bytearray[address['match_start'] - 1] != lower_block[-(growth+1)]:
             break
         growth += 1
         address['blob_offset'] -= 1
-        address['offset'] -= 1
+        address['match_start'] -= 1
         address['size'] += 1
     return growth
 
@@ -240,17 +240,17 @@ def recepify(front, filename, local_blob_dir = None):
             if front.has_block(rolling, sha):
                 #address = [rs.offset()] + front.repo.blocksdb.get_blob_location(rolling, sha) + [WINDOW_SIZE]
                 blob, blob_offset = front.get_dedup_block_location(rolling, sha)
-                address = {'offset': rs.offset(), 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
-                print "True hit at", address
+                address = {'match_start': rs.offset(), 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
+                #print "True hit at", address
                 raw_addresses.append(address)
                 hits.append(rs.offset())
                 block_checksums[rs.offset()] = (rolling, sha)
             else:
                 pass
-                print "False hit at", rs.offset()
+                #print "False hit at", rs.offset()
 
     hits = remove_overlapping_blocks(hits, WINDOW_SIZE)
-    raw_addresses = [t for t in raw_addresses if t['offset'] in hits]
+    raw_addresses = [t for t in raw_addresses if t['match_start'] in hits]
 
     if not raw_addresses:
         return None # No deduplication is possible
@@ -280,33 +280,33 @@ def recepify(front, filename, local_blob_dir = None):
     
     result_md5 = hashlib.md5()
     #output = open("restored_file.bin", "w")
-    for p in polished_addresses:
-        print p
+    #for p in polished_addresses:
+    #    print p
     for address in polished_addresses:
-        if address['offset'] != pos:
-            print "%s-%s Original data (size %s)" % (pos,  address['offset'], address['offset'] - pos)
+        if address['match_start'] != pos:
+            #print "%s-%s Original data (size %s)" % (pos,  address['match_start'], address['match_start'] - pos)
             #output.write(bytearray[pos:address['offset']])
-            result_md5.update(bytearray[pos:address['offset']])
-            pieces.append({"source": None, "offset": pos, "size":  address['offset'] - pos})
-            pos = address['offset']
-        #print address['offset'], address['blob'], address['blob_offset'], address['size']
-        print "%s-%s %s %s+%s" % (address['offset'], address['offset']+address['size'], address['blob'], address['blob_offset'], address['size'])
-        pieces.append({"source": address['blob'], "offset": address['offset'], "size":  address['size']})
+            result_md5.update(bytearray[pos:address['match_start']])
+            pieces.append({"source": None, "offset": pos, "size":  address['match_start'] - pos})
+            pos = address['match_start']
+        #print address['match_start'], address['blob'], address['blob_offset'], address['size']
+        #print "%s-%s %s %s+%s" % (address['match_start'], address['match_start']+address['size'], address['blob'], address['blob_offset'], address['size'])
+        pieces.append({"source": address['blob'], "offset": address['blob_offset'], "size":  address['size']})
         pos += address['size']
         block = blob_source.get_blob(address['blob'], address['blob_offset'], address['size']).read()
         #output.write(block)
         result_md5.update(block)
     if pos != len(bytearray):
-        print "%s-%s Original data (%s)" % (pos, len(bytearray), len(bytearray) - pos)
+        #print "%s-%s Original data (%s)" % (pos, len(bytearray), len(bytearray) - pos)
         pieces.append({"source": None, "offset": pos, "size":  len(bytearray) - pos})
         #output.write(bytearray[pos:])
         result_md5.update(bytearray[pos:])
     #print "*** End of recipe"
     assert expected_md5 == result_md5.hexdigest()
-    if len(pieces) == 1:
-        print pieces
+    if len(pieces) == 1 and pieces[0]["source"] == None:
         return None # No deduplication possible
-    assert len(recipe['pieces']) > 1
+    assert len(recipe['pieces']) > 0
+    #print expected_md5, recipe
     return recipe
 
 

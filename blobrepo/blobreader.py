@@ -49,12 +49,12 @@ class RecipeReader(DataSource):
     def bytes_left(self):
         return self._bytes_left
 
-    def __seek(self, pos):
+    def __seek(self, seek_pos):
         offset = 0
-        if pos > self.blob_size:
-            raise Exception("Illegal position %s" % (pos))
-        if pos == self.blob_size:
-            self.pos = pos
+        if seek_pos > self.blob_size:
+            raise Exception("Illegal position %s" % (seek_pos))
+        if seek_pos == self.blob_size:
+            self.pos = seek_pos
             self.source = None
             return
         for p in self.pieces:
@@ -62,11 +62,11 @@ class RecipeReader(DataSource):
             self.blob_source_range_start = offset
             self.source_offset = p["offset"]
             self.source_size = p["size"]
-            if offset + p["size"] > pos:
-                self.pos = pos
+            if offset + p["size"] > seek_pos:
+                self.pos = seek_pos
                 break
             offset += self.source_size
-        assert self.pos == pos
+        assert self.pos == seek_pos
         assert self.source
         assert is_md5sum(self.source)
 
@@ -89,8 +89,10 @@ class RecipeReader(DataSource):
             bytes_left = readsize - len(result)
             bytes_to_read = min(self.__readable_bytes_without_seek(), bytes_left)
             with open(blobpath, "rb") as f:
-                f.seek(self.pos - self.blob_source_range_start)
+                source_file_pos = self.pos - self.blob_source_range_start + self.source_offset
+                f.seek(source_file_pos)
                 bytes = f.read(bytes_to_read)
+                #print "Reader is reading from %s %s+%s" % (self.source, source_file_pos, bytes_to_read)
             assert len(bytes) == bytes_to_read
             result += bytes
             self.__seek(self.pos + len(bytes))
