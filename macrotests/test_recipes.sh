@@ -68,4 +68,26 @@ $BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }
 (cd Dedup && md5sum -c manifest.md5 ) || exit 1
 rm -r $REPO Dedup || exit 1
 
+#########################
+
+echo "Testing case of single checkin of AA (redundancy within a single file)"
+$BOAR mkrepo $REPO || exit 1
+$BOAR --repo=$REPO mksession Dedup || exit 1
+$BOAR --repo=$REPO co Dedup || exit 1
+
+(cd Dedup && 
+    cat $BIGFILE $BIGFILE >amalgam.bin && # Data blob AA
+    md5sum amalgam.bin >manifest.md5 &&
+    $BOAR ci -q ) || exit 1
+
+ls -l $REPO/recipes || exit 1
+ls -l $REPO/blobs/02/028a14413856fee90edd49ad9f8af9c4 || exit 1
+
+$BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
+$BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }
+(cd Dedup && md5sum -c manifest.md5 ) || exit 1
+rm -r $REPO Dedup || exit 1
+
+############################
+
 exit 0

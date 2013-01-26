@@ -25,25 +25,17 @@ from boar_common import safe_delete_file
 import atexit
 import repository
 
-BLOBS_BLOCKS_DBFILE = "blocks.db"
-
 class blobs_blocks:
-    def __init__(self, repo, datadir):
-        # Use a proxy to avoid circular reference to the repo,
-        # allowing this object to be garbed at shutdown and triggering
-        # the __del__ function.
-        self.repo = proxy(repo)
-        assert os.path.exists(datadir)
-        assert os.path.isdir(datadir)
-        self.datadir = datadir
+    def __init__(self, dbfile = ":memory:"):
         self.conn = None
+        self.dbfile = dbfile
         self.__init_db()
 
     def __init_db(self):
         if self.conn:
             return
         try:
-            self.conn = sqlite3.connect(os.path.join(self.datadir, BLOBS_BLOCKS_DBFILE), check_same_thread = False)
+            self.conn = sqlite3.connect(self.dbfile, check_same_thread = False)
             self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, seq int NOT NULL, offset long NOT NULL, rolling char(32), sha256 char(64) NOT NULL, row_md5 char(32))")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_offset ON blocks (blob, offset)")
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_seq ON blocks (blob, seq)")
@@ -56,7 +48,6 @@ class blobs_blocks:
         c = self.conn.cursor()
         c.execute("SELECT blob, offset FROM blocks WHERE rolling = ? AND sha256 = ?", [rolling, sha])
         row = c.fetchone()
-        assert self.repo.has_raw_blob(row[0])
         return [row[0], row[1]]
 
     def get_all_rolling(self):
