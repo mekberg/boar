@@ -48,8 +48,9 @@ SESSIONS_DIR = "sessions"
 RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
-DERIVED_SHA256_DIR = "derived/sha256"
-DERIVED_BLOCKS_DIR = "derived/blocks"
+DERIVED_SHA256_DIR = os.path.join(DERIVED_DIR, "sha256")
+DERIVED_BLOCKS_DIR = os.path.join(DERIVED_DIR, "blocks")
+DERIVED_BLOCKS_DB = os.path.join(DERIVED_BLOCKS_DIR, "blocks.db")
 DELETE_MARKER = "deleted.json"
 
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
@@ -199,7 +200,7 @@ class Repo:
             try:
                 self.__upgrade_repo()
                 self.__quick_check()
-                self.blocksdb = derived.blobs_blocks(self, self.repopath + "/derived/blocks")
+                self.blocksdb = derived.blobs_blocks(os.path.join(self.repopath, DERIVED_BLOCKS_DB))
                 self.process_queue()
             finally:
                 self.repo_mutex.release()
@@ -448,6 +449,11 @@ class Repo:
     def get_blob_path(self, sum):
         assert is_md5sum(sum), "Was: %s" % (sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
+
+    def get_block_location(self, rolling, sha):
+        blob, offset = self.blocksdb.get_blob_location(rolling, sha)
+        assert self.has_raw_blob(blob)
+        return blob, offset
 
     def get_recipe_path(self, recipe):
         if is_recipe_filename(recipe):
