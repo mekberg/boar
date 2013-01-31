@@ -1,3 +1,5 @@
+#include "rollsum.h"
+
 #include "stdlib.h"
 #include "stdio.h"
 #include "string.h"
@@ -5,14 +7,8 @@
 // Snipped from rsynclib
 // (http://stackoverflow.com/questions/6178201/zlib-adler32-rolling-checksum-problem)
 
-/* the Rollsum struct type*/
-typedef struct _Rollsum {
-  unsigned long count;               /* count of bytes included in sum */
-  unsigned long s1;                  /* s1 part of sum */
-  unsigned long s2;                  /* s2 part of sum */
-} Rollsum;
-
 #define ROLLSUM_CHAR_OFFSET 31
+
 
 #define RollsumInit(sum) { \
   (sum)->count=(sum)->s1=(sum)->s2=0; \
@@ -37,23 +33,13 @@ typedef struct _Rollsum {
 
 #define RollsumDigest(sum) (((sum)->s2 << 16) | ((sum)->s1 & 0xffff))
 
-#define WINDOW_SIZE 4
-
-typedef struct _RollingState {
-  Rollsum sum;
-  int size;
-  char cbuf[WINDOW_SIZE+1]; // Circular buffer
-  int ps; // Start position for circular buffer
-  int pe; // End position for circular buffer (next empty position)
-} RollingState;
-
 RollingState init_rolling(){
   RollingState state = {0};
   state.size = WINDOW_SIZE+1;
   return state;
 }
 
-void assert(int condition, const char* message) {
+static void massert(int condition, const char* message) {
   if(condition == 0){
     printf("Assertion failed: %s\n", message);
     exit(1);
@@ -69,13 +55,13 @@ int is_empty(RollingState* state) {
 }
 
 static void push_char(RollingState* state, unsigned char c_push){
-  assert(! is_full(state), "push_char(): Circular buffer is full");
+  massert(! is_full(state), "push_char(): Circular buffer is full");
   state->cbuf[state->pe] = c_push;
   state->pe = (state->pe + 1) % state->size;
 }
 
 static unsigned char shift_char(RollingState* state){
-  assert(! is_empty(state), "shift_char(): Circular buffer is empty");
+  massert(! is_empty(state), "shift_char(): Circular buffer is empty");
   unsigned char c = state->cbuf[state->ps];
   state->ps = (state->ps + 1) % state->size;
   return c;
@@ -83,7 +69,7 @@ static unsigned char shift_char(RollingState* state){
 
 static void copy_rolling_buffer(RollingState* state, char* target_buffer, int target_buffer_size){
   int p = state->ps;
-  assert(target_buffer_size >= state->size, "copy_rolling_buffer(): too small output buffer");
+  massert(target_buffer_size >= state->size, "copy_rolling_buffer(): too small output buffer");
   memset(target_buffer, 0, target_buffer_size);
   while(p != state->pe){
     *target_buffer++ = state->cbuf[p];
@@ -150,7 +136,7 @@ int main() {
             self.feed_byte(ord(c))
 
     def feed_byte(self, b):
-        #assert type(b) == int and b <= 255 and b >= 0
+        #massert type(b) == int and b <= 255 and b >= 0
         self.buffer.append(b)
         if len(self.buffer) == self.window_size + 1:
             self.algo.update(self.buffer[0], b)
@@ -161,7 +147,7 @@ int main() {
         elif len(self.buffer) == self.window_size: 
             self.algo.update(None, b)
         else:
-            assert False, "Unexpected buffer size"
+            massert False, "Unexpected buffer size"
 
     def value(self):
         if len(self.buffer) < self.window_size:
