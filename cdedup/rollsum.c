@@ -99,9 +99,10 @@ int push_rolling(RollingState* const state, const unsigned char c_add) {
     RollsumRotate(&state->sum, c_remove, c_add);
   }
   push_char(state, c_add);
+  return RollsumDigest(&(state->sum));
 }
 
-void print_rolling(RollingState* const state){
+static void print_rolling(RollingState* const state){
   unsigned digest = RollsumDigest(&(state->sum));
   char buf[state->size+1];
   memset(buf, 0, sizeof(buf));
