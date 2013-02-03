@@ -385,7 +385,9 @@ class SessionWriter:
         # Not safe, but the only consequence of a failed transaction
         # is degradation of deduplication.
         for block_spec in self.found_uncommitted_blocks:
-            self.repo.blocksdb.add_block(*block_spec)
+            blob_md5, seq, offset, rolling, sha256 = block_spec
+            self.repo.blocksdb.add_block(blob_md5, seq, offset, sha256)
+            self.repo.blocksdb.add_rolling(rolling)
         self.repo.blocksdb.commit() 
 
         # This is a fail-safe to reduce the risk of lockfile problems going undetected. 
