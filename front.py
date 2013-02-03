@@ -237,8 +237,8 @@ class Front:
     def get_dedup_block_size(self):
         return repository.DEDUP_BLOCK_SIZE
 
-    def get_dedup_block_location(self, rolling, sha):
-        return self.repo.get_block_location(rolling, sha)
+    def get_dedup_block_location(self, sha):
+        return self.repo.get_block_location(sha)
 
     def get_deleted_snapshot_info(self, rev):
         """ Returns a tuple containing the snapshot deleted_name and
@@ -415,8 +415,8 @@ class Front:
     def get_all_rolling(self):
         return self.repo.blocksdb.get_all_rolling()
 
-    def has_block(self, rolling, sha256):
-        return self.repo.blocksdb.has_block(rolling, sha256)
+    def has_block(self, sha256):
+        return self.repo.blocksdb.has_block(sha256)
 
     def add_blob_data(self, blob_md5, b64data):
         """ Must be called after a create_session()  """
