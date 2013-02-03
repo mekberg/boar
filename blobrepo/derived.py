@@ -36,45 +36,50 @@ class blobs_blocks:
             return
         try:
             self.conn = sqlite3.connect(self.dbfile, check_same_thread = False)
-            self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, seq int NOT NULL, offset long NOT NULL, rolling char(32), sha256 char(64) NOT NULL, row_md5 char(32))")
-            self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_offset ON blocks (blob, offset)")
-            self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_seq ON blocks (blob, seq)")
-            self.conn.execute("CREATE INDEX IF NOT EXISTS rolling_sha256 ON blocks (rolling, sha256)")
+            self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, seq int NOT NULL, offset long NOT NULL, sha256 char(64) NOT NULL, row_md5 char(32))")
+            self.conn.execute("CREATE TABLE IF NOT EXISTS rolling (value INT NOT NULL)") 
+            self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)")
+            #self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_offset ON blocks (blob, offset)")
+            #self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_seq ON blocks (blob, seq)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS index_sha256 ON blocks (sha256)")
             self.conn.commit()
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError(e)
 
-    def get_blob_location(self, rolling, sha):
+    def get_blob_location(self, sha256):
         c = self.conn.cursor()
-        c.execute("SELECT blob, offset FROM blocks WHERE rolling = ? AND sha256 = ?", [rolling, sha])
+        c.execute("SELECT blob, offset FROM blocks WHERE sha256 = ?", [sha256])
         row = c.fetchone()
         return [row[0], row[1]]
 
     def get_all_rolling(self):
         c = self.conn.cursor()
-        c.execute("SELECT DISTINCT rolling FROM blocks")
+        c.execute("SELECT value FROM rolling")
         rows = c.fetchall()
         values = [int(row[0]) for row in rows]
         return values
 
-    def has_block(self, rolling, sha256):
+    def has_block(self, sha256):
         c = self.conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE rolling = ? AND sha256 = ?", [rolling, sha256])
+        c.execute("SELECT 1 FROM blocks WHERE sha256 = ?", [sha256])
         rows = c.fetchall()
         if rows:
             return True
         return False
 
-    def add_block(self, blob, seq, offset, rolling, sha256):
+    def add_block(self, blob, seq, offset, sha256):
         assert is_md5sum(blob)
         assert len(sha256) == 64, repr(sha256)
-        assert type(rolling) == int, repr(rolling)
         assert type(seq) == int, repr(seq)
-        md5_row = md5sum("%s-%s-%s-%s" % (blob, offset, rolling, sha256))
+        md5_row = md5sum("%s-%s-%s" % (blob, offset, sha256))
         try:
-            self.conn.execute("INSERT INTO blocks (blob, seq, offset, rolling, sha256, row_md5) VALUES (?, ?, ?, ?, ?, ?)", (blob, seq, offset, rolling, sha256, md5_row))
+            self.conn.execute("INSERT INTO blocks (blob, seq, offset, sha256, row_md5) VALUES (?, ?, ?, ?, ?)", (blob, seq, offset, sha256, md5_row))
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError("Exception while writing to the blocks cache: "+str(e))
+
+    def add_rolling(self, rolling):
+        assert 0 <= rolling <= 2**32 - 1
+        self.conn.execute("INSERT OR IGNORE INTO rolling (value) VALUES (?)", [rolling])
 
     def verify(self):
         assert False, "not implemented"
