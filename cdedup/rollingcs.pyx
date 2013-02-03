@@ -75,12 +75,15 @@ cdef class RollingChecksum:
 cpdef unsigned calc_rolling(s, window_size):
     """ Convenience method to calculate the rolling checksum on a
     block."""
+    assert len(s) <= window_size
+    return _calc_rolling(s, len(s), window_size)
+
+cdef unsigned _calc_rolling(char[] buf, unsigned buf_length, unsigned window_size):
     cdef RollingState* state 
     cdef int result
-    assert len(s) <= window_size
     state = create_rolling(window_size)
-    for c in s:
-        push_rolling(state, ord(c))
+    for n in xrange(0, buf_length):
+        push_rolling(state, buf[n])
     result = value_rolling(state)
     destroy_rolling(state)
     return result;
