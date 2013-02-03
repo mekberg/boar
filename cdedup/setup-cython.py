@@ -3,7 +3,8 @@ from distutils.extension import Extension
 from Cython.Distutils import build_ext
 
 ext_modules = [Extension("rollingcs", 
-                         ["rollingcs.pyx", "rollsum.c"]
+                         ["rollingcs.pyx", "rollsum.c", "intset.c"],
+                         extra_compile_args=["-O9", "-std=c99"],
                          )]
 
 setup(
