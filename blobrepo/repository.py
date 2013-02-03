@@ -450,8 +450,8 @@ class Repo:
         assert is_md5sum(sum), "Was: %s" % (sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
 
-    def get_block_location(self, rolling, sha):
-        blob, offset = self.blocksdb.get_blob_location(rolling, sha)
+    def get_block_location(self, sha):
+        blob, offset = self.blocksdb.get_blob_location(sha)
         assert self.has_raw_blob(blob)
         return blob, offset
 
