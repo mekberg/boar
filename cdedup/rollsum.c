@@ -33,10 +33,16 @@
 
 #define RollsumDigest(sum) (((sum)->s2 << 16) | ((sum)->s1 & 0xffff))
 
-RollingState init_rolling(){
-  RollingState state = {0};
-  state.size = WINDOW_SIZE+1;
+RollingState* create_rolling(int window_size){
+  RollingState* state = (RollingState*) calloc(1, sizeof(RollingState));
+  state->cbuf = calloc(1, window_size + 1);
+  state->size = window_size+1;
   return state;
+}
+
+void destroy_rolling(RollingState* state) {
+  free(state->cbuf);
+  free(state);
 }
 
 static void massert(int condition, const char* message) {
@@ -77,7 +83,7 @@ static void copy_rolling_buffer(RollingState* state, char* target_buffer, int ta
   }
 }
 
-int push_rolling(RollingState* const state, const unsigned char c_add) {
+void push_rolling(RollingState* const state, const unsigned char c_add) {
   if(!is_full(state)){
     RollsumRollin(&state->sum, c_add);
   } else {
@@ -85,6 +91,9 @@ int push_rolling(RollingState* const state, const unsigned char c_add) {
     RollsumRotate(&state->sum, c_remove, c_add);
   }
   push_char(state, c_add);
+}
+
+unsigned value_rolling(RollingState* const state) {
   return RollsumDigest(&(state->sum));
 }
 
