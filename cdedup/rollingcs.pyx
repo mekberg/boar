@@ -45,7 +45,7 @@ cdef class RollingChecksum:
         self.feeded_bytecount = 0
         self.window_size = window_size
 
-    def __del__(self):
+    def __dealloc__(self):
         destroy_rolling(self.state)
         destroy_intset(self.intset)
 
