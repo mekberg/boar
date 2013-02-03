@@ -17,10 +17,12 @@ cdef extern from "rollsum.h":
     cdef struct _RollingState:
         pass
     ctypedef _RollingState RollingState
-    RollingState init_rolling()
+    RollingState* create_rolling(int window_size)
+    void destroy_rolling(RollingState* state)
     int is_full(RollingState* state)
     int is_empty(RollingState* state)
-    int push_rolling(RollingState* state, unsigned char c_add)
+    void push_rolling(RollingState* state, unsigned char c_add)
+    int value_rolling(RollingState* state)
 
 cdef extern from "intset.h":
     cdef struct _IntSet:
@@ -32,48 +34,82 @@ cdef extern from "intset.h":
     void destroy_intset(IntSet* intset)
 
 cdef class RollingChecksum:
-    cdef RollingState state
+    cdef RollingState* state
     cdef IntSet* intset
-    cdef int file_offset
+    cdef int feeded_bytecount
+    cdef unsigned window_size
 
-    def __init__(self):
-        self.state = init_rolling()
+    def __init__(self, int window_size):
+        self.state = create_rolling(window_size)
         self.intset = create_intset(100000)
-        self.file_offset = 0
+        self.feeded_bytecount = 0
+        self.window_size = window_size
+
+    def __del__(self):
+        destroy_rolling(self.state)
+        destroy_intset(self.intset)
 
     def add_needles(self, s):
-        cdef int n
+        cdef unsigned n
         for n in s:
             add_intset(self.intset, n)
 
     def feed_string(self, s):
-        cdef int rolling_value
+        cdef unsigned rolling_value
         hits = []
         for c in s:
-            rolling_value = self.feed_byte(ord(c))
-            if contains_intset(self.intset, rolling_value):
-                hits.append(self.file_offset - 1)
+            self.feed_byte(ord(c))
+            rolling_value = self.value()
+            if self.feeded_bytecount >= self.window_size:
+                if contains_intset(self.intset, rolling_value):
+                    hits.append((self.feeded_bytecount - self.window_size, rolling_value))
         return hits
 
-    cpdef int feed_byte(RollingChecksum self, unsigned char b):
-        self.file_offset += 1
-        return push_rolling(&self.state, b)
+    cpdef unsigned value(self):
+        return value_rolling(self.state)
 
-    def value(self):
-        pass
+    cpdef feed_byte(RollingChecksum self, unsigned char b):
+        self.feeded_bytecount += 1
+        push_rolling(self.state, b)
 
-cpdef unsigned calc_rolling(char[] s):
+cpdef unsigned calc_rolling(s, window_size):
     """ Convenience method to calculate the rolling checksum on a
     block."""
-    cdef RollingState state
-    state = init_rolling()
-    cdef unsigned result
-    result = 0
+    cdef RollingState* state 
+    cdef int result
+    assert len(s) <= window_size
+    state = create_rolling(window_size)
     for c in s:
-        result = push_rolling(&state, c)
-    return result
+        push_rolling(state, ord(c))
+    result = value_rolling(state)
+    destroy_rolling(state)
+    return result;
 
 def benchmark():
     rs = RollingChecksum()
     for c in xrange(0, 10**7):
         rs.feed_byte(ord("a"))
+
+def test_string(window_size, ls, ss):
+    rs = RollingChecksum(window_size)
+    rs.feed_string(ls)
+    rolling_rs1 = rs.value()
+
+    rs = RollingChecksum(window_size)
+    rs.feed_string(ss)
+    rolling_rs2 = rs.value()
+
+    rolling_cr = calc_rolling(ss, window_size)
+    #print rolling_rs1, rolling_rs2, rolling_cr
+    assert rolling_rs1 == rolling_rs2 == rolling_cr
+    return rolling_rs1
+
+def self_test():
+    assert test_string(3, "xyzabc", "abc") == 50594179
+    assert test_string(3, "abc", "abc") == 50594179
+    assert test_string(3, "qabc", "abc") == 50594179
+    assert test_string(3, "", "") == 0
+
+    #big_string = chr(255) * 10**6 # 10 MB
+    #assert test_string(10**6, big_string, big_string)
+self_test()
