@@ -20,6 +20,7 @@ from common import *
 from jsonrpc import FileDataSource
 
 import sys
+from rollingcs import RollingChecksum, calc_rolling
 
 class BlockChecksum:
     def __init__(self, window_size):
@@ -33,12 +34,8 @@ class BlockChecksum:
         while len(self.buffer) >= self.window_size:
             block = self.buffer[0:self.window_size]
             block_sha256 = sha256(block)
-            #rs = RollingChecksum(self.window_size)
-            #for c in block:
-            #    rs.feed_byte(ord(c))
-            #rs_ok = rs.value()
-            rs_fast = RsyncRolling(self.window_size, block).value()
-            self.blocks.append((self.position, rs_fast, block_sha256))
+            block_rolling = calc_rolling(block, self.window_size)
+            self.blocks.append((self.position, block_rolling, block_sha256))
             self.position += self.window_size
             self.buffer = self.buffer[self.window_size:]
 
@@ -47,106 +44,6 @@ class BlockChecksum:
         self.blocks = []
         return result
             
-
-class RollingChecksum:
-    def __init__(self, window_size):
-        self.buffer = []
-        self.window_size = window_size
-        self.position = 0
-        self.algo = RsyncRolling(window_size)
-
-    def feed_string(self, s):
-        for c in s:
-            self.feed_byte(ord(c))
-
-    def feed_byte(self, b):
-        #assert type(b) == int and b <= 255 and b >= 0
-        self.buffer.append(b)
-        if len(self.buffer) == self.window_size + 1:
-            self.algo.update(self.buffer[0], b)
-            self.position += 1
-            self.buffer.pop(0)
-        elif len(self.buffer) < self.window_size: 
-            self.algo.update(None, b)
-        elif len(self.buffer) == self.window_size: 
-            self.algo.update(None, b)
-        else:
-            assert False, "Unexpected buffer size"
-
-    def value(self):
-        if len(self.buffer) < self.window_size:
-            return None
-        else:
-            return self.algo.value()
-
-    def offset(self):
-        return self.position
-
-    def sha256(self):
-        assert len(self.buffer) == self.window_size
-        data = "".join(map(chr, self.buffer))
-        return sha256(data)
-
-
-def RollingChecksum_self_test():
-    rs = RollingChecksum(3)
-    result = []
-    for c in (0,1,2,3,0,1,2,3):
-        rs.feed_byte(c)
-        result.append(rs.value())
-"""
-    assert result == [None, None, (0, 6), (1, 9), (2, 12), (3, 15), (4, 18), (5, 21), (6, 24)]
-
-    rs = RollingChecksum(3)
-    result = []
-    for b in  range(1,10):
-        result.append(rs.feed_byte(b))
-    assert result == [None, None, (0, 6), (1, 9), (2, 12), (3, 15), (4, 18), (5, 21), (6, 24)]
-
-    bs = BlockChecksum(3)
-    bs.feed_string("".join([chr(x) for x in range(1,10)]))
-    assert bs.blocks == [(0, 6, '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'), 
-                         (3, 15, '787c798e39a5bc1910355bae6d0cd87a36b2e10fd0202a83e3bb6b005da83472'), 
-                         (6, 24, '66a6757151f8ee55db127716c7e3dce0be8074b64e20eda542e5c1e46ca9c41e')]
-"""
-
-# Algorithm from http://tutorials.jenkov.com/rsync/checksums.html
-class RsyncRolling:
-    def __init__(self, window_size, initial_data = None):
-        self.window_size = window_size
-        self.a = 0
-        self.b = 0
-        if initial_data != None:
-            assert len(initial_data) == window_size
-            self.a = sum(map(ord, initial_data))
-            for n in range(0, self.window_size):
-                self.b += (window_size - n) * ord(initial_data[n])
-
-    def update(self, remove, add):
-        if remove == None:
-            remove = 0
-        self.a -= remove
-        self.a += add
-        self.b -= self.window_size * remove
-        self.b += self.a
-
-    def value(self):
-        return self.a * self.b
-
-
-class SimpleSumRolling:
-    def __init__(self):
-        self.sum = 0
-
-    def update(self, remove, add):
-        self.sum += add
-        if remove != None:
-            self.sum -= remove    
-        return self.sum
-
-    def value(self):
-        return self.sum
-
 
 #########################
 
@@ -214,8 +111,6 @@ class UniformBlobGetter:
 def recepify(front, filename, local_blob_dir = None):
     WINDOW_SIZE = front.get_dedup_block_size()
     all_rolling = set(front.get_all_rolling())
-    hits = []
-    block_checksums = {}
     import mmap
     rs = RollingChecksum(WINDOW_SIZE)
     
@@ -228,26 +123,22 @@ def recepify(front, filename, local_blob_dir = None):
     f = safe_open(filename, "rb")
     bytearray = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
     size = 0
+    
 
-    for byte in bytearray:
-        size += 1
-        rs.feed_byte(ord(byte))
-        rolling = rs.value()
-        if rolling == None:
-            continue
-        if rolling in all_rolling:
-            sha = rs.sha256()
-            if front.has_block(rolling, sha):
-                #address = [rs.offset()] + front.repo.blocksdb.get_blob_location(rolling, sha) + [WINDOW_SIZE]
-                blob, blob_offset = front.get_dedup_block_location(rolling, sha)
-                address = {'match_start': rs.offset(), 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
-                #print "True hit at", address
-                raw_addresses.append(address)
-                hits.append(rs.offset())
-                block_checksums[rs.offset()] = (rolling, sha)
-            else:
-                pass
-                #print "False hit at", rs.offset()
+    rs.add_needles(all_rolling)
+    data = f.read()
+    possible_hits = rs.feed_string(bytearray)
+    hits = []
+    for possible_hit in possible_hits:
+        offset, rolling = possible_hit
+        sha = sha256(bytearray[offset:offset+WINDOW_SIZE])
+        if front.has_block(sha):
+            blob, blob_offset = front.get_dedup_block_location(sha)
+            address = {'match_start': offset, 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
+            raw_addresses.append(address)
+            hits.append(offset)
+        else:
+            pass
 
     hits = remove_overlapping_blocks(hits, WINDOW_SIZE)
     raw_addresses = [t for t in raw_addresses if t['match_start'] in hits]
@@ -276,37 +167,25 @@ def recepify(front, filename, local_blob_dir = None):
               "size": len(bytearray),
               "pieces": pieces}
 
-    pos = 0
-    
+    pos = 0    
     result_md5 = hashlib.md5()
-    #output = open("restored_file.bin", "w")
-    #for p in polished_addresses:
-    #    print p
+
     for address in polished_addresses:
         if address['match_start'] != pos:
-            #print "%s-%s Original data (size %s)" % (pos,  address['match_start'], address['match_start'] - pos)
-            #output.write(bytearray[pos:address['offset']])
             result_md5.update(bytearray[pos:address['match_start']])
             pieces.append({"source": None, "offset": pos, "size":  address['match_start'] - pos})
             pos = address['match_start']
-        #print address['match_start'], address['blob'], address['blob_offset'], address['size']
-        #print "%s-%s %s %s+%s" % (address['match_start'], address['match_start']+address['size'], address['blob'], address['blob_offset'], address['size'])
         pieces.append({"source": address['blob'], "offset": address['blob_offset'], "size":  address['size']})
         pos += address['size']
         block = blob_source.get_blob(address['blob'], address['blob_offset'], address['size']).read()
-        #output.write(block)
         result_md5.update(block)
     if pos != len(bytearray):
-        #print "%s-%s Original data (%s)" % (pos, len(bytearray), len(bytearray) - pos)
         pieces.append({"source": None, "offset": pos, "size":  len(bytearray) - pos})
-        #output.write(bytearray[pos:])
         result_md5.update(bytearray[pos:])
-    #print "*** End of recipe"
     assert expected_md5 == result_md5.hexdigest()
     if len(pieces) == 1 and pieces[0]["source"] == None:
         return None # No deduplication possible
     assert len(recipe['pieces']) > 0
-    #print expected_md5, recipe
     return recipe
 
 
@@ -361,8 +240,6 @@ def remove_overlapping_blocks(offsets, block_size):
 
 assert remove_overlapping_blocks([0,2,3,5,6,7,10,15], 5) == [0, 5, 10, 15]
 assert remove_overlapping_blocks([0,2,3,5,6,7,10,15, 21, 22, 23], 5) == [0, 5, 10, 15, 21]
-
-RollingChecksum_self_test()
 
 """
 import sys
