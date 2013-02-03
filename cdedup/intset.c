@@ -26,7 +26,7 @@ void add_intset(IntSet* intset, int int_to_add) {
   } else if(bucket->slot_count == bucket->used_slots){
     // Bucket is full - expand it
     bucket->slot_count *= 2;
-    printf("Expanding bucket %d to size %d\n", int_to_add % intset->bucket_count, bucket->slot_count);
+    //printf("Expanding bucket %d to size %d\n", int_to_add % intset->bucket_count, bucket->slot_count);
     bucket->slots = (uint32_t*) realloc(bucket->slots, bucket->slot_count * sizeof(uint32_t));
   }
   bucket->slots[bucket->used_slots++] = int_to_add;
@@ -52,11 +52,23 @@ void destroy_intset(IntSet* intset) {
 
 
 int main() {
-  IntSet* const intset = create_intset(1000);
+  IntSet* const intset = create_intset(10000000);
   massert(intset != NULL, "Couldn't create intset");
-  add_intset(intset, 10);
-  add_intset(intset, 10);
-  add_intset(intset, 10);
-  add_intset(intset, 1034);
+  for(int i=0; i<10000000; i++){
+    //const int n = rand();
+    const int n = 1;
+    //if(! contains_intset(intset, n))
+    add_intset(intset, n);
+    //massert(contains_intset(intset, n), "Value not found after insertion");
+  }
+
+  printf("Letar\n");
+      
+  for(int i=0; i<100000000; i++){
+    const int n = rand();
+    if(contains_intset(intset, n)){
+    }
+    //massert(contains_intset(intset, n), "Value not found after insertion");
+  }
   destroy_intset(intset);
 }

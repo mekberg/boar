@@ -15,8 +15,8 @@ typedef struct _IntSet {
 } IntSet;
 
 IntSet* create_intset(int bucket_count);
-void add(IntSet* intset, int int_to_add);
-int contains(IntSet* intset, int int_to_find);
+void add_intset(IntSet* intset, int int_to_add);
+int contains_intset(IntSet* intset, int int_to_find);
 void destroy_intset(IntSet* intset);
 
 #endif
