@@ -56,9 +56,11 @@ cdef class RollingChecksum:
 
     def feed_string(self, s):
         cdef unsigned rolling_value
+        cdef char* buf
+        buf = s
         hits = []
-        for c in s:
-            self.feed_byte(ord(c))
+        for n in xrange(0, len(s)):
+            self.feed_byte(buf[n])
             rolling_value = self.value()
             if self.feeded_bytecount >= self.window_size:
                 if contains_intset(self.intset, rolling_value):
