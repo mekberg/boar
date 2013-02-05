@@ -56,7 +56,7 @@ class blobs_blocks:
         c = self.conn.cursor()
         c.execute("SELECT value FROM rolling")
         rows = c.fetchall()
-        values = [int(row[0]) for row in rows]
+        values = [row[0] for row in rows]
         return values
 
     def has_block(self, sha256):
