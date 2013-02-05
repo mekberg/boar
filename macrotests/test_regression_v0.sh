@@ -30,7 +30,10 @@ REPO_PATH=$REPO $BOAR ci && { echo "Ci executed ok even though workdir is out of
 REPO_PATH=$REPO $BOAR update || { echo "Couldn't execute update to latest version"; exit 1; }
 REPO_PATH=$REPO $BOAR ci || { echo "Couldn't execute ci"; exit 1; }
 REPO_PATH=$REPO $BOAR verify || { echo "Couldn't verify"; exit 1; }
-test ! -e $REPO/recipes || { echo "recipes dir wasn't deleted"; exit 1; }
+
+# Test disabled - recipes dir has been ressurrected in v5
+#test ! -e $REPO/recipes || { echo "recipes dir wasn't deleted"; exit 1; }
+
 cd $testdir || exit 1
 rm -r regression-boar-daily.11-Jul-2011 || exit 1
 
