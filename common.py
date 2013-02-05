@@ -157,9 +157,11 @@ def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
     f.seek(0, os.SEEK_END)
     real_end = f.tell()
     assert end == None or end <= real_end, "Can't read past end of file"
-    f.seek(start)
     if end == None:
         end = real_end
+    assert 0 <= end <= real_end
+    assert 0 <= start <= end
+    f.seek(start)
     bytes_left = end - start
     while bytes_left > 0:
         data = f.read(min(bytes_left, blocksize))
