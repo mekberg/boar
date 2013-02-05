@@ -1,14 +1,17 @@
 TESTDIR="`pwd`"
-tar -xzf $BOARTESTHOME/reciperepo.tar.gz || exit 1
 REPO=$TESTDIR/reciperepo
 BIGFILE=$TESTDIR/bigfile.bin
-mkrandfile.py 0 100000 $BIGFILE || exit 1
+mkrandfile.py 0 1000000 $BIGFILE || exit 1
 md5sum -c <<EOF || exit 1
-028a14413856fee90edd49ad9f8af9c4  $BIGFILE
+d978f6138c52b8be4f07bbbf571cd450  $BIGFILE
 EOF
 
 # Verify simple recipe repo NOTE: this repo does not contain a block
 # db. Commits will not be correctly deduplicated.
+
+echo "*** Testing legacy recipe repo"
+
+tar -xzf $BOARTESTHOME/reciperepo.tar.gz || exit 1
 $BOAR --repo=$REPO co Alice || { echo "Check-out failed"; exit 1; }
 $BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
 (cd Alice && md5sum -c || exit 1) <<EOF
@@ -17,9 +20,39 @@ EOF
 cp Alice/alice.txt . || exit 1
 rm -r $REPO Alice || exit 1
 
+############################
+
+echo "*** Testing case of files with identical blocks"
+$BOAR mkrepo $REPO || exit 1
+$BOAR --repo=$REPO mksession Dedup || exit 1
+$BOAR --repo=$REPO co Dedup || exit 1
+
+(cd Dedup && 
+    dd if=/dev/zero of=zero512.bin bs=1024 count=512 &&
+    md5sum zero512.bin >manifest.md5 &&
+    $BOAR ci -q ) || exit 1
+
+(cd Dedup && 
+    dd if=/dev/zero of=zero1024.bin bs=1024 count=1024 &&
+    md5sum *.bin | tee manifest.md5 &&
+    $BOAR ci -q ) || exit 1
+
+rm -r Dedup || exit 1
+
+#b6d81b360a5672d80c27430f39153e2c  zero1024.bin
+#59071590099d21dd439896592338bf95  zero512.bin
+
+test -e $REPO/recipes/b6d81b360a5672d80c27430f39153e2c.recipe || exit 1
+test -e $REPO/blobs/59/59071590099d21dd439896592338bf95 || exit 1
+
+$BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
+$BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }
+(cd Dedup && md5sum -c manifest.md5 ) || exit 1
+rm -r $REPO Dedup || exit 1
+
 #################
 
-echo "Testing case of B followed by ABC"
+echo "*** Testing case of B followed by ABC"
 
 $BOAR mkrepo $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
@@ -31,11 +64,12 @@ $BOAR --repo=$REPO co Dedup || exit 1
     echo "SOME APPENDED DATA" >suffix.txt &&  # Data blob C
     cat prefix.txt bigfile.bin suffix.txt >amalgam.bin && # Data blob ABC
     md5sum *.bin *.txt >manifest.md5 &&
+    ls -l *.bin *.txt &&
     cat manifest.md5 &&
     $BOAR ci -q ) || exit 1
 
+test -e $REPO/recipes/e4050f3033f8b378843afeeea0b2f0e4.recipe || exit 1
 rm -r Dedup || exit 1
-
 $BOAR --repo=$REPO verify || { echo "Verify 2 failed"; exit 1; }
 $BOAR --repo=$REPO co Dedup || { echo "Check-out 2 failed"; exit 1; }
 (cd Dedup && md5sum -c manifest.md5 ) || exit 1
@@ -43,7 +77,7 @@ rm -r $REPO Dedup || exit 1
 
 #################
 
-echo "Testing case of ABC followed by B"
+echo "*** Testing case of ABC followed by B"
 $BOAR mkrepo $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
 $BOAR --repo=$REPO co Dedup || exit 1
@@ -59,8 +93,7 @@ $BOAR --repo=$REPO co Dedup || exit 1
     md5sum *.bin *.txt >manifest.md5 && 
     $BOAR ci -q ) || exit 1
 
-ls $REPO/recipes || exit 1
-cat $REPO/recipes/028a14413856fee90edd49ad9f8af9c4.recipe || exit 1
+test -e $REPO/recipes/d978f6138c52b8be4f07bbbf571cd450.recipe || exit 1
 rm -r Dedup || exit 1
 
 $BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
@@ -70,23 +103,23 @@ rm -r $REPO Dedup || exit 1
 
 #########################
 
-echo "Testing case of single checkin of AA (redundancy within a single file)"
-$BOAR mkrepo $REPO || exit 1
-$BOAR --repo=$REPO mksession Dedup || exit 1
-$BOAR --repo=$REPO co Dedup || exit 1
+# echo "*** Testing case of single checkin of AA (redundancy within a single file)"
+# $BOAR mkrepo $REPO || exit 1
+# $BOAR --repo=$REPO mksession Dedup || exit 1
+# $BOAR --repo=$REPO co Dedup || exit 1
 
-(cd Dedup && 
-    cat $BIGFILE $BIGFILE >amalgam.bin && # Data blob AA
-    md5sum amalgam.bin >manifest.md5 &&
-    $BOAR ci -q ) || exit 1
+# (cd Dedup && 
+#     cat $BIGFILE $BIGFILE >amalgam.bin && # Data blob AA
+#     md5sum amalgam.bin >manifest.md5 &&
+#     $BOAR ci -q ) || exit 1
 
-ls -l $REPO/recipes || exit 1
-ls -l $REPO/blobs/02/028a14413856fee90edd49ad9f8af9c4 || exit 1
+# ls -l $REPO/recipes || exit 1
+# ls -l $REPO/blobs/02/028a14413856fee90edd49ad9f8af9c4 || exit 1
 
-$BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
-$BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }
-(cd Dedup && md5sum -c manifest.md5 ) || exit 1
-rm -r $REPO Dedup || exit 1
+# $BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
+# $BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }
+# (cd Dedup && md5sum -c manifest.md5 ) || exit 1
+# rm -r $REPO Dedup || exit 1
 
 ############################
 
