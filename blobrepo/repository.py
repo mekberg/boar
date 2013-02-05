@@ -65,7 +65,7 @@ REPO_DIRS_V4 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
 REPO_DIRS_V5 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR)
 
-DEDUP_BLOCK_SIZE = 4096
+DEDUP_BLOCK_SIZE = 2 ** 16
 
 recoverytext = """Repository format v%s
 
@@ -185,7 +185,7 @@ class Repo:
         self.scanners = ()
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
-        self.readonly = False
+        self.readonly = os.path.exists(os.path.join(repopath, "READONLY"))
         if not isWritable(os.path.join(repopath, TMP_DIR)):
             if self.get_queued_session_id() != None:
                 raise UserError("Repo is write protected with pending changes. Cannot continue.")
@@ -770,7 +770,6 @@ class Repo:
         queued_item = self.get_queue_path(session_id)
 
         items = os.listdir(queued_item)
-        import deduplication
         from front import Front
         # Check the checksums of all blobs
         for filename in items:
