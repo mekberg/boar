@@ -323,11 +323,13 @@ class SessionWriter:
             path = os.path.join(self.session_path, filename)
             recipe = deduplication.recepify(front, path, self.session_path)
             if not recipe:
-                print "Could not recepify", path
+                # print "Could not recepify", path
                 continue
             assert len(recipe['pieces']) > 0
+            print "Following recipe:", recipe
             for piece in recipe['pieces']:
                 if not piece['source']:
+                    original_piece = copy.copy(piece)
                     new_blob_md5 = md5sum_file(path, piece['offset'], piece['offset'] + piece['size'])
                     new_blob_path = os.path.join(self.session_path, new_blob_md5)
                     piece['source'] = new_blob_md5
@@ -335,8 +337,9 @@ class SessionWriter:
                     if os.path.exists(new_blob_path):
                         continue
                     with StrictFileWriter(new_blob_path, new_blob_md5, piece['size']) as new_blob:
-                        for block in file_reader(path, piece['offset'], piece['offset'] + piece['size']):
-                            new_blob.write(block)
+                        with safe_open(path, "rb") as source_fo:
+                            for block in file_reader(source_fo, original_piece['offset'], original_piece['offset'] + original_piece['size']):
+                                new_blob.write(block)
             recipe_json = json.dumps(recipe, indent = 4)
             recipe_md5 = md5sum(recipe_json)
             recipe_path = os.path.join(self.session_path, filename + ".recipe")
