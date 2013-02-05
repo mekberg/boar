@@ -50,33 +50,28 @@ class BlockChecksum:
 
 
 
-def grow_address_upwards(blob_source, bytearray, address):
-    grow_bite = 4096
+def grow_address_upwards(blob_source, bytearray, address, grow_bite, max_grow_size):
     blob_size = blob_source.get_blob_size(address['blob'])
     upper_block_start = address['blob_offset'] + address['size']
     upper_block_end = min(blob_size, upper_block_start+grow_bite)
     upper_block_size = upper_block_end - upper_block_start
     upper_block = blob_source.get_blob(address['blob'], upper_block_start, upper_block_size).read()
     growth = 0
-    while address['match_start'] + address['size'] < len(bytearray) and growth < upper_block_size:
-        #print address
+    while address['match_start'] + address['size'] < len(bytearray) and growth < upper_block_size and growth < max_grow_size:
         if bytearray[address['match_start'] + address['size']] != upper_block[growth]:
             break
         growth += 1
         address['size'] += 1
     return growth
 
-def grow_address_downwards(blob_source, bytearray, address):
-    grow_bite = 4096
+def grow_address_downwards(blob_source, bytearray, address, grow_bite, max_grow_size):
     blob_size = blob_source.get_blob_size(address['blob'])
     lower_block_start = max(0, address['blob_offset'] - grow_bite)
     lower_block_end = address['blob_offset']
     lower_block_size = lower_block_end - lower_block_start
-    # print lower_block_start, lower_block_end, lower_block_size
     lower_block = blob_source.get_blob(address['blob'], lower_block_start, lower_block_size).read()
     growth = 0
-    while address['match_start'] > 0 and growth < lower_block_size:
-        #print address
+    while address['match_start'] > 0 and growth < lower_block_size and growth < max_grow_size:
         if bytearray[address['match_start'] - 1] != lower_block[-(growth+1)]:
             break
         growth += 1
@@ -116,31 +111,39 @@ def recepify(front, filename, local_blob_dir = None):
     
     blob_source = UniformBlobGetter(front, local_blob_dir)
     raw_addresses = []
-    if os.path.getsize(filename) == 0:
+    original_size = os.path.getsize(filename)
+    if original_size == 0:
         # mmap has problems with zero size files, and anyway they
         # don't deduplicate well...
         return None
     f = safe_open(filename, "rb")
     bytearray = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
-    size = 0
-    
+    assert len(bytearray) == original_size
 
     rs.add_needles(all_rolling)
+
     data = f.read()
-    possible_hits = rs.feed_string(bytearray)
+    possible_hits = rs.feed_string(data)
     hits = []
+    last_true_hit = -WINDOW_SIZE
     for possible_hit in possible_hits:
         offset, rolling = possible_hit
+        if offset < last_true_hit + WINDOW_SIZE:
+            # Ignore overlapping blocks
+            continue
         sha = sha256(bytearray[offset:offset+WINDOW_SIZE])
         if front.has_block(sha):
             blob, blob_offset = front.get_dedup_block_location(sha)
             address = {'match_start': offset, 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
             raw_addresses.append(address)
             hits.append(offset)
+            last_true_hit = offset
         else:
             pass
 
-    hits = remove_overlapping_blocks(hits, WINDOW_SIZE)
+    # No longer necessary
+    # hits = remove_overlapping_blocks(hits, WINDOW_SIZE)
+
     raw_addresses = [t for t in raw_addresses if t['match_start'] in hits]
 
     if not raw_addresses:
@@ -155,22 +158,31 @@ def recepify(front, filename, local_blob_dir = None):
             polished_addresses[-1]['size'] += address['size']
         else:
             polished_addresses.append(address)
+    del raw_addresses
 
-    for address in polished_addresses:
-        while grow_address_upwards(blob_source, bytearray, address): pass
-        while grow_address_downwards(blob_source, bytearray, address): pass
+    for n, address in enumerate(polished_addresses):
+        predecessor = polished_addresses[n-1] if n >= 1 else None
+        try: successor = polished_addresses[n+1]
+        except IndexError: successor = None
+
+        lower_gap = 0
+        if predecessor:
+            lower_gap = address['match_start'] - (predecessor['match_start'] + predecessor['size'])
+        upper_gap = original_size - (address['match_start'] + address['size'])
+        if successor:
+            upper_gap = successor['match_start'] - (address['match_start'] + address['size'])
+
+        grow_address_upwards(blob_source, bytearray, address, grow_bite = WINDOW_SIZE, max_grow_size = upper_gap)
+        grow_address_downwards(blob_source, bytearray, address, grow_bite = WINDOW_SIZE, max_grow_size = lower_gap)
 
     pieces = []
     expected_md5 = md5sum(bytearray)
-    recipe = {"method": "concat",
-              "md5sum": expected_md5,
-              "size": len(bytearray),
-              "pieces": pieces}
 
     pos = 0    
     result_md5 = hashlib.md5()
 
     for address in polished_addresses:
+        assert address['size'] > 0
         if address['match_start'] != pos:
             result_md5.update(bytearray[pos:address['match_start']])
             pieces.append({"source": None, "offset": pos, "size":  address['match_start'] - pos})
@@ -182,6 +194,13 @@ def recepify(front, filename, local_blob_dir = None):
     if pos != len(bytearray):
         pieces.append({"source": None, "offset": pos, "size":  len(bytearray) - pos})
         result_md5.update(bytearray[pos:])
+    del polished_addresses
+
+    recipe = {"method": "concat",
+              "md5sum": expected_md5,
+              "size": len(bytearray),
+              "pieces": pieces}
+
     assert expected_md5 == result_md5.hexdigest()
     if len(pieces) == 1 and pieces[0]["source"] == None:
         return None # No deduplication possible
