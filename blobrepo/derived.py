@@ -36,7 +36,7 @@ class blobs_blocks:
             return
         try:
             self.conn = sqlite3.connect(self.dbfile, check_same_thread = False)
-            self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, seq int NOT NULL, offset long NOT NULL, sha256 char(64) NOT NULL, row_md5 char(32))")
+            self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, sha256 char(64) NOT NULL, row_md5 char(32))")
             self.conn.execute("CREATE TABLE IF NOT EXISTS rolling (value INT NOT NULL)") 
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)")
             #self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_offset ON blocks (blob, offset)")
@@ -48,9 +48,12 @@ class blobs_blocks:
 
     def get_blob_location(self, sha256):
         c = self.conn.cursor()
-        c.execute("SELECT blob, offset FROM blocks WHERE sha256 = ?", [sha256])
+        c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE sha256 = ?", [sha256])
         row = c.fetchone()
-        return [row[0], row[1]]
+        blob, offset, row_md5 = row
+        if row_md5 != md5sum("%s-%s-%s" % (blob, offset, sha256)):
+            raise repository.SoftCorruptionError("Corrupted row in deduplication block table for (%s %s %s)" % (blob, offset, sha256))
+        return blob, offset
 
     def get_all_rolling(self):
         c = self.conn.cursor()
@@ -67,13 +70,12 @@ class blobs_blocks:
             return True
         return False
 
-    def add_block(self, blob, seq, offset, sha256):
+    def add_block(self, blob, offset, sha256):
         assert is_md5sum(blob)
         assert len(sha256) == 64, repr(sha256)
-        assert type(seq) == int, repr(seq)
         md5_row = md5sum("%s-%s-%s" % (blob, offset, sha256))
         try:
-            self.conn.execute("INSERT INTO blocks (blob, seq, offset, sha256, row_md5) VALUES (?, ?, ?, ?, ?)", (blob, seq, offset, sha256, md5_row))
+            self.conn.execute("INSERT INTO blocks (blob, offset, sha256, row_md5) VALUES (?, ?, ?, ?)", (blob, offset, sha256, md5_row))
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError("Exception while writing to the blocks cache: "+str(e))
 
