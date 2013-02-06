@@ -193,7 +193,6 @@ class SessionWriter:
         self.session_name = session_name
         self.max_blob_size = None
         self.base_session = base_session
-        self.session_path = None
         self.force_base_snapshot = force_base_snapshot
         self.metadatas = {}
         self.blob_blocks = {}
@@ -261,11 +260,9 @@ class SessionWriter:
         self.blob_writer[blob_md5].close()
         del self.blob_writer[blob_md5]        
 
-        seq = 0
         for blockdata in self.blob_blocks[blob_md5].harvest():
             offset, rolling, sha256 = blockdata
-            self.found_uncommitted_blocks.append((blob_md5, seq, offset, rolling, sha256))
-            seq += 1
+            self.found_uncommitted_blocks.append((blob_md5, offset, rolling, sha256))
         del self.blob_blocks[blob_md5]
                 
     def has_blob(self, csum):
@@ -388,8 +385,8 @@ class SessionWriter:
         # Not safe, but the only consequence of a failed transaction
         # is degradation of deduplication.
         for block_spec in self.found_uncommitted_blocks:
-            blob_md5, seq, offset, rolling, sha256 = block_spec
-            self.repo.blocksdb.add_block(blob_md5, seq, offset, sha256)
+            blob_md5, offset, rolling, sha256 = block_spec
+            self.repo.blocksdb.add_block(blob_md5, offset, sha256)
             self.repo.blocksdb.add_rolling(rolling)
         self.repo.blocksdb.commit() 
 
