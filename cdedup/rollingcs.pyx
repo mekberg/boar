@@ -39,11 +39,19 @@ cdef class RollingChecksum:
     cdef int feeded_bytecount
     cdef unsigned window_size
 
+    cdef unsigned feed_pos
+    cdef object   feed_queue
+    cdef object   feed_s
+
     def __init__(self, int window_size):
         self.state = create_rolling(window_size)
         self.intset = create_intset(100000)
         self.feeded_bytecount = 0
         self.window_size = window_size
+
+        self.feed_queue = []
+        self.feed_pos = 0
+        self.feed_s = ""
 
     def __dealloc__(self):
         destroy_rolling(self.state)
@@ -55,22 +63,40 @@ cdef class RollingChecksum:
             add_intset(self.intset, n)
 
     def feed_string(self, s):
+        self.feed_queue.append(s)
+
+    cdef _pop_queue(self):
+        assert self.feed_pos == len(self.feed_s)
+        if not self.feed_queue:
+            raise StopIteration
+        s = self.feed_queue.pop(0)
+        self.feed_s = s
+        self.feed_pos = 0        
+
+    def __iter__(self):
+        return self
+
+    def next(self):
         cdef unsigned rolling_value
-        cdef char* buf
-        buf = s
-        hits = []
-        for n in xrange(0, len(s)):
-            self.feed_byte(buf[n])
-            rolling_value = self.value()
-            if self.feeded_bytecount >= self.window_size:
-                if contains_intset(self.intset, rolling_value):
-                    hits.append((self.feeded_bytecount - self.window_size, rolling_value))
-        return hits
+        while True: # Until StopIteration or a hit is returned
+            if self.feed_pos == len(self.feed_s):
+                self._pop_queue()
+            while self.feed_pos < len(self.feed_s):
+                self._feed_byte(ord(self.feed_s[self.feed_pos]))
+                self.feed_pos += 1
+                if self.feeded_bytecount >= self.window_size:
+                    rolling_value = self.value()
+                    if contains_intset(self.intset, rolling_value):
+                        return (self.feeded_bytecount - self.window_size, rolling_value)
 
     cpdef unsigned value(self):
-        return value_rolling(self.state)
+        try:
+            while True:
+                self.next()
+        except StopIteration:
+            return value_rolling(self.state)
 
-    cpdef feed_byte(RollingChecksum self, unsigned char b):
+    cdef _feed_byte(RollingChecksum self, unsigned char b):
         self.feeded_bytecount += 1
         push_rolling(self.state, b)
 
@@ -93,7 +119,7 @@ cdef unsigned _calc_rolling(char[] buf, unsigned buf_length, unsigned window_siz
 def benchmark():
     rs = RollingChecksum()
     for c in xrange(0, 10**7):
-        rs.feed_byte(ord("a"))
+        rs._feed_byte(ord("a"))
 
 def test_string(window_size, ls, ss):
     rs = RollingChecksum(window_size)
@@ -105,7 +131,7 @@ def test_string(window_size, ls, ss):
     rolling_rs2 = rs.value()
 
     rolling_cr = calc_rolling(ss, window_size)
-    #print rolling_rs1, rolling_rs2, rolling_cr
+    print rolling_rs1, rolling_rs2, rolling_cr
     assert rolling_rs1 == rolling_rs2 == rolling_cr
     return rolling_rs1
 
@@ -114,6 +140,13 @@ def self_test():
     assert test_string(3, "abc", "abc") == 50594179
     assert test_string(3, "qabc", "abc") == 50594179
     assert test_string(3, "", "") == 0
+
+    rs = RollingChecksum(3)
+    rs.feed_string("a")
+    rs.feed_string("b")
+    rs.feed_string("c")
+    assert rs.value() == 50594179
+
 
     #big_string = chr(255) * 10**6 # 10 MB
     #assert test_string(10**6, big_string, big_string)
