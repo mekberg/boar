@@ -76,7 +76,7 @@ cdef class RollingChecksum:
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         cdef unsigned rolling_value
         while True: # Until StopIteration or a hit is returned
             if self.feed_pos == len(self.feed_s):
@@ -85,7 +85,7 @@ cdef class RollingChecksum:
                 self._feed_byte(ord(self.feed_s[self.feed_pos]))
                 self.feed_pos += 1
                 if self.feeded_bytecount >= self.window_size:
-                    rolling_value = self.value()
+                    rolling_value = value_rolling(self.state)
                     if contains_intset(self.intset, rolling_value):
                         return (self.feeded_bytecount - self.window_size, rolling_value)
 
@@ -99,6 +99,7 @@ cdef class RollingChecksum:
     cdef _feed_byte(RollingChecksum self, unsigned char b):
         self.feeded_bytecount += 1
         push_rolling(self.state, b)
+        #print "Feeded", chr(b), self.feeded_bytecount, value_rolling(self.state)
 
 cpdef unsigned calc_rolling(s, window_size):
     """ Convenience method to calculate the rolling checksum on a
@@ -147,6 +148,15 @@ def self_test():
     rs.feed_string("c")
     assert rs.value() == 50594179
 
+
+    rs = RollingChecksum(3)
+    rs.add_needles([25231617, 50594179, 50987398, 51380617])
+    rs.feed_string("a")
+    rs.feed_string("b")
+    rs.feed_string("c")
+    rs.feed_string("d")
+    rs.feed_string("e")
+    assert list(rs) == [(0L, 50594179L), (1L, 50987398L), (2L, 51380617L)]
 
     #big_string = chr(255) * 10**6 # 10 MB
     #assert test_string(10**6, big_string, big_string)
