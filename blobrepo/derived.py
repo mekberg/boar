@@ -39,8 +39,6 @@ class blobs_blocks:
             self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, sha256 char(64) NOT NULL, row_md5 char(32))")
             self.conn.execute("CREATE TABLE IF NOT EXISTS rolling (value INT NOT NULL)") 
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)")
-            #self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_offset ON blocks (blob, offset)")
-            #self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS blob_seq ON blocks (blob, seq)")
             self.conn.execute("CREATE INDEX IF NOT EXISTS index_sha256 ON blocks (sha256)")
             self.conn.commit()
         except sqlite3.DatabaseError, e:
