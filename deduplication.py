@@ -106,28 +106,26 @@ class UniformBlobGetter:
 def recepify(front, filename, local_blob_dir = None):
     WINDOW_SIZE = front.get_dedup_block_size()
     all_rolling = set(front.get_all_rolling())
-    import mmap
+
     rs = RollingChecksum(WINDOW_SIZE)
     
     blob_source = UniformBlobGetter(front, local_blob_dir)
     raw_addresses = []
     original_size = os.path.getsize(filename)
     if original_size == 0:
-        # mmap has problems with zero size files, and anyway they
-        # don't deduplicate well...
+        # Zero length files don't deduplicate well...
         return None
     f = safe_open(filename, "rb")
-    bytearray = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
+    bytearray = FileAsString(f)
     assert len(bytearray) == original_size
 
     rs.add_needles(all_rolling)
 
     data = f.read()
-    possible_hits = rs.feed_string(data)
+    rs.feed_string(data)
     hits = []
     last_true_hit = -WINDOW_SIZE
-    for possible_hit in possible_hits:
-        offset, rolling = possible_hit
+    for offset, rolling in rs:
         if offset < last_true_hit + WINDOW_SIZE:
             # Ignore overlapping blocks
             continue
@@ -140,7 +138,7 @@ def recepify(front, filename, local_blob_dir = None):
             last_true_hit = offset
         else:
             pass
-
+    del rs
     # No longer necessary
     # hits = remove_overlapping_blocks(hits, WINDOW_SIZE)
 
@@ -176,7 +174,7 @@ def recepify(front, filename, local_blob_dir = None):
         grow_address_downwards(blob_source, bytearray, address, grow_bite = WINDOW_SIZE, max_grow_size = lower_gap)
 
     pieces = []
-    expected_md5 = md5sum(bytearray)
+    expected_md5 = md5sum_file(f)
 
     pos = 0    
     result_md5 = hashlib.md5()
