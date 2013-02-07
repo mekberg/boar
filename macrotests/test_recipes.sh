@@ -101,6 +101,38 @@ $BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }
 (cd Dedup && md5sum -c manifest.md5 ) || exit 1
 rm -r $REPO Dedup || exit 1
 
+#################
+
+echo "*** Testing case of A followed by ABC followed by C"
+
+$BOAR mkrepo $REPO || exit 1
+$BOAR --repo=$REPO mksession Dedup || exit 1
+$BOAR --repo=$REPO co Dedup || exit 1
+
+mkrandfile.py 0 1000000 A || exit 1
+mkrandfile.py 1 1000000 B || exit 1
+mkrandfile.py 2 1000000 C || exit 1
+
+(cd Dedup && 
+    cp ../A . &&
+    $BOAR ci -q ) || exit 1
+
+(cd Dedup && 
+    cat ../A ../B ../C >ABC &&
+    $BOAR ci -q ) || exit 1
+
+(cd Dedup && 
+    cp ../C C &&
+    md5sum A ABC C >manifest.md5 && 
+    $BOAR ci -q ) || exit 1
+
+rm -r Dedup || exit 1
+
+$BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
+$BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }
+(cd Dedup && md5sum -c manifest.md5 ) || exit 1
+rm -r $REPO Dedup || exit 1
+
 #########################
 
 # echo "*** Testing case of single checkin of AA (redundancy within a single file)"
