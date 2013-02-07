@@ -713,6 +713,27 @@ def FakeFile():
     """ Behaves like a file object, but does not actually do anything."""
     return open(os.path.devnull, "w")
 
+class FileAsString:
+    def __init__(self, fo):
+        self.fo = fo
+        self.size = os.fstat(fo.fileno()).st_size
+        
+    def __len__(self):
+        return self.size
+    
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            start, stop, step = index.start, index.stop, index.step
+            assert step == None
+            if stop == VERY_LARGE_NUMBER:
+                stop = self.size
+        else:
+            start = index
+            stop = start + 1
+        assert 0 <= start <= stop <= self.size, (start, stop, step, self.size)
+        self.fo.seek(start)
+        return self.fo.read(stop - start)
+
 class RateLimiter:
     """This class makes it easy to perform some action only when a
     certain time has passed. The maxrate parameter is given in Hz and
