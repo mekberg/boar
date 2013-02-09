@@ -86,21 +86,31 @@ class TailBuffer:
     def __getitem__(self, index):
         return self.buffer.__getitem__(index)
 
+class OriginalPieceHandler:
+    def init_piece(self, index):
+        pass
+
+    def add_piece_data(self, index, data):
+        pass
+    
+    def end_piece(self, index):
+        pass    
+
 class RecipeFinder:
-    def __init__(self, front, block_size, all_rolling, blob_source, original_piece_directory = None):
+    def __init__(self, front, block_size, all_rolling, blob_source, original_piece_handler = OriginalPieceHandler()):
         self.front = front
         self.block_size = block_size
         self.rs = RollingChecksum(block_size)
         self.rs.add_needles(all_rolling)
         self.blob_source = blob_source
-        self.original_piece_directory = original_piece_directory
-        assert self.original_piece_directory == None or os.path.isdir(self.original_piece_directory)
+        self.original_piece_handler = original_piece_handler
 
         self.tail_buffer = TailBuffer(self.block_size*2)
         self.end_of_last_hit = 0
         self.original_run_since = None
         self.addresses = []
         self.md5summer = hashlib.md5()
+        self.original_piece_count = 0
 
     def feed(self, s):
         assert len(s) <= self.block_size
@@ -141,10 +151,10 @@ class RecipeFinder:
         if start_offset == end_offset:
             return
         assert start_offset < end_offset
-        if self.original_piece_directory:
-            md5 = md5sum(self.tail_buffer[start_offset:end_offset])
-            with StrictFileWriter(s.path.join(self.original_piece_directory, "piece-" + md5), md5, end_offset - start_offset) as f:
-                f.write(self.tail_buffer[start_offset:end_offset])
+        self.original_piece_handler.init_piece(self.original_piece_count)
+        self.original_piece_handler.add_piece_data(self.original_piece_count, self.tail_buffer[start_offset:end_offset])
+        self.original_piece_handler.end_piece(self.original_piece_count)
+        self.original_piece_count += 1
         #print "Found original data at %s+%s" % ( start_offset, end_offset - start_offset)
         self.__add_address(Struct(match_start = start_offset, blob = None, blob_offset = start_offset, size = end_offset - start_offset))
 
