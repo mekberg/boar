@@ -851,3 +851,20 @@ class StrictFileWriter:
         else:
             self.close()
  
+def common_tail(s1, s2):
+    size = min(len(s1), len(s2))
+    if size == 0:
+        return ""
+    s1 = s1[-size:]
+    s2 = s2[-size:]
+    for i in reversed(range(0, size)):
+        if s1[i] != s2[i]:
+            return s1[i:]
+    return s1
+        
+class Struct:
+    def __init__(self, **entries): 
+        self.__dict__.update(entries)
+
+    def __repr__(self):
+        return "Struct: " + repr(self.__dict__)
