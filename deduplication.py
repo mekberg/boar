@@ -44,42 +44,6 @@ class BlockChecksum:
         self.blocks = []
         return result
             
-
-#########################
-
-
-
-
-def grow_address_upwards(blob_source, bytearray, address, grow_bite, max_grow_size):
-    blob_size = blob_source.get_blob_size(address['blob'])
-    upper_block_start = address['blob_offset'] + address['size']
-    upper_block_end = min(blob_size, upper_block_start+grow_bite)
-    upper_block_size = upper_block_end - upper_block_start
-    upper_block = blob_source.get_blob(address['blob'], upper_block_start, upper_block_size).read()
-    growth = 0
-    while address['match_start'] + address['size'] < len(bytearray) and growth < upper_block_size and growth < max_grow_size:
-        if bytearray[address['match_start'] + address['size']] != upper_block[growth]:
-            break
-        growth += 1
-        address['size'] += 1
-    return growth
-
-def grow_address_downwards(blob_source, bytearray, address, grow_bite, max_grow_size):
-    blob_size = blob_source.get_blob_size(address['blob'])
-    lower_block_start = max(0, address['blob_offset'] - grow_bite)
-    lower_block_end = address['blob_offset']
-    lower_block_size = lower_block_end - lower_block_start
-    lower_block = blob_source.get_blob(address['blob'], lower_block_start, lower_block_size).read()
-    growth = 0
-    while address['match_start'] > 0 and growth < lower_block_size and growth < max_grow_size:
-        if bytearray[address['match_start'] - 1] != lower_block[-(growth+1)]:
-            break
-        growth += 1
-        address['blob_offset'] -= 1
-        address['match_start'] -= 1
-        address['size'] += 1
-    return growth
-
 class UniformBlobGetter:
     def __init__(self, front, local_blob_dir = None):
         self.front = front
@@ -140,8 +104,8 @@ class RecipeFinder:
 
     def feed(self, s):
         assert len(s) <= self.block_size
-        self.md5summer.update(s)
         self.rs.feed_string(s)
+        self.md5summer.update(s)
         self.tail_buffer.append(s)
         for offset, rolling in self.rs:
             if offset < self.end_of_last_hit:
@@ -157,7 +121,7 @@ class RecipeFinder:
         recipe_size = 0
         for a in self. addresses:
             recipe_size += a.size
-        assert original_size == recipe_size:
+        assert original_size == recipe_size
         del self.rs
 
     def get_recipe(self):
@@ -202,16 +166,13 @@ class RecipeFinder:
         hit_size += match_length
         del sha # No longer valid
 
-        if match_length:
-            #print "Block hit was expanded to %s+%s" % ( offset, hit_size)
-            pass
+        #if match_length: print "Block hit was expanded to %s+%s" % ( offset, hit_size)
+
         # There is original data from the end of the last true
         # hit, up to the start of this true hit.
         self.__add_original(self.end_of_last_hit, offset)
         self.__add_address(Struct(match_start = offset, blob = blob, blob_offset = blob_offset, size = hit_size))
         
-        #raw_addresses.append(address)
-        #hits.append(offset)
         self.end_of_last_hit = offset + hit_size
 
     def __add_address(self, new_address):
@@ -230,16 +191,6 @@ class RecipeFinder:
                 #print "Adding (appended)", new_address
                     
             
-"""        
-# Join consecutive addresses referring to the same blob
-for address in raw_addresses:
-    if address['blob'] == polished_addresses[-1]['blob'] and \
-            address['blob_offset'] == polished_addresses[-1]['blob_offset'] + polished_addresses[-1]['size']:
-        polished_addresses[-1]['size'] += address['size']
-    else:
-        polished_addresses.append(address)
-"""     
-    
 def print_recipe(recipe):
     print "Md5sum:", recipe["md5sum"]
     print "Size  :", recipe["size"]
@@ -260,128 +211,26 @@ def print_recipe(recipe):
 
 def recepify(front, filename, local_blob_dir = None):
     WINDOW_SIZE = front.get_dedup_block_size()
-    all_rolling = set(front.get_all_rolling())
-
-    rs = RollingChecksum(WINDOW_SIZE)
-    
     blob_source = UniformBlobGetter(front, local_blob_dir)
-    raw_addresses = []
     original_size = os.path.getsize(filename)
     if original_size == 0:
         # Zero length files don't deduplicate well...
         return None
+
+    finder = RecipeFinder(front, WINDOW_SIZE, front.get_all_rolling(), blob_source)
     f = safe_open(filename, "rb")
-    bytearray = FileAsString(f)
-    assert len(bytearray) == original_size
-
-    rs.add_needles(all_rolling)
-
-    data = f.read()
-
-    #front, block_size, all_rolling, blob_source, original_piece_directory
-    finder = RecipeFinder(front, WINDOW_SIZE, all_rolling, blob_source)
     for block in file_reader(f, blocksize = WINDOW_SIZE):
         finder.feed(block)
-
-    rs.feed_string(data)
-    hits = []
-    last_true_hit = -WINDOW_SIZE
-    for offset, rolling in rs:
-        if offset < last_true_hit + WINDOW_SIZE:
-            # Ignore overlapping blocks
-            continue
-        sha = sha256(bytearray[offset:offset+WINDOW_SIZE])
-        if front.has_block(sha):
-            blob, blob_offset = front.get_dedup_block_location(sha)
-            address = {'match_start': offset, 'blob': blob, 'blob_offset': blob_offset, 'size': WINDOW_SIZE}
-            raw_addresses.append(address)
-            hits.append(offset)
-            last_true_hit = offset
-        else:
-            pass
-    del rs
-    # No longer necessary
-    # hits = remove_overlapping_blocks(hits, WINDOW_SIZE)
-
-    raw_addresses = [t for t in raw_addresses if t['match_start'] in hits]
-
-    if not raw_addresses:
-        return None # No deduplication is possible
-
-    polished_addresses = []
-    polished_addresses.append(raw_addresses.pop(0))
-
-    # Join consecutive addresses referring to the same blob
-    for address in raw_addresses:
-        if address['blob'] == polished_addresses[-1]['blob'] and \
-                address['blob_offset'] == polished_addresses[-1]['blob_offset'] + polished_addresses[-1]['size']:
-            polished_addresses[-1]['size'] += address['size']
-        else:
-            polished_addresses.append(address)
-    del raw_addresses
-
-    # Grow every hit up to one block if possible
-    for n, address in enumerate(polished_addresses):
-        predecessor = polished_addresses[n-1] if n >= 1 else None
-        try: successor = polished_addresses[n+1]
-        except IndexError: successor = None
-
-        lower_gap = 0
-        if predecessor:
-            lower_gap = address['match_start'] - (predecessor['match_start'] + predecessor['size'])
-        upper_gap = original_size - (address['match_start'] + address['size'])
-        if successor:
-            upper_gap = successor['match_start'] - (address['match_start'] + address['size'])
-
-        grow_address_upwards(blob_source, bytearray, address, grow_bite = WINDOW_SIZE, max_grow_size = upper_gap)
-        grow_address_downwards(blob_source, bytearray, address, grow_bite = WINDOW_SIZE, max_grow_size = lower_gap)
-
-    pieces = []
-    expected_md5 = md5sum_file(f)
-
-    pos = 0    
-    result_md5 = hashlib.md5()
-
-    # Construct a recipe instance from the polished addresses
-    for address in polished_addresses:
-        assert address['size'] > 0
-        if address['match_start'] != pos:
-            result_md5.update(bytearray[pos:address['match_start']])
-            pieces.append({"source": None, "offset": pos, "size":  address['match_start'] - pos})
-            pos = address['match_start']
-        pieces.append({"source": address['blob'], "offset": address['blob_offset'], "size":  address['size']})
-        pos += address['size']
-        block = blob_source.get_blob(address['blob'], address['blob_offset'], address['size']).read()
-        result_md5.update(block)
-    if pos != len(bytearray):
-        pieces.append({"source": None, "offset": pos, "size":  len(bytearray) - pos})
-        result_md5.update(bytearray[pos:])
-    del polished_addresses
-
-    recipe = {"method": "concat",
-              "md5sum": expected_md5,
-              "size": len(bytearray),
-              "pieces": pieces}
-
-    assert expected_md5 == result_md5.hexdigest()
-    if len(pieces) == 1 and pieces[0]["source"] == None:
-        return None # No deduplication possible
-    assert len(recipe['pieces']) > 0
-
     finder.close()
-    #print "Finder result:"
-    #for address in finder.addresses:
-    #    print address
-    print "Official recipe:"
-    print_recipe(recipe)
-    print
-    print "New recipe:"
-    print_recipe(finder.get_recipe())
+    f.close()
+
+    recipe = finder.get_recipe()
+
+    if len(recipe['pieces']) == 1 and recipe['pieces'][0]["source"] == None:
+        return None # No deduplication possible
+
+    assert len(recipe['pieces']) > 0
     
-    recipe_sum = sum([piece['size'] for piece in recipe['pieces']])
-    if recipe_sum != original_size:
-        print "WARNING: old recepify() got the wrong size!"
-    return finder.get_recipe()
-    #return recipe
+    return recipe
 
 
