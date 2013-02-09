@@ -132,7 +132,7 @@ def test_string(window_size, ls, ss):
     rolling_rs2 = rs.value()
 
     rolling_cr = calc_rolling(ss, window_size)
-    print rolling_rs1, rolling_rs2, rolling_cr
+    #print rolling_rs1, rolling_rs2, rolling_cr
     assert rolling_rs1 == rolling_rs2 == rolling_cr
     return rolling_rs1
 
