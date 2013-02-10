@@ -194,7 +194,6 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         assert index >= 0
         assert self.current_index == None
         assert index not in self.pieces
-
         filename=os.path.join(self.session_dir, "piece-%s" % index)
         assert not os.path.exists(filename)
         
@@ -252,9 +251,7 @@ class SessionWriter:
         self.base_session = base_session
         self.force_base_snapshot = force_base_snapshot
         self.metadatas = {}
-        self.blob_blocks = {}
         self.found_uncommitted_blocks = []
-        self.blob_writer = {}
         self.blob_deduplicator = {}
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
@@ -302,9 +299,7 @@ class SessionWriter:
         # here. Possibly some other session is uploading, or has
         # uploaded this blob, before we get here. But that is ok. 
         assert not self.dead
-        assert not self.blob_writer.keys(), "Another new blob is already in progress"
         fname = os.path.join(self.session_path, blob_md5)
-        self.blob_writer[blob_md5] = StrictFileWriter(fname, blob_md5, blob_size)
         blobsource = deduplication.UniformBlobGetter(self.repo, self.session_path)
         self.blob_deduplicator[blob_md5] = \
             deduplication.RecipeFinder(self.repo.blocksdb,
@@ -312,30 +307,39 @@ class SessionWriter:
                                        self.repo.blocksdb.get_all_rolling(),
                                        blobsource,
                                        PieceHandler(self.session_path, repository.DEDUP_BLOCK_SIZE))
-        self.blob_blocks[blob_md5] = deduplication.BlockChecksum(repository.DEDUP_BLOCK_SIZE)
         
 
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""
         assert is_md5sum(blob_md5)
         assert not self.dead
-        self.blob_writer[blob_md5].write(fragment)
-        self.blob_blocks[blob_md5].feed_string(fragment)
         self.blob_deduplicator[blob_md5].feed(fragment)
 
     def blob_finished(self, blob_md5):
-        self.blob_writer[blob_md5].close()
-        del self.blob_writer[blob_md5]
         self.blob_deduplicator[blob_md5].close()
-        for blockdata in self.blob_blocks[blob_md5].harvest():
-            offset, rolling, sha256 = blockdata
-            self.found_uncommitted_blocks.append((blob_md5, offset, rolling, sha256))
-        del self.blob_blocks[blob_md5]
+        for index, piece in self.blob_deduplicator[blob_md5].original_piece_handler.pieces.items():
+            self.blob_deduplicator[blob_md5].modify_piece(index, blob=piece.md5, offset=0)
+            self.found_uncommitted_blocks += piece.blocks
+        recipe = self.blob_deduplicator[blob_md5].get_recipe()
+        if len(recipe['pieces']) == 1 and recipe['pieces'][0]['source'] == blob_md5:
+            recipe = None
+        if recipe:
+            recipe = self.blob_deduplicator[blob_md5].get_recipe()
+            recipe_json = json.dumps(recipe, indent = 4)
+            recipe_md5 = md5sum(recipe_json)
+            recipe_path = os.path.join(self.session_path, blob_md5 + ".recipe")
+            with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
+                recipe_file.write(recipe_json)
         del self.blob_deduplicator[blob_md5]
                 
     def has_blob(self, csum):
         assert is_md5sum(csum)
         fname = os.path.join(self.session_path, csum)
+        return os.path.exists(fname)
+
+    def has_recipe(self, csum):
+        assert is_md5sum(csum)
+        fname = os.path.join(self.session_path, csum + ".recipe")
         return os.path.exists(fname)
 
     def add(self, metadata):
@@ -350,9 +354,10 @@ class SessionWriter:
             "Filenames must not be absolute. Was:" + metadata['filename']
         assert not metadata['filename'].endswith("/"), \
             "Filenames must not end with a path separator. Was:" + metadata['filename']
-        new_blob_filename = os.path.join(self.session_path, metadata['md5sum'])
         assert self.repo.has_blob(metadata['md5sum']) \
-            or os.path.exists(new_blob_filename), "Tried to add blob info, but no such blob exists: "+new_blob_filename
+            or self.has_blob(metadata['md5sum']) \
+            or self.has_recipe(metadata['md5sum']), \
+            "Tried to add blob info, but no such blob exists: "+ metadata['md5sum']
         assert metadata['filename'] not in self.metadatas
         self.metadatas[metadata['filename']] = metadata
         self.resulting_blobdict[metadata['filename']] = metadata
@@ -374,48 +379,9 @@ class SessionWriter:
         finally:
             self.session_mutex.release()
 
-    def __deduplicate(self):
-        contents = os.listdir(self.session_path)
-        import front, deduplication
-        front = front.Front(self.repo)
-        session_blobs = [filename for filename in contents if is_md5sum(filename)]
-        for filename in contents:
-            assert not repository.is_recipe_filename(filename), "Not supposed to be any recipies here yet"
-            if not is_md5sum(filename):
-                continue
-            if front.has_blob(filename):
-                continue
-            path = os.path.join(self.session_path, filename)
-            recipe = deduplication.recepify(front, path, self.session_path)
-            if not recipe:
-                # print "Could not recepify", path
-                continue
-            assert len(recipe['pieces']) > 0
-            print "Following recipe:", recipe
-            for piece in recipe['pieces']:
-                if not piece['source']:
-                    original_piece = copy.copy(piece)
-                    new_blob_md5 = md5sum_file(path, piece['offset'], piece['offset'] + piece['size'])
-                    new_blob_path = os.path.join(self.session_path, new_blob_md5)
-                    piece['source'] = new_blob_md5
-                    piece['offset'] = 0
-                    if os.path.exists(new_blob_path):
-                        continue
-                    with StrictFileWriter(new_blob_path, new_blob_md5, piece['size']) as new_blob:
-                        with safe_open(path, "rb") as source_fo:
-                            for block in file_reader(source_fo, original_piece['offset'], original_piece['offset'] + original_piece['size']):
-                                new_blob.write(block)
-            recipe_json = json.dumps(recipe, indent = 4)
-            recipe_md5 = md5sum(recipe_json)
-            recipe_path = os.path.join(self.session_path, filename + ".recipe")
-            with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
-                recipe_file.write(recipe_json)
-            os.remove(path)
-
     def __commit(self, sessioninfo):
         assert not self.dead
         assert self.session_path != None
-        assert not self.blob_writer, "Commit while blob writer is active"
 
         if "name" in sessioninfo:
             assert self.session_name == sessioninfo['name'], \
@@ -425,8 +391,6 @@ class SessionWriter:
         self.writer.set_client_data(sessioninfo)
 
         snapshot_blobs = [filename for filename in os.listdir(self.session_path) if is_md5sum(filename)]
-
-        self.__deduplicate()
 
         for blob_name in snapshot_blobs:
             # Verify that all blobs still are there - as raw blobs or as recipes

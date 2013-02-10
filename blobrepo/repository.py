@@ -65,7 +65,7 @@ REPO_DIRS_V4 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
 REPO_DIRS_V5 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR)
 
-DEDUP_BLOCK_SIZE = 2 ** 16
+DEDUP_BLOCK_SIZE = 2**16
 
 recoverytext = """Repository format v%s
 
@@ -771,20 +771,23 @@ class Repo:
 
         items = os.listdir(queued_item)
         from front import Front
-        # Check the checksums of all blobs
+
+        # Check the checksums of all blobs 
         for filename in items:
             full_path = os.path.join(queued_item, filename)
             if is_md5sum(filename):
                 assert filename == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
-            elif is_recipe_filename(filename):
+
+        # Check the checksums of all recipes
+        for filename in items:
+            full_path = os.path.join(queued_item, filename)
+            if is_recipe_filename(filename):
                 md5summer = hashlib.md5()
                 recipe = read_json(full_path)
                 reader = blobreader.RecipeReader(recipe, self, local_path=queued_item)
                 while reader.bytes_left():
                     md5summer.update(reader.read(4096))
-                assert filename == md5summer.hexdigest() + ".recipe"
-            else:
-                pass
+                assert filename == md5summer.hexdigest() + ".recipe", "Invalid recipe found in queue dir:" + full_path
 
         # Check the existence of all required files
         # TODO: check the contents for validity
