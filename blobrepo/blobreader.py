@@ -1,5 +1,6 @@
 from common import *
 from jsonrpc import DataSource
+import deduplication
 
 """ A recipe has the following format:
 
@@ -45,6 +46,11 @@ class RecipeReader(DataSource):
         self.source_size = 0
         self.pos = offset
         self.__seek(self.pos)
+        print "Reader opening recipe:"
+        deduplication.print_recipe(recipe)
+
+    def remaining(self): # TODO: make less silly
+        return self.bytes_left(self)
 
     def bytes_left(self):
         return self._bytes_left
@@ -89,10 +95,13 @@ class RecipeReader(DataSource):
             bytes_left = readsize - len(result)
             bytes_to_read = min(self.__readable_bytes_without_seek(), bytes_left)
             with open(blobpath, "rb") as f:
+                print self.pos, self.blob_source_range_start, self.source_offset
                 source_file_pos = self.pos - self.blob_source_range_start + self.source_offset
+                source_file_size = os.path.getsize(blobpath)
+                assert source_file_pos <= source_file_size, "Source file %s is of unexpected size (seek to %s, is only %s)" % (blobpath, source_file_pos, source_file_size)
                 f.seek(source_file_pos)
                 bytes = f.read(bytes_to_read)
-                #print "Reader is reading from %s %s+%s" % (self.source, source_file_pos, bytes_to_read)
+                print "Reader is reading from %s %s+%s" % (self.source, source_file_pos, bytes_to_read)
             assert len(bytes) == bytes_to_read
             result += bytes
             self.__seek(self.pos + len(bytes))
