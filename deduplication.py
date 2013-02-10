@@ -24,20 +24,20 @@ from rollingcs import RollingChecksum, calc_rolling
 
 class BlockChecksum:
     def __init__(self, window_size):
-        self.buffer = ""
+        import tempfile
+        self.buffer = FileAsString(tempfile.TemporaryFile())
         self.window_size = window_size
         self.position = 0
         self.blocks = []
 
     def feed_string(self, s):
-        self.buffer += s
-        while len(self.buffer) >= self.window_size:
-            block = self.buffer[0:self.window_size]
+        self.buffer.append(s)
+        while len(self.buffer) - self.position >= self.window_size:
+            block = self.buffer[self.position:self.position+self.window_size]
             block_sha256 = sha256(block)
             block_rolling = calc_rolling(block, self.window_size)
             self.blocks.append((self.position, block_rolling, block_sha256))
             self.position += self.window_size
-            self.buffer = self.buffer[self.window_size:]
 
     def harvest(self):
         result = self.blocks
@@ -74,11 +74,11 @@ class TailBuffer:
 
     def __init__(self, tail_size):
         #self.tail_size = tail_size
-        self.buffer = ""
-        self.offset = 0
+        import tempfile
+        self.buffer = FileAsString(tempfile.TemporaryFile())
         
     def append(self, s):
-        self.buffer += s
+        self.buffer.append(s)
 
     def __len__(self):
         return len(self.buffer)
@@ -97,8 +97,8 @@ class OriginalPieceHandler:
         pass    
 
 class RecipeFinder:
-    def __init__(self, blocksdb, block_size, all_rolling, blob_source, original_piece_handler = OriginalPieceHandler()):
-        self.blocksdb = blocksdb
+    def __init__(self, repo, block_size, all_rolling, blob_source, original_piece_handler = OriginalPieceHandler()):
+        self.repo = repo
         self.block_size = block_size
         self.rs = RollingChecksum(block_size)
         self.rs.add_needles(all_rolling)
@@ -112,10 +112,12 @@ class RecipeFinder:
         self.md5summer = hashlib.md5()
         self.original_piece_count = 0
         self.closed = False
+        self.feed_byte_count = 0
 
     def feed(self, s):
         assert len(s) <= self.block_size
         assert not self.closed
+        self.feed_byte_count += len(s)
         self.rs.feed_string(s)
         self.md5summer.update(s)
         self.tail_buffer.append(s)
@@ -124,7 +126,7 @@ class RecipeFinder:
                 # Ignore overlapping blocks
                 continue
             sha = sha256(self.tail_buffer[offset : offset + self.block_size])
-            if self.blocksdb.has_block(sha):
+            if self.repo.has_block(sha):
                 self.__add_hit(offset, sha)
 
     def close(self):
@@ -132,8 +134,9 @@ class RecipeFinder:
         self.closed = True
         self.__add_original(self.end_of_last_hit, len(self.tail_buffer))
         original_size = len(self.tail_buffer)
+        assert original_size == self.feed_byte_count
         recipe_size = 0
-        for a in self. addresses:
+        for a in self.addresses:
             recipe_size += a.size
         assert original_size == recipe_size
         del self.rs
@@ -152,12 +155,11 @@ class RecipeFinder:
         for address in self.addresses:
             assert address.size > 0
             pieces.append({"source": address.blob, "offset": address.blob_offset, "size":  address.size})
-
         result = {"method": "concat",
                   "md5sum": self.md5summer.hexdigest(),
                   "size": len(self.tail_buffer),
                   "pieces": pieces}
-
+        #print_recipe(result)
         return result
 
     def __add_original(self, start_offset, end_offset):
@@ -177,7 +179,7 @@ class RecipeFinder:
         hit_size = self.block_size
         hit_bytes = self.tail_buffer[offset : offset + hit_size]
 
-        blob, blob_offset = self.blocksdb.get_blob_location(sha)
+        blob, blob_offset = self.repo.get_blob_location(sha)
         #print "Found block hit at %s+%s (pointing at %s %s)" % ( offset, hit_size, blob, blob_offset)
         # We have found a hit, but it might be possible to grow it.
         preceeding_original_data_size = offset - self.end_of_last_hit
@@ -247,7 +249,7 @@ def recepify(front, filename, local_blob_dir = None):
         # Zero length files don't deduplicate well...
         return None
 
-    finder = RecipeFinder(front.repo.blocksdb, WINDOW_SIZE, front.get_all_rolling(), blob_source)
+    finder = RecipeFinder(front.repo, WINDOW_SIZE, front.get_all_rolling(), blob_source)
     f = safe_open(filename, "rb")
     for block in file_reader(f, blocksize = WINDOW_SIZE):
         finder.feed(block)
