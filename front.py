@@ -158,11 +158,12 @@ def __clone_single_snapshot(from_front, to_front, session_id):
     to_front. It does not commit that snapshot. """
     other_bloblist = from_front.get_session_bloblist(session_id)
     other_raw_bloblist = from_front.get_session_raw_bloblist(session_id)
-    for blobinfo in other_raw_bloblist:
+    for n, blobinfo in enumerate(other_raw_bloblist):
         action = blobinfo.get("action", None)
         if not action:
             md5sum = blobinfo['md5sum']
             if not (to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum)):
+                print "Sending blob %s of %s (%s MB)" % (n, len(other_raw_bloblist), blobinfo['size'] / (1.0 * 2**20))
                 to_front.init_new_blob(md5sum, blobinfo['size'])
                 to_front.add_blob_data_streamed(md5sum, datasource = from_front.get_blob(md5sum))
                 to_front.blob_finished(md5sum)
@@ -423,8 +424,15 @@ class Front:
         self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))
 
     def add_blob_data_streamed(self, blob_md5, datasource):
-        while datasource.remaining > 0:
-            self.new_session.add_blob_data(blob_md5, datasource.read(2**12))
+        import hashlib, common
+        assert is_md5sum(blob_md5)
+        summer = hashlib.md5()
+        while datasource.bytes_left() > 0:
+            block = datasource.read(2**12)
+            summer.update(block)
+            self.new_session.add_blob_data(blob_md5, block)
+        if summer.hexdigest() != blob_md5:
+            raise common.ConstraintViolation("Received blob data differs from promised.")
 
     def blob_finished(self, blob_md5):
         self.new_session.blob_finished(blob_md5)
