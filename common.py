@@ -716,7 +716,8 @@ def FakeFile():
 class FileAsString:
     def __init__(self, fo):
         self.fo = fo
-        self.size = os.fstat(fo.fileno()).st_size
+        self.fo.seek(0, 2)
+        self.size = self.fo.tell()
         
     def __len__(self):
         return self.size
@@ -733,6 +734,13 @@ class FileAsString:
         assert 0 <= start <= stop <= self.size, (start, stop, step, self.size)
         self.fo.seek(start)
         return self.fo.read(stop - start)
+    
+    def append(self, s):
+        self.fo.seek(0, 2)
+        self.fo.write(s)
+        self.fo.seek(0, 2)
+        self.size = self.fo.tell()
+        
 
 class RateLimiter:
     """This class makes it easy to perform some action only when a
