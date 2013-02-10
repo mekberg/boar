@@ -30,7 +30,7 @@ import hashlib
 import types
 
 from common import *
-from deduplication import BlockChecksum
+import deduplication
 
 """
 The SessionWriter and SessionReader are together with Repository the
@@ -181,6 +181,63 @@ class _NaiveSessionWriter:
             pass
 
 
+class PieceHandler(deduplication.OriginalPieceHandler):
+    def __init__(self, session_dir, block_size):
+        assert os.path.isdir(session_dir)
+        assert block_size > 0
+        self.block_size = block_size
+        self.session_dir = session_dir
+        self.pieces = {}
+        self.current_index = None
+
+    def init_piece(self, index):
+        assert index >= 0
+        assert self.current_index == None
+        assert index not in self.pieces
+
+        filename=os.path.join(self.session_dir, "piece-%s" % index)
+        assert not os.path.exists(filename)
+        
+        self.pieces[index] = \
+            Struct(filename=filename,
+                   fileobj = open(filename, "wb"),
+                   md5summer = hashlib.md5(),
+                   blockifyer = deduplication.BlockChecksum(self.block_size))
+        self.current_index = index
+
+    def add_piece_data(self, index, data):
+        assert self.current_index == index
+        self.pieces[index].fileobj.write(data)
+        self.pieces[index].md5summer.update(data)
+        self.pieces[index].blockifyer.feed_string(data)
+
+    def end_piece(self, index):
+        assert self.current_index == index
+        self.current_index = None
+
+        piece = self.pieces[index]
+        piece.md5 = piece.md5summer.hexdigest()
+        piece.fileobj.close()
+        real_name = os.path.join(self.session_dir, piece.md5)
+
+        piece.blocks = []
+        for blockdata in self.pieces[index].blockifyer.harvest():
+            offset, rolling, sha256 = blockdata
+            piece.blocks.append((piece.md5, offset, rolling, sha256))
+
+        if os.path.exists(real_name):
+            # Necessary for windows. Posix silently replaces an existing file.
+            os.remove(piece.filename)
+        else:
+            os.rename(piece.filename, real_name)
+        
+        del piece.fileobj
+        del piece.filename
+        del piece.md5summer
+        del piece.blockifyer
+        
+
+        
 class SessionWriter:
     def __init__(self, repo, session_name, base_session = None, session_id = None, force_base_snapshot = False):
         assert session_name and isinstance(session_name, unicode)
@@ -198,6 +255,7 @@ class SessionWriter:
         self.blob_blocks = {}
         self.found_uncommitted_blocks = []
         self.blob_writer = {}
+        self.blob_deduplicator = {}
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
         assert os.path.exists(self.repo.repopath)
@@ -247,7 +305,15 @@ class SessionWriter:
         assert not self.blob_writer.keys(), "Another new blob is already in progress"
         fname = os.path.join(self.session_path, blob_md5)
         self.blob_writer[blob_md5] = StrictFileWriter(fname, blob_md5, blob_size)
-        self.blob_blocks[blob_md5] = BlockChecksum(repository.DEDUP_BLOCK_SIZE)
+        blobsource = deduplication.UniformBlobGetter(self.repo, self.session_path)
+        self.blob_deduplicator[blob_md5] = \
+            deduplication.RecipeFinder(self.repo.blocksdb,
+                                       repository.DEDUP_BLOCK_SIZE,
+                                       self.repo.blocksdb.get_all_rolling(),
+                                       blobsource,
+                                       PieceHandler(self.session_path, repository.DEDUP_BLOCK_SIZE))
+        self.blob_blocks[blob_md5] = deduplication.BlockChecksum(repository.DEDUP_BLOCK_SIZE)
+        
 
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""
@@ -255,15 +321,17 @@ class SessionWriter:
         assert not self.dead
         self.blob_writer[blob_md5].write(fragment)
         self.blob_blocks[blob_md5].feed_string(fragment)
+        self.blob_deduplicator[blob_md5].feed(fragment)
 
     def blob_finished(self, blob_md5):
         self.blob_writer[blob_md5].close()
-        del self.blob_writer[blob_md5]        
-
+        del self.blob_writer[blob_md5]
+        self.blob_deduplicator[blob_md5].close()
         for blockdata in self.blob_blocks[blob_md5].harvest():
             offset, rolling, sha256 = blockdata
             self.found_uncommitted_blocks.append((blob_md5, offset, rolling, sha256))
         del self.blob_blocks[blob_md5]
+        del self.blob_deduplicator[blob_md5]
                 
     def has_blob(self, csum):
         assert is_md5sum(csum)
