@@ -111,9 +111,11 @@ class RecipeFinder:
         self.addresses = []
         self.md5summer = hashlib.md5()
         self.original_piece_count = 0
+        self.closed = False
 
     def feed(self, s):
         assert len(s) <= self.block_size
+        assert not self.closed
         self.rs.feed_string(s)
         self.md5summer.update(s)
         self.tail_buffer.append(s)
@@ -126,6 +128,8 @@ class RecipeFinder:
                 self.__add_hit(offset, sha)
 
     def close(self):
+        assert not self.closed
+        self.closed = True
         self.__add_original(self.end_of_last_hit, len(self.tail_buffer))
         original_size = len(self.tail_buffer)
         recipe_size = 0
@@ -134,17 +138,27 @@ class RecipeFinder:
         assert original_size == recipe_size
         del self.rs
 
+    def modify_piece(self, index, blob, offset):
+        assert self.closed
+        addresses = [a for a in self.addresses if a.piece_index == index]
+        assert len(addresses) == 1
+        p = addresses[0]
+        p.blob = blob
+        p.blob_offset = offset
+
     def get_recipe(self):
+        assert self.closed
         pieces = []
         for address in self.addresses:
             assert address.size > 0
             pieces.append({"source": address.blob, "offset": address.blob_offset, "size":  address.size})
 
-        return {"method": "concat",
-                "md5sum": self.md5summer.hexdigest(),
-                "size": len(self.tail_buffer),
-                "pieces": pieces}
+        result = {"method": "concat",
+                  "md5sum": self.md5summer.hexdigest(),
+                  "size": len(self.tail_buffer),
+                  "pieces": pieces}
 
+        return result
 
     def __add_original(self, start_offset, end_offset):
         assert 0 <= start_offset <= end_offset
@@ -154,9 +168,9 @@ class RecipeFinder:
         self.original_piece_handler.init_piece(self.original_piece_count)
         self.original_piece_handler.add_piece_data(self.original_piece_count, self.tail_buffer[start_offset:end_offset])
         self.original_piece_handler.end_piece(self.original_piece_count)
-        self.original_piece_count += 1
         #print "Found original data at %s+%s" % ( start_offset, end_offset - start_offset)
-        self.__add_address(Struct(match_start = start_offset, blob = None, blob_offset = start_offset, size = end_offset - start_offset))
+        self.__add_address(Struct(match_start = start_offset, blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset))
+        self.original_piece_count += 1
 
     def __add_hit(self, offset, sha):
         assert offset >= self.end_of_last_hit
@@ -183,7 +197,7 @@ class RecipeFinder:
         # There is original data from the end of the last true
         # hit, up to the start of this true hit.
         self.__add_original(self.end_of_last_hit, offset)
-        self.__add_address(Struct(match_start = offset, blob = blob, blob_offset = blob_offset, size = hit_size))
+        self.__add_address(Struct(match_start = offset, blob = blob, piece_index = None, blob_offset = blob_offset, size = hit_size))
         
         self.end_of_last_hit = offset + hit_size
 
@@ -219,7 +233,11 @@ def print_recipe(recipe):
         pos += p['size']
         if p['source'] == None: # Count the parts we couldn't find elsewhere
             dedup_size += p['size']
-    print "Dedup removed %s%% of original size" % round((100.0 * (1.0 - float(dedup_size) / recipe["size"])), 1)
+    try:
+        print "Dedup removed %s%% of original size" % round((100.0 * (1.0 - float(dedup_size) / recipe["size"])), 1)
+    except ZeroDivisionError:
+        print "Zero size recipe"
+        pass
 
 def recepify(front, filename, local_blob_dir = None):
     WINDOW_SIZE = front.get_dedup_block_size()
@@ -238,11 +256,6 @@ def recepify(front, filename, local_blob_dir = None):
 
     recipe = finder.get_recipe()
 
-    if len(recipe['pieces']) == 1 and recipe['pieces'][0]["source"] == None:
-        return None # No deduplication possible
-
-    assert len(recipe['pieces']) > 0
-    
     return recipe
 
 
