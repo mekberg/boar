@@ -11,14 +11,15 @@ static void massert(int condition, const char* message) {
   }
 }
 
-IntSet* create_intset(const int bucket_count) {
+IntSet* create_intset(const uint32_t bucket_count) {
+  massert(bucket_count > 0, "Bucket count must not be zero");
   IntSet* intset = (IntSet*) calloc(1, sizeof(IntSet));
   intset->bucket_count = bucket_count;
   intset->buckets = (Bucket*) calloc(intset->bucket_count, sizeof(Bucket));
   return intset;
 }
 
-void add_intset(IntSet* intset, int int_to_add) {
+void add_intset(IntSet* intset, uint32_t int_to_add) {
   Bucket* const bucket = &intset->buckets[int_to_add % intset->bucket_count];
   if(bucket->slot_count == 0) {
     bucket->slot_count = 1;
@@ -32,7 +33,7 @@ void add_intset(IntSet* intset, int int_to_add) {
   bucket->slots[bucket->used_slots++] = int_to_add;
 }
 
-int contains_intset(IntSet* const intset, const int int_to_find) {
+int contains_intset(IntSet* const intset, const uint32_t int_to_find) {
   Bucket* const bucket = &intset->buckets[int_to_find % intset->bucket_count];
   for(int i=0; i < bucket->used_slots; i++){
     if(bucket->slots[i] == int_to_find){
