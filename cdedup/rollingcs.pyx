@@ -33,19 +33,43 @@ cdef extern from "intset.h":
     int contains_intset(IntSet* intset, int int_to_find)
     void destroy_intset(IntSet* intset)
 
+cdef class IntegerSet:
+    cdef IntSet* intset
+   
+    def __init__(self, bucket_count):
+        self.intset = create_intset(bucket_count)
+
+    def __dealloc__(self):
+        destroy_intset(self.intset)
+
+    def add(self, unsigned int int_to_add):
+        add_intset(self.intset, int_to_add)
+    
+    def add_all(self, ints_to_add):
+        cdef unsigned int n
+        for n in ints_to_add:
+            self.add(n)
+
+    def contains(self, unsigned int int_to_find):
+        return bool(contains_intset(self.intset, int_to_find))
+
+    cdef IntSet* get_intset(self):
+        return self.intset
+
 cdef class RollingChecksum:
     cdef RollingState* state
-    cdef IntSet* intset
     cdef int feeded_bytecount
     cdef unsigned window_size
 
     cdef unsigned feed_pos
     cdef object   feed_queue
     cdef object   feed_s
+    cdef IntegerSet my_intset
 
-    def __init__(self, int window_size):
+    def __init__(self, int window_size, m_intset):
         self.state = create_rolling(window_size)
-        self.intset = create_intset(100000)
+        assert self.state
+        self.my_intset = m_intset
         self.feeded_bytecount = 0
         self.window_size = window_size
 
@@ -53,17 +77,15 @@ cdef class RollingChecksum:
         self.feed_pos = 0
         self.feed_s = ""
 
+    def __cinit__(self):
+        pass
+
     def __dealloc__(self):
         destroy_rolling(self.state)
-        destroy_intset(self.intset)
-
-    def add_needles(self, s):
-        cdef unsigned n
-        for n in s:
-            add_intset(self.intset, n)
 
     def feed_string(self, s):
         self.feed_queue.append(s)
+        #print "Feed queue length:", len(self.feed_queue)
 
     cdef _pop_queue(self):
         assert self.feed_pos == len(self.feed_s)
@@ -78,15 +100,22 @@ cdef class RollingChecksum:
 
     def __next__(self):
         cdef unsigned rolling_value
+        cdef char* buf
+        cdef unsigned int buf_len
+        cdef IntSet* intset
         while True: # Until StopIteration or a hit is returned
             if self.feed_pos == len(self.feed_s):
                 self._pop_queue()
-            while self.feed_pos < len(self.feed_s):
-                self._feed_byte(ord(self.feed_s[self.feed_pos]))
+            buf = self.feed_s
+            buf_len = len(self.feed_s)
+            intset = self.my_intset.get_intset()
+            while self.feed_pos < buf_len:
+                push_rolling(self.state, buf[self.feed_pos])
+                self.feeded_bytecount += 1
                 self.feed_pos += 1
                 if self.feeded_bytecount >= self.window_size:
                     rolling_value = value_rolling(self.state)
-                    if contains_intset(self.intset, rolling_value):
+                    if contains_intset(intset, rolling_value):
                         return (self.feeded_bytecount - self.window_size, rolling_value)
 
     cpdef unsigned value(self):
@@ -95,11 +124,6 @@ cdef class RollingChecksum:
                 self.next()
         except StopIteration:
             return value_rolling(self.state)
-
-    cdef _feed_byte(RollingChecksum self, unsigned char b):
-        self.feeded_bytecount += 1
-        push_rolling(self.state, b)
-        #print "Feeded", chr(b), self.feeded_bytecount, value_rolling(self.state)
 
 cpdef unsigned calc_rolling(s, window_size):
     """ Convenience method to calculate the rolling checksum on a
@@ -111,6 +135,7 @@ cdef unsigned _calc_rolling(char[] buf, unsigned buf_length, unsigned window_siz
     cdef RollingState* state 
     cdef int result
     state = create_rolling(window_size)
+    assert state
     for n in xrange(0, buf_length):
         push_rolling(state, buf[n])
     result = value_rolling(state)
@@ -118,16 +143,20 @@ cdef unsigned _calc_rolling(char[] buf, unsigned buf_length, unsigned window_siz
     return result;
 
 def benchmark():
-    rs = RollingChecksum()
-    for c in xrange(0, 10**7):
-        rs._feed_byte(ord("a"))
+    rs = RollingChecksum(4096, IntegerSet(100))
+    s = "a" * 4096
+    for c in xrange(0, 2000):
+        rs.feed_string(s)
+        for result in rs:
+            pass
+    print "All done", rs.feeded_bytecount
 
 def test_string(window_size, ls, ss):
-    rs = RollingChecksum(window_size)
+    rs = RollingChecksum(window_size, IntegerSet(100))
     rs.feed_string(ls)
     rolling_rs1 = rs.value()
 
-    rs = RollingChecksum(window_size)
+    rs = RollingChecksum(window_size, IntegerSet(100))
     rs.feed_string(ss)
     rolling_rs2 = rs.value()
 
@@ -142,22 +171,27 @@ def self_test():
     assert test_string(3, "qabc", "abc") == 50594179
     assert test_string(3, "", "") == 0
 
-    rs = RollingChecksum(3)
+    rs = RollingChecksum(3, IntegerSet(100))
     rs.feed_string("a")
     rs.feed_string("b")
     rs.feed_string("c")
     assert rs.value() == 50594179
 
 
-    rs = RollingChecksum(3)
-    rs.add_needles([25231617, 50594179, 50987398, 51380617])
+    intset = IntegerSet(100)
+    rs = RollingChecksum(3, intset)
+    intset.add_all([25231617, 50594179, 50987398, 51380617])
     rs.feed_string("a")
     rs.feed_string("b")
     rs.feed_string("c")
     rs.feed_string("d")
     rs.feed_string("e")
-    assert list(rs) == [(0L, 50594179L), (1L, 50987398L), (2L, 51380617L)]
+    result = list(rs)
+    assert result == [(0L, 50594179L), (1L, 50987398L), (2L, 51380617L)], result
 
     #big_string = chr(255) * 10**6 # 10 MB
     #assert test_string(10**6, big_string, big_string)
+    #print "Self test completed"
+
 self_test()
+benchmark()
