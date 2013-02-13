@@ -16,11 +16,13 @@ IntSet* create_intset(const uint32_t bucket_count) {
   IntSet* intset = (IntSet*) calloc(1, sizeof(IntSet));
   intset->bucket_count = bucket_count;
   intset->buckets = (Bucket*) calloc(intset->bucket_count, sizeof(Bucket));
+  // intset->filter = bf_create(1); 
   return intset;
 }
 
 void add_intset(IntSet* intset, uint32_t int_to_add) {
   Bucket* const bucket = &intset->buckets[int_to_add % intset->bucket_count];
+  //bf_set(intset->filter, int_to_add % intset->filter->size, 1);
   if(bucket->slot_count == 0) {
     bucket->slot_count = 1;
     bucket->slots = (uint32_t*) malloc(bucket->slot_count * sizeof(uint32_t));
@@ -33,7 +35,10 @@ void add_intset(IntSet* intset, uint32_t int_to_add) {
   bucket->slots[bucket->used_slots++] = int_to_add;
 }
 
-int contains_intset(IntSet* const intset, const uint32_t int_to_find) {
+inline int contains_intset(IntSet* const intset, const uint32_t int_to_find) {
+  //if(bf_get(intset->filter, int_to_find % intset->filter->size) == 0){
+  //  return 0;
+  // }
   Bucket* const bucket = &intset->buckets[int_to_find % intset->bucket_count];
   for(int i=0; i < bucket->used_slots; i++){
     if(bucket->slots[i] == int_to_find){
@@ -48,11 +53,12 @@ void destroy_intset(IntSet* intset) {
     free(intset->buckets[i].slots);
   }
   free(intset->buckets);
+  //bf_destroy(intset->filter);
   free(intset);
 }
 
 
-int main() {
+int main_unused() {
   IntSet* const intset = create_intset(10000000);
   massert(intset != NULL, "Couldn't create intset");
   for(int i=0; i<10000000; i++){
@@ -72,4 +78,5 @@ int main() {
     //massert(contains_intset(intset, n), "Value not found after insertion");
   }
   destroy_intset(intset);
+  return 0;
 }
