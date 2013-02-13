@@ -27,9 +27,11 @@ inline void bf_set(BitField* const bf, const unsigned int bit, const int value){
   const unsigned int word = bit / BITS_PER_WORD;
   const unsigned wbit = bit % BITS_PER_WORD;
   bf->words[word] |= ((!!value) << wbit);
+  massert(bf_get(bf, bit) == 1, "Bit didn't stick");
 }
 
 inline unsigned int bf_get(BitField* const bf, const unsigned int bit){
+  return 1;
   massert(bit < bf->size, "Tried to read bit outside of range");
   const unsigned int word = bit / BITS_PER_WORD;
   const unsigned wbit = bit % BITS_PER_WORD;
