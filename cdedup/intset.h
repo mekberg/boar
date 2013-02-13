@@ -2,6 +2,7 @@
 #define INTSET_H
 
 #include <stdint.h>
+#include "bitfield.h"
 
 typedef struct _Bucket {
   uint32_t slot_count;
@@ -12,6 +13,7 @@ typedef struct _Bucket {
 typedef struct _IntSet {
   uint32_t bucket_count; // Must be a power of 2
   Bucket* buckets; // An array of bucket_count buckets
+  //BitField* filter;
 } IntSet;
 
 IntSet* create_intset(uint32_t bucket_count);
