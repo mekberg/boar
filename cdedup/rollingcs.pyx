@@ -143,13 +143,22 @@ cdef unsigned _calc_rolling(char[] buf, unsigned buf_length, unsigned window_siz
     return result;
 
 def benchmark():
-    rs = RollingChecksum(4096, IntegerSet(100))
+    import random
+    sw = StopWatch()
+    randints = [random.randint(0, 2**32-1) for n in range(1000000)]
+    intset = IntegerSet(len(randints))
+    print len(randints), randints[0:10]
+    intset.add_all(randints)
+    del randints
+    rs = RollingChecksum(65000, intset)
+    sw.mark("Setup")
     s = "a" * 4096
-    for c in xrange(0, 2000):
+    for c in xrange(0, 10000):
         rs.feed_string(s)
         for result in rs:
             pass
-    print "All done", rs.feeded_bytecount
+    print "Feeded", rs.feeded_bytecount, "bytes"
+    sw.mark("Feeding")
 
 def test_string(window_size, ls, ss):
     rs = RollingChecksum(window_size, IntegerSet(100))
@@ -193,5 +202,17 @@ def self_test():
     #assert test_string(10**6, big_string, big_string)
     #print "Self test completed"
 
+import time
+class StopWatch:
+    def __init__(self):
+        self.t_init = time.time()
+        self.t_last = time.time()
+
+    def mark(self, msg):
+        now = time.time()
+        print "MARK: %s %s (total %s)" % ( msg, now - self.t_last, now - self.t_init )
+        self.t_last = time.time()
+
 self_test()
-benchmark()
+#benchmark()
+
