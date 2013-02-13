@@ -163,8 +163,10 @@ class TestMisc(unittest.TestCase):
         test("abc", "abc", "abc")
         test("c", "abc", "c")
         test("abc", "c", "c")
-        test("abc", "", "")
-        test("", "abc", "")
+        test("bc", "abc", "bc")
+        test("abc", "bc", "bc")
+        test("abc", "a", "")
+        test("a", "abc", "")
 
 
 
