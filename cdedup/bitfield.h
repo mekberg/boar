@@ -13,6 +13,4 @@ unsigned int bf_get(BitField* bf, unsigned int bit);
 void bf_print(BitField* bf);
 void bf_destroy(BitField* bf);
 
-int main();
-
 #endif
