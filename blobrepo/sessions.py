@@ -226,6 +226,8 @@ class PieceHandler(deduplication.OriginalPieceHandler):
             offset, rolling, sha256 = blockdata
             piece.blocks.append((piece.md5, offset, rolling, sha256))
 
+        # The piece may already have been added during this commit. If
+        # so, just ignore it.
         if os.path.exists(real_name):
             # Necessary for windows. Posix silently replaces an existing file.
             os.remove(piece.filename)
@@ -335,8 +337,9 @@ class SessionWriter:
             recipe_json = json.dumps(recipe, indent = 4)
             recipe_md5 = md5sum(recipe_json)
             recipe_path = os.path.join(self.session_path, blob_md5 + ".recipe")
-            with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
-                recipe_file.write(recipe_json)
+            if not os.path.exists(recipe_path): # If it already exists, don't write it again
+                with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
+                    recipe_file.write(recipe_json)
 
         del self.blob_deduplicator[blob_md5]
                 
