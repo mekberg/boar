@@ -450,6 +450,9 @@ class Repo:
         assert is_md5sum(sum), "Was: %s" % (sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
 
+    def has_block(self, sha):
+        return self.blocksdb.has_block(sha)
+
     def get_block_location(self, sha):
         blob, offset = self.blocksdb.get_blob_location(sha)
         assert self.has_raw_blob(blob)
@@ -788,7 +791,6 @@ class Repo:
                 while reader.bytes_left():
                     md5summer.update(reader.read(4096))
                 assert filename == md5summer.hexdigest() + ".recipe", "Invalid recipe found in queue dir:" + full_path
-
         # Check the existence of all required files
         # TODO: check the contents for validity
         meta_info = read_json(os.path.join(queued_item, "session.json"))
@@ -814,12 +816,14 @@ class Repo:
             if filename == "delete.json":
                 snapshots_to_delete = read_json(os.path.join(queued_item, "delete.json"))
                 continue
+            if filename == "blocks.json":
+                continue
             assert False, "Unexpected file in new session:" + filename
 
         # Check that all necessary files are present in the snapshot
         assert set(contents) >= \
             set([meta_info['fingerprint']+".fingerprint",\
-                     "session.json", "bloblist.json", "session.md5"]), \
+                     "session.json", "bloblist.json", "session.md5", "blocks.json"]), \
                      "Missing files in queue dir: "+str(contents)
 
         # Everything seems OK, move the blobs and consolidate the session
@@ -848,6 +852,17 @@ class Repo:
         if os.path.exists(os.path.join(queued_item, "delete.json")):
             self.erase_orphan_blobs()
             safe_delete_file(os.path.join(queued_item, "delete.json"))
+
+        blocks_fname = os.path.join(queued_item, "blocks.json")
+        for block_spec in read_json(blocks_fname):
+            blob_md5, offset, rolling, sha256 = block_spec
+            self.blocksdb.add_block(blob_md5, offset, sha256)
+            self.blocksdb.add_rolling(rolling)
+        # This is not entirely safe. If the commit fails, the block
+        # list will be lost. This is however acceptable, as it is
+        # unlikely and just results in degraded deduplication.
+        safe_delete_file(blocks_fname)
+        self.blocksdb.commit()
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
