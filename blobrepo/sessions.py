@@ -30,7 +30,9 @@ import hashlib
 import types
 
 from common import *
+
 import deduplication
+import rollingcs
 
 """
 The SessionWriter and SessionReader are together with Repository the
@@ -253,6 +255,11 @@ class SessionWriter:
         self.metadatas = {}
         self.found_uncommitted_blocks = []
         self.blob_deduplicator = {}
+
+        all_rolling = self.repo.blocksdb.get_all_rolling()
+        self.rolling_set = rollingcs.IntegerSet(max(len(all_rolling), 1))
+        self.rolling_set.add_all(all_rolling)
+
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
         assert os.path.exists(self.repo.repopath)
@@ -304,7 +311,7 @@ class SessionWriter:
         self.blob_deduplicator[blob_md5] = \
             deduplication.RecipeFinder(self.repo.blocksdb,
                                        repository.DEDUP_BLOCK_SIZE,
-                                       self.repo.blocksdb.get_all_rolling(),
+                                       self.rolling_set,
                                        blobsource,
                                        PieceHandler(self.session_path, repository.DEDUP_BLOCK_SIZE))
         
@@ -330,6 +337,7 @@ class SessionWriter:
             recipe_path = os.path.join(self.session_path, blob_md5 + ".recipe")
             with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
                 recipe_file.write(recipe_json)
+
         del self.blob_deduplicator[blob_md5]
                 
     def has_blob(self, csum):
@@ -414,13 +422,8 @@ class SessionWriter:
                 self.writer.add_blobinfo(blobitem)
         self.writer.commit()
 
-        # Not safe, but the only consequence of a failed transaction
-        # is degradation of deduplication.
-        for block_spec in self.found_uncommitted_blocks:
-            blob_md5, offset, rolling, sha256 = block_spec
-            self.repo.blocksdb.add_block(blob_md5, offset, sha256)
-            self.repo.blocksdb.add_rolling(rolling)
-        self.repo.blocksdb.commit() 
+        blocks_fname = os.path.join(self.session_path, "blocks.json")
+        write_json(blocks_fname, self.found_uncommitted_blocks)
 
         # This is a fail-safe to reduce the risk of lockfile problems going undetected. 
         # It is not meant to be 100% safe. That responsibility lies with the lockfile.
