@@ -21,11 +21,11 @@ from jsonrpc import FileDataSource
 
 import sys
 from rollingcs import RollingChecksum, calc_rolling
+import tempfile
 
 class BlockChecksum:
     def __init__(self, window_size):
-        import tempfile
-        self.buffer = FileAsString(tempfile.TemporaryFile())
+        self.buffer = FileAsString(tempfile.SpooledTemporaryFile(max_size=2**23))
         self.window_size = window_size
         self.position = 0
         self.blocks = []
@@ -74,8 +74,7 @@ class TailBuffer:
 
     def __init__(self, tail_size):
         #self.tail_size = tail_size
-        import tempfile
-        self.buffer = FileAsString(tempfile.TemporaryFile())
+        self.buffer = FileAsString(tempfile.SpooledTemporaryFile(max_size=2**23))
         
     def append(self, s):
         self.buffer.append(s)
@@ -97,11 +96,10 @@ class OriginalPieceHandler:
         pass    
 
 class RecipeFinder:
-    def __init__(self, repo, block_size, all_rolling, blob_source, original_piece_handler = OriginalPieceHandler()):
+    def __init__(self, repo, block_size, intset, blob_source, original_piece_handler = OriginalPieceHandler()):
         self.repo = repo
         self.block_size = block_size
-        self.rs = RollingChecksum(block_size)
-        self.rs.add_needles(all_rolling)
+        self.rs = RollingChecksum(block_size, intset)
         self.blob_source = blob_source
         self.original_piece_handler = original_piece_handler
 
@@ -110,9 +108,13 @@ class RecipeFinder:
         self.original_run_since = None
         self.addresses = []
         self.md5summer = hashlib.md5()
+        self.md5summer_reconstruct = hashlib.md5()
+        #self.reconstructed_file = tempfile.NamedTemporaryFile(delete=False)
+        #print "Reconstructed file is", self.reconstructed_file.name
         self.original_piece_count = 0
         self.closed = False
         self.feed_byte_count = 0
+
 
     def feed(self, s):
         assert len(s) <= self.block_size
@@ -139,6 +141,8 @@ class RecipeFinder:
         for a in self.addresses:
             recipe_size += a.size
         assert original_size == recipe_size
+        #print_recipe(self.get_recipe())
+        assert self.md5summer.hexdigest() == self.md5summer_reconstruct.hexdigest()
         del self.rs
 
     def modify_piece(self, index, blob, offset):
@@ -172,6 +176,8 @@ class RecipeFinder:
         self.original_piece_handler.end_piece(self.original_piece_count)
         #print "Found original data at %s+%s" % ( start_offset, end_offset - start_offset)
         self.__add_address(Struct(match_start = start_offset, blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset))
+        self.md5summer_reconstruct.update(self.tail_buffer[start_offset:end_offset])
+        #self.reconstructed_file.write(self.tail_buffer[start_offset:end_offset])
         self.original_piece_count += 1
 
     def __add_hit(self, offset, sha):
@@ -194,13 +200,26 @@ class RecipeFinder:
         hit_size += match_length
         del sha # No longer valid
 
-        #if match_length: print "Block hit was expanded to %s+%s" % ( offset, hit_size)
+        ### TODO: This is a development test - should be removed before release
+        original_block =  self.tail_buffer[offset:offset+hit_size]
+        refer_block = self.blob_source.get_blob_reader(blob,
+                                                       offset=blob_offset,
+                                                       size=hit_size).read(hit_size)
+        with open("/tmp/original_block", "wb") as f:
+            f.write(original_block)
+        with open("/tmp/referred_block", "wb") as f:
+            f.write(refer_block)
+        assert original_block == refer_block
+        ### End of test
 
+        #if match_length: print "Block hit was expanded to %s+%s" % ( offset, hit_size)
         # There is original data from the end of the last true
         # hit, up to the start of this true hit.
         self.__add_original(self.end_of_last_hit, offset)
         self.__add_address(Struct(match_start = offset, blob = blob, piece_index = None, blob_offset = blob_offset, size = hit_size))
         
+        #self.reconstructed_file.write(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
+        self.md5summer_reconstruct.update(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
         self.end_of_last_hit = offset + hit_size
 
     def __add_address(self, new_address):
@@ -230,7 +249,7 @@ def print_recipe(recipe):
         print "  Source blob  :", p['source'] if p['source'] else "SELF"
         print "  Source offset:", p['offset']
         print "  Size         :", p['size']
-        print "  Position     : %s - %s" % (pos, pos + p['size'])
+        print "  Position     : %s - %s" % (hex(pos), hex(pos + p['size']))
         print "  ---------------"
         pos += p['size']
         if p['source'] == None: # Count the parts we couldn't find elsewhere
@@ -259,5 +278,4 @@ def recepify(front, filename, local_blob_dir = None):
     recipe = finder.get_recipe()
 
     return recipe
-
 
