@@ -6,6 +6,11 @@ md5sum -c <<EOF || exit 1
 d978f6138c52b8be4f07bbbf571cd450  $BIGFILE
 EOF
 
+
+mkrandfile.py 0 1000000 A || exit 1
+mkrandfile.py 1 1000000 B || exit 1
+mkrandfile.py 2 1000000 C || exit 1
+
 # Verify simple recipe repo NOTE: this repo does not contain a block
 # db. Commits will not be correctly deduplicated.
 
@@ -109,10 +114,6 @@ $BOAR mkrepo $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
 $BOAR --repo=$REPO co Dedup || exit 1
 
-mkrandfile.py 0 1000000 A || exit 1
-mkrandfile.py 1 1000000 B || exit 1
-mkrandfile.py 2 1000000 C || exit 1
-
 (cd Dedup && 
     cp ../A . &&
     $BOAR ci -q ) || exit 1
@@ -124,6 +125,31 @@ mkrandfile.py 2 1000000 C || exit 1
 (cd Dedup && 
     cp ../C C &&
     md5sum A ABC C >manifest.md5 && 
+    $BOAR ci -q ) || exit 1
+
+rm -r Dedup || exit 1
+
+$BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
+$BOAR --repo=$REPO co Dedup || { echo "Check-out failed"; exit 1; }
+(cd Dedup && md5sum -c manifest.md5 ) || exit 1
+rm -r $REPO Dedup || exit 1
+
+#################
+
+echo "*** Testing case of A followed by {AB, AB}"
+
+$BOAR mkrepo $REPO || exit 1
+$BOAR --repo=$REPO mksession Dedup || exit 1
+$BOAR --repo=$REPO co Dedup || exit 1
+
+(cd Dedup && 
+    cp ../A . &&
+    $BOAR ci -q ) || exit 1
+
+(cd Dedup && 
+    cat ../A ../B >AB_1 &&
+    cat ../A ../B >AB_2 &&
+    md5sum A AB_1 AB_2 >manifest.md5 &&
     $BOAR ci -q ) || exit 1
 
 rm -r Dedup || exit 1
