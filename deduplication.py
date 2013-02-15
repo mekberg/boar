@@ -24,8 +24,8 @@ from rollingcs import RollingChecksum, calc_rolling
 import tempfile
 
 class BlockChecksum:
-    def __init__(self, window_size):
-        self.buffer = FileAsString(tempfile.SpooledTemporaryFile(max_size=2**23))
+    def __init__(self, window_size, tmpdir = None):
+        self.buffer = FileAsString(tempfile.SpooledTemporaryFile(max_size=2**23, dir=tmpdir))
         self.window_size = window_size
         self.position = 0
         self.blocks = []
@@ -72,12 +72,16 @@ class TailBuffer:
     of the data that is appended to it, but can be accessed using the
     positions of the original data. """
 
-    def __init__(self, tail_size):
+    def __init__(self, tail_size, tmpdir = None):
         #self.tail_size = tail_size
-        self.buffer = FileAsString(tempfile.SpooledTemporaryFile(max_size=2**23))
+        self.tmpfo = tempfile.SpooledTemporaryFile(max_size=2**23, dir = tmpdir)
+        self.buffer = FileAsString(self.tmpfo)
         
     def append(self, s):
         self.buffer.append(s)
+
+    def get_blocks(self, start, size):
+        return file_reader(self.tmpfo, start, start + size)
 
     def __len__(self):
         return len(self.buffer)
@@ -96,14 +100,14 @@ class OriginalPieceHandler:
         pass    
 
 class RecipeFinder:
-    def __init__(self, repo, block_size, intset, blob_source, original_piece_handler = OriginalPieceHandler()):
-        self.repo = repo
+    def __init__(self, blocksdb, block_size, intset, blob_source, original_piece_handler = OriginalPieceHandler(), tmpdir = None):
+        self.blocksdb = blocksdb
         self.block_size = block_size
         self.rs = RollingChecksum(block_size, intset)
         self.blob_source = blob_source
         self.original_piece_handler = original_piece_handler
 
-        self.tail_buffer = TailBuffer(self.block_size*2)
+        self.tail_buffer = TailBuffer(self.block_size*2, tmpdir = tmpdir)
         self.end_of_last_hit = 0
         self.original_run_since = None
         self.addresses = []
@@ -128,7 +132,7 @@ class RecipeFinder:
                 # Ignore overlapping blocks
                 continue
             sha = sha256(self.tail_buffer[offset : offset + self.block_size])
-            if self.repo.has_block(sha):
+            if self.blocksdb.has_block(sha):
                 self.__add_hit(offset, sha)
 
     def close(self):
@@ -172,11 +176,12 @@ class RecipeFinder:
             return
         assert start_offset < end_offset
         self.original_piece_handler.init_piece(self.original_piece_count)
-        self.original_piece_handler.add_piece_data(self.original_piece_count, self.tail_buffer[start_offset:end_offset])
+        for block in self.tail_buffer.get_blocks(start_offset, end_offset - start_offset):
+            self.original_piece_handler.add_piece_data(self.original_piece_count, block)
+            self.md5summer_reconstruct.update(block)
         self.original_piece_handler.end_piece(self.original_piece_count)
         #print "Found original data at %s+%s" % ( start_offset, end_offset - start_offset)
         self.__add_address(Struct(match_start = start_offset, blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset))
-        self.md5summer_reconstruct.update(self.tail_buffer[start_offset:end_offset])
         #self.reconstructed_file.write(self.tail_buffer[start_offset:end_offset])
         self.original_piece_count += 1
 
@@ -185,7 +190,7 @@ class RecipeFinder:
         hit_size = self.block_size
         hit_bytes = self.tail_buffer[offset : offset + hit_size]
 
-        blob, blob_offset = self.repo.get_blob_location(sha)
+        blob, blob_offset = self.blocksdb.get_blob_location(sha)
         #print "Found block hit at %s+%s (pointing at %s %s)" % ( offset, hit_size, blob, blob_offset)
         # We have found a hit, but it might be possible to grow it.
         preceeding_original_data_size = offset - self.end_of_last_hit
