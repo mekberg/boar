@@ -410,6 +410,9 @@ class Repo:
     def get_path(self, subdir, *parts):
         return os.path.join(self.repopath, subdir, *parts)
 
+    def get_tmpdir(self):
+        return self.get_path(TMP_DIR)
+
     def get_repo_identifier(self):
         """Returns the identifier for the repo, or None if the
         repository has no identifier. The latter scenarion will
