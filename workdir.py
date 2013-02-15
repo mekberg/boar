@@ -374,7 +374,7 @@ class Workdir:
                 raise UserError("File %s contents conflicts with manifest" % wd_path)
             try:
                 check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
-            except ConstraintViolation:
+            except ContentViolation:
                 raise UserError("File changed during commit: %s" % wd_path)
             except EnvironmentError, e:
                 if ignore_errors:
@@ -610,10 +610,15 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
         # File does not exist in repo or previously in this new snapshot. Upload it.
         _send_file_hook(abspath) # whitebox testing
         with open_raw(abspath) as f:
+            #t0 = time.time()
             front.init_new_blob(expected_md5sum, blobinfo["size"])
+            #print "check_in_file: front.init_new_blob()", expected_md5sum, time.time() - t0            
             datasource = FileDataSource(f, os.path.getsize(abspath))
             front.add_blob_data_streamed(expected_md5sum, datasource = datasource)
+            #print "check_in_file: front.add_blob_data_streamed()", expected_md5sum, time.time() - t0
             front.blob_finished(expected_md5sum)
+            #print "check_in_file: front.blob_finished()", expected_md5sum, time.time() - t0
+
     front.add(blobinfo)
 
 def init_workdir(path):
