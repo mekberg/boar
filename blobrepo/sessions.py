@@ -184,13 +184,14 @@ class _NaiveSessionWriter:
 
 
 class PieceHandler(deduplication.OriginalPieceHandler):
-    def __init__(self, session_dir, block_size):
+    def __init__(self, session_dir, block_size, tmpdir):
         assert os.path.isdir(session_dir)
         assert block_size > 0
         self.block_size = block_size
         self.session_dir = session_dir
         self.pieces = {}
         self.current_index = None
+        self.tmpdir = tmpdir
 
     def init_piece(self, index):
         assert index >= 0
@@ -203,7 +204,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
             Struct(filename=filename,
                    fileobj = open(filename, "wb"),
                    md5summer = hashlib.md5(),
-                   blockifyer = deduplication.BlockChecksum(self.block_size))
+                   blockifyer = deduplication.BlockChecksum(self.block_size, tmpdir = self.tmpdir))
         self.current_index = index
 
     def add_piece_data(self, index, data):
@@ -315,7 +316,9 @@ class SessionWriter:
                                        repository.DEDUP_BLOCK_SIZE,
                                        self.rolling_set,
                                        blobsource,
-                                       PieceHandler(self.session_path, repository.DEDUP_BLOCK_SIZE))
+                                       PieceHandler(self.session_path, repository.DEDUP_BLOCK_SIZE,
+                                                    tmpdir = self.repo.get_tmpdir()),
+                                       tmpdir = self.repo.get_tmpdir())
         
 
     def add_blob_data(self, blob_md5, fragment):
