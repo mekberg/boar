@@ -36,6 +36,14 @@ class blobs_blocks:
             return
         try:
             self.conn = sqlite3.connect(self.dbfile, check_same_thread = False)
+            pragmas = \
+                "PRAGMA main.page_size = 4096;", \
+                "PRAGMA main.cache_size=10000;", \
+                "PRAGMA main.locking_mode=NORMAL;", \
+                "PRAGMA main.synchronous=OFF;" # TODO: replace with WAL
+                #"PRAGMA main.journal_mode=WAL;" # Requires sqlite 3.7.0
+            for pragma in pragmas:
+                self.conn.execute(pragma)
             self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, sha256 char(64) NOT NULL, row_md5 char(32))")
             self.conn.execute("CREATE TABLE IF NOT EXISTS rolling (value INT NOT NULL)") 
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)")
