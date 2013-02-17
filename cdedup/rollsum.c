@@ -3,12 +3,12 @@
 #include "stdlib.h"
 #include "stdio.h"
 #include "string.h"
+#include "stdint.h"
 
 // Snipped from rsynclib
 // (http://stackoverflow.com/questions/6178201/zlib-adler32-rolling-checksum-problem)
 
 #define ROLLSUM_CHAR_OFFSET 31
-
 
 #define RollsumInit(sum) { \
   (sum)->count=(sum)->s1=(sum)->s2=0; \
@@ -32,6 +32,11 @@
   }
 
 #define RollsumDigest(sum) (((sum)->s2 << 16) | ((sum)->s1 & 0xffff))
+
+#define RollsumDigest64(sum) (						\
+			      (((uint64_t)((sum)->s2)) << 32) |		\
+			      ((sum)->s1)				\
+									)
 
 RollingState* create_rolling(int window_size){
   RollingState* state = (RollingState*) calloc(1, sizeof(RollingState));
@@ -95,6 +100,10 @@ void push_rolling(RollingState* const state, const unsigned char c_add) {
 
 unsigned value_rolling(RollingState* const state) {
   return RollsumDigest(&(state->sum));
+}
+
+uint64_t value64_rolling(RollingState* const state) {
+  return RollsumDigest64(&(state->sum));
 }
 
 static void print_rolling(RollingState* const state){

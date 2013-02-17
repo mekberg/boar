@@ -20,27 +20,27 @@ IntSet* create_intset(const uint32_t bucket_count) {
   return intset;
 }
 
-void add_intset(IntSet* intset, uint32_t int_to_add) {
+void add_intset(IntSet* intset, uint64_t int_to_add) {
   Bucket* const bucket = &intset->buckets[int_to_add % intset->bucket_count];
   //bf_set(intset->filter, int_to_add % intset->filter->size, 1);
   if(bucket->slot_count == 0) {
     bucket->slot_count = 1;
-    bucket->slots = (uint32_t*) malloc(bucket->slot_count * sizeof(uint32_t));
+    bucket->slots = (uint64_t*) malloc(bucket->slot_count * sizeof(uint64_t));
   } else if(bucket->slot_count == bucket->used_slots){
     // Bucket is full - expand it
     bucket->slot_count *= 2;
     //printf("Expanding bucket %d to size %d\n", int_to_add % intset->bucket_count, bucket->slot_count);
-    bucket->slots = (uint32_t*) realloc(bucket->slots, bucket->slot_count * sizeof(uint32_t));
+    bucket->slots = (uint32_t*) realloc(bucket->slots, bucket->slot_count * sizeof(uint64_t));
   }
   bucket->slots[bucket->used_slots++] = int_to_add;
 }
 
-inline int contains_intset(IntSet* const intset, const uint32_t int_to_find) {
+inline int contains_intset(IntSet* const intset, const uint64_t int_to_find) {
   //if(bf_get(intset->filter, int_to_find % intset->filter->size) == 0){
   //  return 0;
   // }
   Bucket* const bucket = &intset->buckets[int_to_find % intset->bucket_count];
-  for(int i=0; i < bucket->used_slots; i++){
+  for(unsigned i=0; i < bucket->used_slots; i++){
     if(bucket->slots[i] == int_to_find){
       return 1;
     }

@@ -1,6 +1,8 @@
 #ifndef ROLLSUM_H
 #define ROLLSUM_H
 
+#include "stdint.h"
+
 typedef struct _Rollsum {
   unsigned long count;               /* count of bytes included in sum */
   unsigned long s1;                  /* s1 part of sum */
@@ -20,6 +22,7 @@ int is_full(RollingState* state);
 int is_empty(RollingState* state);
 void push_rolling(RollingState* state, unsigned char c_add);
 unsigned value_rolling(RollingState* state);
+uint64_t value64_rolling(RollingState* state);
 void destroy_rolling(RollingState* state);
 
 #endif
