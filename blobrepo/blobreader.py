@@ -31,7 +31,14 @@ class RecipeReader(DataSource):
         assert size == None or size >= 0
         self.repo = repo
         self.local_path = local_path
-        self.pieces = recipe['pieces']
+
+        self.pieces = []
+
+        # Expand repeated pieces
+        for piece in recipe['pieces']:
+            repeat = piece.get('repeat', 1)
+            for n in xrange(0, repeat):
+                self.pieces.append(piece)
 
         self.blob_size = recipe['size']
         if size == None:
@@ -64,6 +71,7 @@ class RecipeReader(DataSource):
             self.source = None
             return
         for p in self.pieces:
+            # Ignore repeat here - already taken care of at init
             self.source = p["source"]
             self.blob_source_range_start = offset
             self.source_offset = p["offset"]

@@ -145,9 +145,9 @@ class RecipeFinder:
         assert original_size == self.feed_byte_count
         recipe_size = 0
         for a in self.addresses:
-            recipe_size += a.size
-        assert original_size == recipe_size
+            recipe_size += a.size * a.repeat
         #print_recipe(self.get_recipe())
+        assert original_size == recipe_size
         assert self.md5summer.hexdigest() == self.md5summer_reconstruct.hexdigest()
         del self.rs
 
@@ -167,7 +167,8 @@ class RecipeFinder:
             pieces.append({"source": address.blob, 
                            "offset": address.blob_offset, 
                            "size": address.size, 
-                           "original": address.original})
+                           "original": address.original,
+                           "repeat": address.repeat})
         result = {"method": "concat",
                   "md5sum": self.md5summer.hexdigest(),
                   "size": len(self.tail_buffer),
@@ -186,7 +187,7 @@ class RecipeFinder:
             self.md5summer_reconstruct.update(block)
         self.original_piece_handler.end_piece(self.original_piece_count)
         #print "Found original data at %s+%s" % ( start_offset, end_offset - start_offset)
-        self.__add_address(Struct(match_start = start_offset, blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset, original = True))
+        self.__add_address(Struct(match_start = start_offset, blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset, original = True, repeat = 1))
         #self.reconstructed_file.write(self.tail_buffer[start_offset:end_offset])
         self.original_piece_count += 1
 
@@ -226,7 +227,7 @@ class RecipeFinder:
         # There is original data from the end of the last true
         # hit, up to the start of this true hit.
         self.__add_original(self.end_of_last_hit, offset)
-        self.__add_address(Struct(match_start = offset, blob = blob, piece_index = None, blob_offset = blob_offset, size = hit_size, original = False))
+        self.__add_address(Struct(match_start = offset, blob = blob, piece_index = None, blob_offset = blob_offset, size = hit_size, original = False, repeat = 1))
         
         #self.reconstructed_file.write(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
         self.md5summer_reconstruct.update(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
@@ -244,8 +245,15 @@ class RecipeFinder:
                 prev_address.size += new_address.size
                 #print "Adding (joined)", new_address
             else:
-                self.addresses.append(new_address)
-                #print "Adding (appended)", new_address
+                if prev_address.blob == new_address.blob and \
+                        prev_address.blob_offset == new_address.blob_offset and \
+                        prev_address.size == new_address.size:
+                    assert prev_address.piece_index == None and new_address.piece_index == None
+                    assert prev_address.original == False and new_address.original == False
+                    prev_address.repeat = prev_address.repeat + 1
+                else:
+                    self.addresses.append(new_address)
+                    #print "Adding (appended)", new_address
                     
             
 def print_recipe(recipe):
@@ -259,7 +267,8 @@ def print_recipe(recipe):
         print "  Source blob  :", p['source'] if p['source'] else "SELF"
         print "  Source offset:", p['offset']
         print "  Size         :", p['size']
-        print "  Position     : %s - %s" % (hex(pos), hex(pos + p['size']))
+        print "  Position     : %s - %s" % (hex(pos), hex(pos + p['size'] * p.get('repeat', 1)))
+        print "  Repeat       :", p.get('repeat', "(1)")
         print "  ---------------"
         pos += p['size']
         if p['source'] == None: # Count the parts we couldn't find elsewhere
