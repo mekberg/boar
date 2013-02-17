@@ -34,9 +34,9 @@ class BlockChecksum:
         self.buffer.append(s)
         while len(self.buffer) - self.position >= self.window_size:
             block = self.buffer[self.position:self.position+self.window_size]
-            block_sha256 = sha256(block)
+            block_md5 = md5sum(block)
             block_rolling = calc_rolling(block, self.window_size)
-            self.blocks.append((self.position, block_rolling, block_sha256))
+            self.blocks.append((self.position, block_rolling, block_md5))
             self.position += self.window_size
 
     def harvest(self):
@@ -131,9 +131,11 @@ class RecipeFinder:
             if offset < self.end_of_last_hit:
                 # Ignore overlapping blocks
                 continue
-            sha = sha256(self.tail_buffer[offset : offset + self.block_size])
-            if self.blocksdb.has_block(sha):
-                self.__add_hit(offset, sha)
+            md5 = md5sum(self.tail_buffer[offset : offset + self.block_size])
+            if self.blocksdb.has_block(md5):
+                self.__add_hit(offset, md5)
+            #else:
+            #    print "False hit at", offset
 
     def close(self):
         assert not self.closed
@@ -162,7 +164,10 @@ class RecipeFinder:
         pieces = []
         for address in self.addresses:
             assert address.size > 0
-            pieces.append({"source": address.blob, "offset": address.blob_offset, "size":  address.size})
+            pieces.append({"source": address.blob, 
+                           "offset": address.blob_offset, 
+                           "size": address.size, 
+                           "original": address.original})
         result = {"method": "concat",
                   "md5sum": self.md5summer.hexdigest(),
                   "size": len(self.tail_buffer),
@@ -181,7 +186,7 @@ class RecipeFinder:
             self.md5summer_reconstruct.update(block)
         self.original_piece_handler.end_piece(self.original_piece_count)
         #print "Found original data at %s+%s" % ( start_offset, end_offset - start_offset)
-        self.__add_address(Struct(match_start = start_offset, blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset))
+        self.__add_address(Struct(match_start = start_offset, blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset, original = True))
         #self.reconstructed_file.write(self.tail_buffer[start_offset:end_offset])
         self.original_piece_count += 1
 
@@ -221,7 +226,7 @@ class RecipeFinder:
         # There is original data from the end of the last true
         # hit, up to the start of this true hit.
         self.__add_original(self.end_of_last_hit, offset)
-        self.__add_address(Struct(match_start = offset, blob = blob, piece_index = None, blob_offset = blob_offset, size = hit_size))
+        self.__add_address(Struct(match_start = offset, blob = blob, piece_index = None, blob_offset = blob_offset, size = hit_size, original = False))
         
         #self.reconstructed_file.write(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
         self.md5summer_reconstruct.update(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
@@ -283,4 +288,29 @@ def recepify(front, filename, local_blob_dir = None):
     recipe = finder.get_recipe()
 
     return recipe
+
+def benchmark():
+    import time
+    b = BlockChecksum(2**16)
+    data = "x" * 12345
+    t0 = time.time()
+    for n in range(0,10000):
+        b.feed_string(data)
+        b.harvest()
+    print time.time() - t0
+
+#res=cProfile.run('main()', "prof.txt")
+#import pstats
+#p = pstats.Stats('prof.txt')
+#p.sort_stats('cum').print_stats(20)
+#sys.exit(res)
+
+def main():
+    import cProfile, pstats
+    res=cProfile.run('benchmark()', "deduplication_prof.txt")
+    p = pstats.Stats('deduplication_prof.txt')
+    p.sort_stats('cum').print_stats(20)
+
+#main()
+#benchmark()
 
