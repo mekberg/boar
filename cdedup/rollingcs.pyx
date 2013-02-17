@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+cdef extern from "stdint.h":
+    ctypedef unsigned long long uint64_t
+
 cdef extern from "rollsum.h":
     cdef struct _RollingState:
         pass
@@ -22,7 +25,7 @@ cdef extern from "rollsum.h":
     int is_full(RollingState* state)
     int is_empty(RollingState* state)
     void push_rolling(RollingState* state, unsigned char c_add)
-    int value_rolling(RollingState* state)
+    uint64_t value64_rolling(RollingState* state)
 
 cdef extern from "intset.h":
     cdef struct _IntSet:
@@ -42,15 +45,15 @@ cdef class IntegerSet:
     def __dealloc__(self):
         destroy_intset(self.intset)
 
-    def add(self, unsigned int int_to_add):
+    def add(self, uint64_t int_to_add):
         add_intset(self.intset, int_to_add)
     
     def add_all(self, ints_to_add):
-        cdef unsigned int n
+        cdef uint64_t n
         for n in ints_to_add:
             self.add(n)
 
-    def contains(self, unsigned int int_to_find):
+    def contains(self, uint64_t int_to_find):
         return bool(contains_intset(self.intset, int_to_find))
 
     cdef IntSet* get_intset(self):
@@ -58,7 +61,7 @@ cdef class IntegerSet:
 
 cdef class RollingChecksum:
     cdef RollingState* state
-    cdef int feeded_bytecount
+    cdef uint64_t feeded_bytecount
     cdef unsigned window_size
 
     cdef unsigned feed_pos
@@ -99,7 +102,7 @@ cdef class RollingChecksum:
         return self
 
     def __next__(self):
-        cdef unsigned rolling_value
+        cdef uint64_t rolling_value
         cdef char* buf
         cdef unsigned int buf_len
         cdef IntSet* intset
@@ -114,31 +117,30 @@ cdef class RollingChecksum:
                 self.feeded_bytecount += 1
                 self.feed_pos += 1
                 if self.feeded_bytecount >= self.window_size:
-                    rolling_value = value_rolling(self.state)
+                    rolling_value = value64_rolling(self.state)
                     if contains_intset(intset, rolling_value):
                         return (self.feeded_bytecount - self.window_size, rolling_value)
 
-    cpdef unsigned value(self):
+    cpdef uint64_t value(self):
         try:
             while True:
                 self.next()
         except StopIteration:
-            return value_rolling(self.state)
+            return value64_rolling(self.state)
 
-cpdef unsigned calc_rolling(s, window_size):
+cpdef uint64_t calc_rolling(s, window_size):
     """ Convenience method to calculate the rolling checksum on a
     block."""
     assert len(s) <= window_size
     return _calc_rolling(s, len(s), window_size)
 
-cdef unsigned _calc_rolling(char[] buf, unsigned buf_length, unsigned window_size):
+cdef uint64_t _calc_rolling(char[] buf, unsigned buf_length, unsigned window_size):
     cdef RollingState* state 
-    cdef int result
+    cdef uint64_t result
     state = create_rolling(window_size)
-    assert state
     for n in xrange(0, buf_length):
         push_rolling(state, buf[n])
-    result = value_rolling(state)
+    result = value64_rolling(state)
     destroy_rolling(state)
     return result;
 
@@ -213,6 +215,6 @@ class StopWatch:
         print "MARK: %s %s (total %s)" % ( msg, now - self.t_last, now - self.t_init )
         self.t_last = time.time()
 
-self_test()
+#self_test()
 #benchmark()
 
