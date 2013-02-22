@@ -1,6 +1,6 @@
 import os, sys, tempfile
 
-from common import convert_win_path_to_unix
+from common import convert_win_path_to_unix, md5sum
 
 boar_dirs = [".boar", ".boar_session"]
 TMPDIR=tempfile.gettempdir()
@@ -54,8 +54,10 @@ class WorkdirHelper:
     def addWorkdirFile(self, path, content):
         assert not os.path.isabs(path)
         filepath = os.path.join(self.workdir, path)
+        md5 = md5sum(content)
         with open(filepath, "w") as f:
             f.write(content)
+        return md5
     
     def rmWorkdirFile(self, path):
         assert not os.path.isabs(path)
