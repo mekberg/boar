@@ -188,6 +188,7 @@ class RecipeFinder:
         for block in self.tail_buffer.get_blocks(start_offset, end_offset - start_offset):
             self.original_piece_handler.add_piece_data(self.original_piece_count, block)
             self.md5summer_reconstruct.update(block)
+        #print "Add original '%s'" % block
         self.original_piece_handler.end_piece(self.original_piece_count)
         #print "Found original data at %s+%s" % ( start_offset, end_offset - start_offset)
         self.__add_address(Struct(blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset, original = True, repeat = 1))
@@ -195,6 +196,9 @@ class RecipeFinder:
         self.original_piece_count += 1
 
     def __add_hit(self, offset, md5):
+        """'Offset' is the point in the input stream where the match
+        begins. The match is always as long as the current block
+        size."""
         assert offset >= self.end_of_last_hit
         hit_size = self.block_size
         hit_bytes = self.tail_buffer[offset : offset + hit_size]
@@ -204,32 +208,46 @@ class RecipeFinder:
         #if match_length: print "Block hit was expanded to %s+%s" % ( offset, hit_size)
         # There is original data from the end of the last true
         # hit, up to the start of this true hit.
-        if self.end_of_last_hit != offset: 
+        match_gap = self.end_of_last_hit != offset
+        blob_gap = not self.seqfinder.can_add(md5)
+        if match_gap or blob_gap:            
+            #if match_gap: print "Gap in match at (before) position", self.end_of_last_hit
+            #if blob_gap: print "Gap in blobs at (before) position", self.end_of_last_hit
             # There's a region of original data between this match and
             # the last one
-            self.__add_original(self.end_of_last_hit, offset)
 
             # Finish processing any deduplicated sequence
             if list(self.seqfinder.get_matches()):
-                self.__finish_sequence(offset)
+                self.__finish_sequence()
+
+            #print "Adding original from add_hit", self.end_of_last_hit, offset
+            self.__add_original(self.end_of_last_hit, offset)
 
             # This is no longer a continous match - reset the sequence finder 
             self.seqfinder = self.blocksdb.get_sequence_finder()
 
         self.seqfinder.add_block(md5)
-
-        ######################
-
         #self.reconstructed_file.write(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
         self.end_of_last_hit = offset + hit_size
 
     def __finish_sequence(self):
         blob, blob_offset, match_length = self.seqfinder.get_matches().next()
+        assert blob_offset >= 0
+        assert match_length > 0
+
+        # TODO: remove/fix before release. Cannot read() an unknown amount of data.
+        matched_data = self.blob_source.get_blob_reader(blob, offset=blob_offset, size = match_length).read()
+        self.md5summer_reconstruct.update(matched_data)
+
+        #print "Adding matched data '%s'" % matched_data
+
         self.__add_address(Struct(blob = blob, piece_index = None, blob_offset = blob_offset, size = match_length, original = False, repeat = 1))
-        self.md5summer_reconstruct.update(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = match_length).read())
+
+
 
 
     def __add_address(self, new_address):
+        #print "Adding address", new_address
         if not self.addresses:
             #print "Adding (appended first)", new_address
             self.addresses.append(new_address)
