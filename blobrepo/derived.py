@@ -25,15 +25,46 @@ from boar_common import safe_delete_file
 import atexit
 import repository
 
-class blobs_blocks:
-    def __init__(self, dbfile = ":memory:"):
+class BlockSequenceFinder:
+    def __init__(self, blocksdb):
+        self.blocksdb = blocksdb
+
+        # The candidates are tuples on the form (blob, offset), where
+        # offset is the end of the last matched block.
+        self.candidates = set()
+
+        self.firstblock = True
+        self.block_size = blocksdb.get_block_size()
+
+    def add_block(self, block_md5):
+        if self.firstblock:
+            self.firstblock = False
+            for blob, offset in self.blocksdb.get_block_locations(block_md5):
+                self.candidates.add((blob, offset + self.block_size))
+        else:
+            surviving_candidates = set()
+            for block in self.candidates.intersection(set(self.blocksdb.get_block_locations(block_md5))):
+                blob, offset = block
+                surviving_candidates.add((blob, offset + self.block_size))
+            self.candidates = surviving_candidates
+        print "Candidates are", self.candidates
+
+def block_row_checksum(blob, offset, block_md5):
+    return md5sum("%s-%s-%s" % (blob, offset, block_md5))
+
+def assert_block_row_integrity(blob, offset, block_md5, expected_row_checksum):
+    if expected_row_checksum != block_row_checksum(blob, offset, block_md5):
+        raise repository.SoftCorruptionError("Corrupted row in deduplication block table for (%s %s %s)" % (blob, offset, block_md5))
+
+class BlockLocationsDB:
+    def __init__(self, block_size, dbfile = ":memory:"):
         self.conn = None
         self.dbfile = dbfile
-        self.__init_db()
+        self.__init_db(block_size)
 
-    def __init_db(self):
-        if self.conn:
-            return
+    def __init_db(self, block_size):
+        assert type(block_size) == int and block_size > 0
+        assert not self.conn
         try:
             self.conn = sqlite3.connect(self.dbfile, check_same_thread = False)
             pragmas = \
@@ -44,21 +75,61 @@ class blobs_blocks:
                 #"PRAGMA main.journal_mode=WAL;" # Requires sqlite 3.7.0
             for pragma in pragmas:
                 self.conn.execute(pragma)
-            self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, sha256 char(64) NOT NULL, row_md5 char(32))")
+            self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, md5 char(32) NOT NULL, row_md5 char(32))")
             self.conn.execute("CREATE TABLE IF NOT EXISTS rolling (value INT NOT NULL)") 
+            self.conn.execute("CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)")
+            self.conn.execute("INSERT OR IGNORE INTO props VALUES ('block_size', ?)", [block_size])
             self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)")
-            self.conn.execute("CREATE INDEX IF NOT EXISTS index_sha256 ON blocks (sha256)")
-            self.conn.commit()
+            self.conn.execute("CREATE INDEX IF NOT EXISTS index_md5 ON blocks (md5)")
+            self.conn.commit()            
+            assert self.get_block_size() == block_size
+
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError(e)
 
-    def get_blob_location(self, sha256):
+    def get_sequence_finder(self):
+        return BlockSequenceFinder(self)
+
+    def get_block_size(self):
         c = self.conn.cursor()
-        c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE sha256 = ?", [sha256])
-        row = c.fetchone()
+        c.execute("SELECT value FROM props WHERE name = 'block_size'")
+        value, = c.fetchone()
+        return int(value)
+
+    #def get_relevant_data(self, block_md5):
+    #    sql = "SELECT blob, offset, row_md5 FROM blocks WHERE blob IN (SELECT DISTINCT blob FROM blocks WHERE md5 = ?)"
+    #    c.execute(sql, [block_md5])
+
+    def get_block_locations(self, block_md5):
+        c = self.conn.cursor()
+        c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ?", [block_md5])
+        rows = c.fetchall()
+        for row in rows:
+            blob, offset, row_md5 = row
+            assert_block_row_integrity(blob, offset, block_md5, row_md5)
+            yield blob, offset
+
+    def get_blob_location(self, md5, preferred_blob = None, preferred_offset = None):
+        sw = StopWatch(False)
+        c = self.conn.cursor()
+        row = None
+        if preferred_blob and preferred_offset:
+            c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ? AND blob = ? AND offset = ? LIMIT 1", [md5, preferred_blob, preferred_offset])
+            row = c.fetchone()
+            if row:
+                print "Succeeded in finding preferred location", [md5, preferred_blob, preferred_offset]
+            else:
+                print "failed in finding preferred location", [md5, preferred_blob, preferred_offset]
+        if preferred_blob and not row:
+            c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ? AND blob = ? LIMIT 1", [md5, preferred_blob])
+            row = c.fetchone()
+        if not row:
+            c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ? LIMIT 1", [md5])
+            row = c.fetchone()
+        assert row, "get_blob_location() must be called with args identifying known existing blocks"
         blob, offset, row_md5 = row
-        if row_md5 != md5sum("%s-%s-%s" % (blob, offset, sha256)):
-            raise repository.SoftCorruptionError("Corrupted row in deduplication block table for (%s %s %s)" % (blob, offset, sha256))
+        assert_block_row_integrity(blob, offset, md5, row_md5)
+        sw.mark("blocksdb.get_blob_location()")
         return blob, offset
 
     def get_all_rolling(self):
@@ -68,26 +139,29 @@ class blobs_blocks:
         values = [row[0] for row in rows]
         return values
 
-    def has_block(self, sha256):
+    def has_block(self, md5):
+        sw = StopWatch(False)
         c = self.conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE sha256 = ?", [sha256])
+        c.execute("SELECT 1 FROM blocks WHERE md5 = ?", [md5])
         rows = c.fetchall()
+        sw.mark("blocksdb.has_block()")
         if rows:
             return True
         return False
 
-    def add_block(self, blob, offset, sha256):
+    def add_block(self, blob, offset, md5):
         assert is_md5sum(blob)
-        assert len(sha256) == 64, repr(sha256)
-        md5_row = md5sum("%s-%s-%s" % (blob, offset, sha256))
+        assert len(md5) == 32, repr(md5)
+        md5_row = block_row_checksum(blob, offset, md5)
         try:
-            self.conn.execute("INSERT INTO blocks (blob, offset, sha256, row_md5) VALUES (?, ?, ?, ?)", (blob, offset, sha256, md5_row))
+            self.conn.execute("INSERT INTO blocks (blob, offset, md5, row_md5) VALUES (?, ?, ?, ?)", (blob, offset, md5, md5_row))
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError("Exception while writing to the blocks cache: "+str(e))
 
     def add_rolling(self, rolling):
-        assert 0 <= rolling <= 2**32 - 1
-        self.conn.execute("INSERT OR IGNORE INTO rolling (value) VALUES (?)", [rolling])
+        assert 0 <= rolling <= (2**64 - 1)
+        print rolling
+        self.conn.execute("INSERT OR IGNORE INTO rolling (value) VALUES (?)", [str(rolling)])
 
     def verify(self):
         assert False, "not implemented"
