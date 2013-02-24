@@ -51,18 +51,28 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.wd.checkin()
         recipe = self.repo.get_recipe(blob)
         self.assertEquals(len(recipe['pieces']), 2)
-        self.assertEquals(recipe['pieces'][0], {u'source': u'02129bb861061d1a052c592e2dc6b383', 
-                                                u'repeat': 1, 
-                                                u'original': True, 
-                                                u'offset': 0, 
-                                                u'size': 1})
-        self.assertEquals(recipe['pieces'][1], {u'source': u'00312b74e44d0712882387b8e0f0a57e', 
-                                                u'repeat': 1, 
-                                                u'original': False, 
-                                                u'offset': 0, 
-                                                u'size': 27})
+        self.assertEquals(recipe['pieces'][0], {
+                u'source': u'02129bb861061d1a052c592e2dc6b383', 
+                u'repeat': 1, u'original': True, u'offset': 0, u'size': 1})
+        self.assertEquals(recipe['pieces'][1], {
+                u'source': u'00312b74e44d0712882387b8e0f0a57e', 
+                u'repeat': 1, u'original': False, u'offset': 0, u'size': 27})
         rebuilt_content = self.wd.front.get_blob(blob).read()
         self.assertEquals(md5sum(rebuilt_content), "407badd3ba116d47c556d1366343048c")
+
+    def testMultiplePossibleHits2(self):
+        first_blob = self.addWorkdirFile("a.txt", "aaabbbaaabbbaaabbbaaabbbccc")
+        self.wd.checkin()
+        blob = self.addWorkdirFile("b.txt", "aaabbbccc")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(blob)
+        print_recipe(recipe)
+        self.assertEquals(len(recipe['pieces']), 1)
+        self.assertEquals(recipe['pieces'][0], {
+                u'source': first_blob, 
+                u'repeat': 1, u'original': False, u'offset': 18, u'size': 9})
+        rebuilt_content = self.wd.front.get_blob(blob).read()
+        self.assertEquals(md5sum(rebuilt_content), "d1aaf4767a3c10a473407a4e47b02da6")
         
     def tearDown(self):
         for d in self.remove_at_teardown:
