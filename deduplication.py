@@ -119,9 +119,10 @@ class RecipeFinder:
         self.closed = False
         self.feed_byte_count = 0
 
+        self.seqfinder = None
 
     def feed(self, s):
-        assert len(s) <= self.block_size
+        #assert len(s) <= self.block_size, "%s %s" % (s, self.block_size)
         assert not self.closed
         self.feed_byte_count += len(s)
         self.rs.feed_string(s)
@@ -191,25 +192,34 @@ class RecipeFinder:
         #self.reconstructed_file.write(self.tail_buffer[start_offset:end_offset])
         self.original_piece_count += 1
 
-    def __add_hit(self, offset, sha):
+    def __add_hit(self, offset, md5):
         assert offset >= self.end_of_last_hit
         hit_size = self.block_size
         hit_bytes = self.tail_buffer[offset : offset + hit_size]
 
-        blob, blob_offset = self.blocksdb.get_blob_location(sha)
+        preferred_blob = None
+        preferred_offset = None
+        if self.addresses:
+            last_address = self.addresses[-1]
+            preferred_blob = last_address.blob
+            if preferred_blob:
+                preferred_offset = last_address.blob_offset + last_address.size
+            
+        blob, blob_offset = self.blocksdb.get_blob_location(md5, preferred_blob = preferred_blob, preferred_offset = preferred_offset)
         #print "Found block hit at %s+%s (pointing at %s %s)" % ( offset, hit_size, blob, blob_offset)
         # We have found a hit, but it might be possible to grow it.
         preceeding_original_data_size = offset - self.end_of_last_hit
         potential_growth_size = min(blob_offset, preceeding_original_data_size)
         potential_match = self.blob_source.get_blob_reader(blob, 
                                                            offset=blob_offset - potential_growth_size, 
-                                                           size=potential_growth_size).read(potential_growth_size)
+                                                           size=potential_growth_size).read()
         match_length = len(common_tail(hit_bytes, potential_match))
 
         offset -= match_length
         blob_offset -= match_length
         hit_size += match_length
-        del sha # No longer valid
+        remove_me_md5 = md5 # For block seq experiment
+        del md5 # No longer valid
 
         ### TODO: This is a development test - should be removed before release
         original_block =  self.tail_buffer[offset:offset+hit_size]
@@ -228,7 +238,21 @@ class RecipeFinder:
         # hit, up to the start of this true hit.
         self.__add_original(self.end_of_last_hit, offset)
         self.__add_address(Struct(match_start = offset, blob = blob, piece_index = None, blob_offset = blob_offset, size = hit_size, original = False, repeat = 1))
-        
+
+        ##################
+        # Block sequence experiment
+        ###################
+        if not self.seqfinder:
+            self.seqfinder = self.blocksdb.get_sequence_finder()
+        if self.end_of_last_hit == offset: # This hit is right next to the previous hit
+            # This is a continuation - update block sequence finder
+            print "Block continuation at", blob, offset, blob_offset
+        else:
+            print "End of block continuation"
+            self.seqfinder = self.blocksdb.get_sequence_finder()
+        self.seqfinder.add_block(remove_me_md5)
+        ######################
+
         #self.reconstructed_file.write(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
         self.md5summer_reconstruct.update(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
         self.end_of_last_hit = offset + hit_size
