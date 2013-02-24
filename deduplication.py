@@ -108,7 +108,7 @@ class RecipeFinder:
         self.original_piece_handler = original_piece_handler
 
         self.tail_buffer = TailBuffer(self.block_size*2, tmpdir = tmpdir)
-        self.end_of_last_hit = 0
+        self.end_of_last_hit = 0 # The end of the last matched block
         self.original_run_since = None
         self.addresses = []
         self.md5summer = hashlib.md5()
@@ -119,7 +119,7 @@ class RecipeFinder:
         self.closed = False
         self.feed_byte_count = 0
 
-        self.seqfinder = None
+        self.seqfinder = self.blocksdb.get_sequence_finder()
 
     def feed(self, s):
         #assert len(s) <= self.block_size, "%s %s" % (s, self.block_size)
@@ -141,6 +141,8 @@ class RecipeFinder:
     def close(self):
         assert not self.closed
         self.closed = True
+        if list(self.seqfinder.get_matches()):
+            self.__finish_sequence()
         self.__add_original(self.end_of_last_hit, len(self.tail_buffer))
         original_size = len(self.tail_buffer)
         assert original_size == self.feed_byte_count
@@ -188,7 +190,7 @@ class RecipeFinder:
             self.md5summer_reconstruct.update(block)
         self.original_piece_handler.end_piece(self.original_piece_count)
         #print "Found original data at %s+%s" % ( start_offset, end_offset - start_offset)
-        self.__add_address(Struct(match_start = start_offset, blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset, original = True, repeat = 1))
+        self.__add_address(Struct(blob = None, piece_index = self.original_piece_count, blob_offset = start_offset, size = end_offset - start_offset, original = True, repeat = 1))
         #self.reconstructed_file.write(self.tail_buffer[start_offset:end_offset])
         self.original_piece_count += 1
 
@@ -197,65 +199,35 @@ class RecipeFinder:
         hit_size = self.block_size
         hit_bytes = self.tail_buffer[offset : offset + hit_size]
 
-        preferred_blob = None
-        preferred_offset = None
-        if self.addresses:
-            last_address = self.addresses[-1]
-            preferred_blob = last_address.blob
-            if preferred_blob:
-                preferred_offset = last_address.blob_offset + last_address.size
-            
-        blob, blob_offset = self.blocksdb.get_blob_location(md5, preferred_blob = preferred_blob, preferred_offset = preferred_offset)
-        #print "Found block hit at %s+%s (pointing at %s %s)" % ( offset, hit_size, blob, blob_offset)
-        # We have found a hit, but it might be possible to grow it.
-        preceeding_original_data_size = offset - self.end_of_last_hit
-        potential_growth_size = min(blob_offset, preceeding_original_data_size)
-        potential_match = self.blob_source.get_blob_reader(blob, 
-                                                           offset=blob_offset - potential_growth_size, 
-                                                           size=potential_growth_size).read()
-        match_length = len(common_tail(hit_bytes, potential_match))
-
-        offset -= match_length
-        blob_offset -= match_length
-        hit_size += match_length
-        remove_me_md5 = md5 # For block seq experiment
-        del md5 # No longer valid
-
-        ### TODO: This is a development test - should be removed before release
-        original_block =  self.tail_buffer[offset:offset+hit_size]
-        refer_block = self.blob_source.get_blob_reader(blob,
-                                                       offset=blob_offset,
-                                                       size=hit_size).read(hit_size)
-        with open("/tmp/original_block", "wb") as f:
-            f.write(original_block)
-        with open("/tmp/referred_block", "wb") as f:
-            f.write(refer_block)
-        assert original_block == refer_block
-        ### End of test
+        blob, blob_offset = self.blocksdb.get_block_locations(md5, limit=1).next()
 
         #if match_length: print "Block hit was expanded to %s+%s" % ( offset, hit_size)
         # There is original data from the end of the last true
         # hit, up to the start of this true hit.
-        self.__add_original(self.end_of_last_hit, offset)
-        self.__add_address(Struct(match_start = offset, blob = blob, piece_index = None, blob_offset = blob_offset, size = hit_size, original = False, repeat = 1))
+        if self.end_of_last_hit != offset: 
+            # There's a region of original data between this match and
+            # the last one
+            self.__add_original(self.end_of_last_hit, offset)
 
-        ##################
-        # Block sequence experiment
-        ###################
-        if not self.seqfinder:
+            # Finish processing any deduplicated sequence
+            if list(self.seqfinder.get_matches()):
+                self.__finish_sequence(offset)
+
+            # This is no longer a continous match - reset the sequence finder 
             self.seqfinder = self.blocksdb.get_sequence_finder()
-        if self.end_of_last_hit == offset: # This hit is right next to the previous hit
-            # This is a continuation - update block sequence finder
-            print "Block continuation at", blob, offset, blob_offset
-        else:
-            print "End of block continuation"
-            self.seqfinder = self.blocksdb.get_sequence_finder()
-        self.seqfinder.add_block(remove_me_md5)
+
+        self.seqfinder.add_block(md5)
+
         ######################
 
         #self.reconstructed_file.write(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
-        self.md5summer_reconstruct.update(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
         self.end_of_last_hit = offset + hit_size
+
+    def __finish_sequence(self):
+        blob, blob_offset, match_length = self.seqfinder.get_matches().next()
+        self.__add_address(Struct(blob = blob, piece_index = None, blob_offset = blob_offset, size = match_length, original = False, repeat = 1))
+        self.md5summer_reconstruct.update(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = match_length).read())
+
 
     def __add_address(self, new_address):
         if not self.addresses:
