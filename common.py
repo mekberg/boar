@@ -880,3 +880,20 @@ class Struct:
         return "Struct: " + repr(self.__dict__)
 
 
+import time
+class StopWatch:
+    def __init__(self, enabled = True):
+        self.t_init = time.time()
+        self.t_last = time.time()
+        self.enabled = enabled
+
+    def mark(self, msg):
+        now = time.time()
+        if self.enabled:
+            print "MARK: %s %s (total %s)" % ( msg, now - self.t_last, now - self.t_init )
+        self.t_last = time.time()
+
+
+class DevNull:
+    def write(self, *args):
+        pass
