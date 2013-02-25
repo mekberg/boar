@@ -89,7 +89,9 @@ class RecipeReader(DataSource):
         readable = self.source_size - pos_from_source_start
         return readable
 
-    def read(self, readsize):
+    def read(self, readsize = None):
+        if readsize == None:
+            readsize = self.bytes_left()
         assert readsize >= 0
         assert self._bytes_left >= 0
         readsize = min(self._bytes_left, readsize)

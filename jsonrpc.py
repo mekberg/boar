@@ -167,7 +167,7 @@ class DataSource:
         this data source."""
         raise NotImplementedError()
     
-    def read(self, n):
+    def read(self, n = None):
         """Reads and returns a number of bytes. May return fewer bytes
         than specified if there are no more bytes to read."""
         raise NotImplementedError()
@@ -180,7 +180,9 @@ class StreamDataSource(DataSource):
     def bytes_left(self):
         return self.remaining
 
-    def read(self, n):
+    def read(self, n = None):
+        if n == None:
+            n = self.bytes_left()
         if self.remaining == 0:
             return ""
         bytes_to_read = min(n, self.remaining)
