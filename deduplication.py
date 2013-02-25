@@ -247,27 +247,19 @@ class RecipeFinder:
 
 
     def __add_address(self, new_address):
-        #print "Adding address", new_address
         if not self.addresses:
-            #print "Adding (appended first)", new_address
             self.addresses.append(new_address)
         else:
             prev_address = self.addresses[-1]
             if prev_address.blob == new_address.blob and \
-                    new_address.blob_offset == prev_address.blob_offset + prev_address.size:
-                    #prev_address.match_start + prev_address.size == new_address.match_start:
-                prev_address.size += new_address.size
-                #print "Adding (joined)", new_address
+                    prev_address.blob_offset == new_address.blob_offset and \
+                    prev_address.size == new_address.size:
+                assert prev_address.piece_index == None and new_address.piece_index == None
+                assert prev_address.original == False and new_address.original == False
+                prev_address.repeat = prev_address.repeat + 1
             else:
-                if prev_address.blob == new_address.blob and \
-                        prev_address.blob_offset == new_address.blob_offset and \
-                        prev_address.size == new_address.size:
-                    assert prev_address.piece_index == None and new_address.piece_index == None
-                    assert prev_address.original == False and new_address.original == False
-                    prev_address.repeat = prev_address.repeat + 1
-                else:
-                    self.addresses.append(new_address)
-                    #print "Adding (appended)", new_address
+                self.addresses.append(new_address)
+                #print "Adding (appended)", new_address
                     
             
 def print_recipe(recipe):
