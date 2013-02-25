@@ -99,6 +99,11 @@ class OriginalPieceHandler:
     def end_piece(self, index):
         pass    
 
+START = "START"
+ORIGINAL = "ORIGINAL"
+MATCH = "MATCH"
+END = "END"
+
 class RecipeFinder:
     def __init__(self, blocksdb, block_size, intset, blob_source, original_piece_handler = OriginalPieceHandler(), tmpdir = None):
         self.blocksdb = blocksdb
@@ -120,6 +125,18 @@ class RecipeFinder:
         self.feed_byte_count = 0
 
         self.seqfinder = self.blocksdb.get_sequence_finder()
+        self.dedup_state = START
+        self.dedup_state_start = 0
+        self.seq_number = 0
+
+    def __enter_state(self, state, offset):
+        assert state in (MATCH, ORIGINAL, END)
+        assert offset >= self.dedup_state_start
+        if state != self.dedup_state:
+            print "Border at %s (from %s to %s)" % (offset, self.dedup_state, state)
+            self.dedup_state = state
+            self.dedup_state_start = offset
+            self.seq_number += 1
 
     def feed(self, s):
         #assert len(s) <= self.block_size, "%s %s" % (s, self.block_size)
@@ -134,13 +151,27 @@ class RecipeFinder:
                 continue
             md5 = md5sum(self.tail_buffer[offset : offset + self.block_size])
             if self.blocksdb.has_block(md5):
+                if offset != self.end_of_last_hit + self.block_size:
+                    self.__enter_state(ORIGINAL, self.end_of_last_hit)
+                self.__enter_state(MATCH, offset)
                 self.__add_hit(offset, md5)
+                self.end_of_last_hit = offset + self.block_size
             #else:
             #    print "False hit at", offset
+
+        if self.end_of_last_hit <= (self.feed_byte_count - self.block_size):
+            self.__enter_state(ORIGINAL, self.end_of_last_hit)
+        # Guaranteed original data from self.end_of_last_hit to
+        # (self.feed_byte_count - window_size). (The next byte that
+        # arrives could potentially cause a block hit
+        # [self.feed_byte_count - window_size, self.feed_byte_count])
 
     def close(self):
         assert not self.closed
         self.closed = True
+        if self.end_of_last_hit != self.feed_byte_count:
+            self.__enter_state(ORIGINAL, self.end_of_last_hit)
+        self.__enter_state(END, self.feed_byte_count)
         if list(self.seqfinder.get_matches()):
             self.__finish_sequence()
         self.__add_original(self.end_of_last_hit, len(self.tail_buffer))
@@ -201,7 +232,6 @@ class RecipeFinder:
         size."""
         assert offset >= self.end_of_last_hit
         hit_size = self.block_size
-        hit_bytes = self.tail_buffer[offset : offset + hit_size]
 
         blob, blob_offset = self.blocksdb.get_block_locations(md5, limit=1).next()
 
@@ -228,7 +258,6 @@ class RecipeFinder:
 
         self.seqfinder.add_block(md5)
         #self.reconstructed_file.write(self.blob_source.get_blob_reader(blob, offset=blob_offset, size = hit_size).read())
-        self.end_of_last_hit = offset + hit_size
 
     def __finish_sequence(self):
         blob, blob_offset, match_length = self.seqfinder.get_matches().next()
