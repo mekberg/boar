@@ -32,22 +32,39 @@ class BlockSequenceFinder:
         # The candidates are tuples on the form (blob, offset), where
         # offset is the end of the last matched block.
         self.candidates = set()
+        self.feeded_blocks = 0
 
         self.firstblock = True
         self.block_size = blocksdb.get_block_size()
 
+    def get_matches(self):
+        length = self.block_size * self.feeded_blocks
+        for blob, end_pos in self.candidates:
+            start_pos = end_pos - length
+            assert start_pos >= 0
+            yield blob, start_pos, length
+
+    def can_add(self, block_md5):
+        return self.firstblock or self.__filter_and_extend_candidates(block_md5)
+
+    def __filter_and_extend_candidates(self, block_md5):
+        """ Returns the candidates that can be extended with the given block."""
+        surviving_candidates = set()
+        for block in self.candidates.intersection(set(self.blocksdb.get_block_locations(block_md5))):
+            blob, offset = block
+            surviving_candidates.add((blob, offset + self.block_size))
+        return surviving_candidates
+
     def add_block(self, block_md5):
+        self.feeded_blocks += 1
         if self.firstblock:
             self.firstblock = False
             for blob, offset in self.blocksdb.get_block_locations(block_md5):
                 self.candidates.add((blob, offset + self.block_size))
         else:
-            surviving_candidates = set()
-            for block in self.candidates.intersection(set(self.blocksdb.get_block_locations(block_md5))):
-                blob, offset = block
-                surviving_candidates.add((blob, offset + self.block_size))
-            self.candidates = surviving_candidates
-        print "Candidates are", self.candidates
+            self.candidates = self.__filter_and_extend_candidates(block_md5)
+        assert self.candidates, "No remaining candidates"
+        print "Candidates are", list(self.get_matches())
 
 def block_row_checksum(blob, offset, block_md5):
     return md5sum("%s-%s-%s" % (blob, offset, block_md5))
@@ -96,41 +113,14 @@ class BlockLocationsDB:
         value, = c.fetchone()
         return int(value)
 
-    #def get_relevant_data(self, block_md5):
-    #    sql = "SELECT blob, offset, row_md5 FROM blocks WHERE blob IN (SELECT DISTINCT blob FROM blocks WHERE md5 = ?)"
-    #    c.execute(sql, [block_md5])
-
-    def get_block_locations(self, block_md5):
+    def get_block_locations(self, block_md5, limit = -1):
         c = self.conn.cursor()
-        c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ?", [block_md5])
+        c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ? LIMIT ?", [block_md5, limit])
         rows = c.fetchall()
         for row in rows:
             blob, offset, row_md5 = row
             assert_block_row_integrity(blob, offset, block_md5, row_md5)
             yield blob, offset
-
-    def get_blob_location(self, md5, preferred_blob = None, preferred_offset = None):
-        sw = StopWatch(False)
-        c = self.conn.cursor()
-        row = None
-        if preferred_blob and preferred_offset:
-            c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ? AND blob = ? AND offset = ? LIMIT 1", [md5, preferred_blob, preferred_offset])
-            row = c.fetchone()
-            if row:
-                print "Succeeded in finding preferred location", [md5, preferred_blob, preferred_offset]
-            else:
-                print "failed in finding preferred location", [md5, preferred_blob, preferred_offset]
-        if preferred_blob and not row:
-            c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ? AND blob = ? LIMIT 1", [md5, preferred_blob])
-            row = c.fetchone()
-        if not row:
-            c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ? LIMIT 1", [md5])
-            row = c.fetchone()
-        assert row, "get_blob_location() must be called with args identifying known existing blocks"
-        blob, offset, row_md5 = row
-        assert_block_row_integrity(blob, offset, md5, row_md5)
-        sw.mark("blocksdb.get_blob_location()")
-        return blob, offset
 
     def get_all_rolling(self):
         c = self.conn.cursor()
