@@ -126,17 +126,23 @@ class RecipeFinder:
 
         self.seqfinder = self.blocksdb.get_sequence_finder()
         self.dedup_state = START
-        self.dedup_state_start = 0
+        self.dedup_last_border = 0
+        self.dedup_last_offset = 0
         self.seq_number = 0
 
     def __enter_state(self, state, offset):
         assert state in (MATCH, ORIGINAL, END)
-        assert offset >= self.dedup_state_start
+        assert offset >= self.dedup_last_border
+        if self.dedup_state == ORIGINAL:
+            print "Original data (seq %s): '%s'" % (self.seq_number, self.tail_buffer[self.dedup_last_offset:offset])
+        elif self.dedup_state == MATCH:
+            print "Matched data (seq %s): '%s'" % (self.seq_number, self.tail_buffer[self.dedup_last_offset:offset])
         if state != self.dedup_state:
             print "Border at %s (from %s to %s)" % (offset, self.dedup_state, state)
             self.dedup_state = state
-            self.dedup_state_start = offset
+            self.dedup_last_border = offset
             self.seq_number += 1
+        self.dedup_last_offset = offset
 
     def feed(self, s):
         #assert len(s) <= self.block_size, "%s %s" % (s, self.block_size)
@@ -151,7 +157,7 @@ class RecipeFinder:
                 continue
             md5 = md5sum(self.tail_buffer[offset : offset + self.block_size])
             if self.blocksdb.has_block(md5):
-                if offset != self.end_of_last_hit + self.block_size:
+                if offset - self.end_of_last_hit > 0:
                     self.__enter_state(ORIGINAL, self.end_of_last_hit)
                 self.__enter_state(MATCH, offset)
                 self.__add_hit(offset, md5)
@@ -159,7 +165,7 @@ class RecipeFinder:
             #else:
             #    print "False hit at", offset
 
-        if self.end_of_last_hit <= (self.feed_byte_count - self.block_size):
+        if self.end_of_last_hit < (self.feed_byte_count - self.block_size):
             self.__enter_state(ORIGINAL, self.end_of_last_hit)
         # Guaranteed original data from self.end_of_last_hit to
         # (self.feed_byte_count - window_size). (The next byte that
