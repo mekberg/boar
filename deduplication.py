@@ -128,17 +128,25 @@ class RecipeFinder:
         self.dedup_state = START
         self.dedup_last_border = 0
         self.dedup_last_offset = 0
+        self.dedup_last_flush = 0
         self.seq_number = 0
+
+    def __flush(self, offset):
+        if self.dedup_last_flush == offset:
+            return
+        if self.dedup_state == ORIGINAL:
+            print "Flushing original data (seq %s): '%s'" % (self.seq_number, self.tail_buffer[self.dedup_last_flush:offset])
+            #self.__add_original(self.dedup_last_flush, offset)
+        elif self.dedup_state == MATCH:
+            print "Flushing matched data (seq %s): '%s'" % (self.seq_number, self.tail_buffer[self.dedup_last_flush:offset])
+        self.dedup_last_flush = offset
 
     def __enter_state(self, state, offset):
         assert state in (MATCH, ORIGINAL, END)
         assert offset >= self.dedup_last_border
-        if self.dedup_state == ORIGINAL:
-            print "Original data (seq %s): '%s'" % (self.seq_number, self.tail_buffer[self.dedup_last_offset:offset])
-        elif self.dedup_state == MATCH:
-            print "Matched data (seq %s): '%s'" % (self.seq_number, self.tail_buffer[self.dedup_last_offset:offset])
+        self.__flush(offset)
         if state != self.dedup_state:
-            print "Border at %s (from %s to %s)" % (offset, self.dedup_state, state)
+            #print "Border at %s (from %s to %s)" % (offset, self.dedup_state, state)
             self.dedup_state = state
             self.dedup_last_border = offset
             self.seq_number += 1
@@ -286,11 +294,13 @@ class RecipeFinder:
             self.addresses.append(new_address)
         else:
             prev_address = self.addresses[-1]
-            if prev_address.blob == new_address.blob and \
+            if prev_address.blob != None and \
+                    prev_address.blob == new_address.blob and \
                     prev_address.blob_offset == new_address.blob_offset and \
                     prev_address.size == new_address.size:
-                assert prev_address.piece_index == None and new_address.piece_index == None
+                # This match is identical to the previous one. Make it a repeat.
                 assert prev_address.original == False and new_address.original == False
+                assert prev_address.piece_index == None and new_address.piece_index == None
                 prev_address.repeat = prev_address.repeat + 1
             else:
                 self.addresses.append(new_address)
