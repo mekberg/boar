@@ -129,16 +129,19 @@ class RecipeFinder:
         self.dedup_last_border = 0
         self.dedup_last_offset = 0
         self.dedup_last_flush = 0
-        self.seq_number = 0
+        self.seq_number = -1
+        self.sequences = []
 
     def __flush(self, offset):
         if self.dedup_last_flush == offset:
             return
         if self.dedup_state == ORIGINAL:
             print "Flushing original data (seq %s): '%s'" % (self.seq_number, self.tail_buffer[self.dedup_last_flush:offset])
-            #self.__add_original(self.dedup_last_flush, offset)
+            self.__add_original(self.dedup_last_flush, offset)
         elif self.dedup_state == MATCH:
             print "Flushing matched data (seq %s): '%s'" % (self.seq_number, self.tail_buffer[self.dedup_last_flush:offset])
+            self.__add_hit(offset, md5sum(self.tail_buffer[self.dedup_last_flush:offset]))
+
         self.dedup_last_flush = offset
 
     def __enter_state(self, state, offset):
@@ -147,11 +150,34 @@ class RecipeFinder:
         self.__flush(offset)
         if state != self.dedup_state:
             #print "Border at %s (from %s to %s)" % (offset, self.dedup_state, state)
+            if state == MATCH:
+                self.seq_number += 1
+                self.sequences.append([]) # sequence of md5s
+            elif state == ORIGINAL:
+                self.seq_number += 1
+                self.sequences.append((offset,0)) # start, size
             self.dedup_state = state
             self.dedup_last_border = offset
-            self.seq_number += 1
         self.dedup_last_offset = offset
+        assert self.seq_number == len(self.sequences) - 1
 
+    def __add_block_to_current_sequence(self, md5):
+        self.sequences[self.seq_number].append(md5)
+
+    def __add_original_to_current_sequence(self, size):
+        offset, old_size = self.sequences[self.seq_number]        
+        self.sequences[self.seq_number] = (offset, old_size + size)        
+
+        """
+    def __event_block_match(self, offset, md5):
+        self.__enter_state(MATCH, offset)
+        print "EVENT block match: ",  self.tail_buffer[offset : offset + self.block_size]
+
+    def __event_original_data(self, start, end):
+        self.__enter_state(ORIGINAL, start)
+        print "EVENT original data: ",  self.tail_buffer[start : end]
+        """
+        
     def feed(self, s):
         #assert len(s) <= self.block_size, "%s %s" % (s, self.block_size)
         assert not self.closed
@@ -167,8 +193,9 @@ class RecipeFinder:
             if self.blocksdb.has_block(md5):
                 if offset - self.end_of_last_hit > 0:
                     self.__enter_state(ORIGINAL, self.end_of_last_hit)
+                    self.__add_original_to_current_sequence(offset - self.end_of_last_hit)
                 self.__enter_state(MATCH, offset)
-                self.__add_hit(offset, md5)
+                self.__add_block_to_current_sequence(md5)
                 self.end_of_last_hit = offset + self.block_size
             #else:
             #    print "False hit at", offset
@@ -180,21 +207,39 @@ class RecipeFinder:
         # arrives could potentially cause a block hit
         # [self.feed_byte_count - window_size, self.feed_byte_count])
 
+    def seq2rec(self):
+        print "=== seq2rec ==="
+        print self.sequences
+        for s in self.sequences:
+            if type(s) == tuple:
+                offset, size = s
+                print size, "bytes of original data"
+            elif type(s) == list:
+                assert s
+                seqfinder = self.blocksdb.get_sequence_finder()
+                for md5 in s:
+                    seqfinder.add_block(md5)
+                blob, offset, size = seqfinder.get_matches().next()
+                print size, "bytes from blob", blob, "at position", offset
+                
+
     def close(self):
         assert not self.closed
         self.closed = True
-        if self.end_of_last_hit != self.feed_byte_count:
-            self.__enter_state(ORIGINAL, self.end_of_last_hit)
-        self.__enter_state(END, self.feed_byte_count)
         if list(self.seqfinder.get_matches()):
             self.__finish_sequence()
-        self.__add_original(self.end_of_last_hit, len(self.tail_buffer))
+        if self.end_of_last_hit != self.feed_byte_count:
+            self.__enter_state(ORIGINAL, self.end_of_last_hit)
+            self.__add_original_to_current_sequence(self.feed_byte_count - self.end_of_last_hit)
+            self.__flush(self.feed_byte_count)
+        self.__enter_state(END, self.feed_byte_count)
         original_size = len(self.tail_buffer)
         assert original_size == self.feed_byte_count
         recipe_size = 0
         for a in self.addresses:
             recipe_size += a.size * a.repeat
-        #print_recipe(self.get_recipe())
+        print_recipe(self.get_recipe())
+        self.seq2rec()
         assert original_size == recipe_size
         assert self.md5summer.hexdigest() == self.md5summer_reconstruct.hexdigest()
         del self.rs
@@ -263,9 +308,6 @@ class RecipeFinder:
             # Finish processing any deduplicated sequence
             if list(self.seqfinder.get_matches()):
                 self.__finish_sequence()
-
-            #print "Adding original from add_hit", self.end_of_last_hit, offset
-            self.__add_original(self.end_of_last_hit, offset)
 
             # This is no longer a continous match - reset the sequence finder 
             self.seqfinder = self.blocksdb.get_sequence_finder()
