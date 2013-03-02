@@ -89,7 +89,7 @@ class TestDeduplication(unittest.TestCase, WorkdirHelper):
         rebuilt_content = self.wd.front.get_blob(c_blob).read()
         self.assertEquals(md5sum(rebuilt_content), "6547436690a26a399603a7096e876a2d")
 
-    def testInterleavedHit(self):
+    def testInterleavedHit1(self):
         a_blob = self.addWorkdirFile("a.txt", "aaa")
         self.wd.checkin()
         b_blob = self.addWorkdirFile("b.txt", "XaaaXaaaX")
@@ -115,6 +115,50 @@ class TestDeduplication(unittest.TestCase, WorkdirHelper):
                 'repeat': 1, 'original': True, 'offset': 0, 'size': 1})
         rebuilt_content = self.wd.front.get_blob(b_blob).read()
         self.assertEquals(md5sum(rebuilt_content), "e18585992d1ea79a30a34e015c49719e")
+
+    def testInterleavedHit2(self):
+        a_blob = self.addWorkdirFile("a.txt", "aaa")
+        self.wd.checkin()
+        b_blob = self.addWorkdirFile("b.txt", "aaaXaaa")
+        self.wd.checkin()
+        x_blob = md5sum("X")
+        recipe = self.repo.get_recipe(b_blob)
+        #print_recipe(recipe)
+        self.assertEquals(len(recipe['pieces']), 3)
+        self.assertEquals(recipe['pieces'][0], {
+                'source': a_blob, 
+                'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
+        self.assertEquals(recipe['pieces'][1], {
+                'source': x_blob, 
+                'repeat': 1, 'original': True, 'offset': 0, 'size': 1})
+        self.assertEquals(recipe['pieces'][2], {
+                'source': a_blob, 
+                'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
+        rebuilt_content = self.wd.front.get_blob(b_blob).read()
+        self.assertEquals(md5sum(rebuilt_content), "78c011eeafaad0783eb1d90392e08b46")
+
+    def testAmbigousHit(self):
+        a_blob = self.addWorkdirFile("a.txt", "aaaaaa")
+        self.wd.checkin()
+        b_blob = self.addWorkdirFile("b.txt", "aaa")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(b_blob)
+        self.assertEquals(len(recipe['pieces']), 1)
+        self.assertEquals(recipe['pieces'][0], {
+                'source': a_blob,
+                'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
+        rebuilt_content = self.wd.front.get_blob(b_blob).read()
+        self.assertEquals(rebuilt_content, "aaa")
+        #print_recipe(recipe)
+
+    def testRepeatedHit(self):
+        a_blob = self.addWorkdirFile("a.txt", "aaa")
+        self.wd.checkin()
+        b_blob = self.addWorkdirFile("b.txt", "XXXaaaXXXaaaXXX")
+        self.wd.checkin()
+        x_blob = md5sum("X")
+        recipe = self.repo.get_recipe(b_blob)
+        #print_recipe(recipe)
         
     def tearDown(self):
         for d in self.remove_at_teardown:
