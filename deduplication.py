@@ -22,6 +22,7 @@ from jsonrpc import FileDataSource
 import sys
 from rollingcs import RollingChecksum, calc_rolling
 import tempfile
+import array
 
 class BlockChecksum:
     def __init__(self, window_size, tmpdir = None):
@@ -72,23 +73,40 @@ class TailBuffer:
     of the data that is appended to it, but can be accessed using the
     positions of the original data. """
 
-    def __init__(self, tail_size, tmpdir = None):
-        #self.tail_size = tail_size
-        self.tmpfo = tempfile.SpooledTemporaryFile(max_size=2**23, dir = tmpdir)
-        self.buffer = FileAsString(self.tmpfo)
+    def __init__(self):
+        self.buffer = array.array("c")
+        self.shifted = 0
         
     def append(self, s):
-        self.buffer.append(s)
+        self.buffer.fromstring(s)
 
-    def get_blocks(self, start, size):
-        assert False
-        return file_reader(self.tmpfo, start, start + size)
+    def release(self, offset):
+        assert offset >= self.shifted
+        shift = offset - self.shifted
+        self.shifted += shift
+        del self.buffer[:shift]
+        #print "Tail buffer is now virtually", (len(self)), "bytes, but only", len(self.buffer), "in reality"
 
     def __len__(self):
-        return len(self.buffer)
+        return self.shifted + len(self.buffer)
 
     def __getitem__(self, index):
-        return self.buffer.__getitem__(index)
+        assert isinstance(index, slice)
+        assert index.step == None, index
+        assert index.start >= self.shifted and index.stop >= self.shifted, \
+            "Requested slice %s overlaps with the released part of the buffer (up to %s)" % (index, self.shifted) 
+        index2 = slice(index.start - self.shifted, index.stop - self.shifted)
+        #print index, "->", index2
+        return self.buffer.__getitem__(index2).tostring()
+
+"""
+tb = TailBuffer()
+tb.append("abc")
+tb.append("def")
+print tb[2:6]
+tb.release(3)
+print tb[2:6]
+"""
 
 class OriginalPieceHandler:
     def init_piece(self, index):
@@ -176,8 +194,9 @@ class RecipeFinder(GenericStateMachine):
         self.rs = RollingChecksum(block_size, intset)
         self.original_piece_handler = original_piece_handler
 
-        self.tail_buffer = TailBuffer(self.block_size*2, tmpdir = tmpdir)
+        self.tail_buffer = TailBuffer()
         self.end_of_last_hit = 0 # The end of the last matched block
+        self.last_flush_end = 0
         self.md5summer = hashlib.md5()
         self.restored_md5summer = hashlib.md5()
 
@@ -195,6 +214,9 @@ class RecipeFinder(GenericStateMachine):
         self.original_piece_handler.init_piece(self.seq_number)
 
     def __on_original_data_part_end(self, **args):
+        #print args
+        #print "Releasing ", self.last_flush_end
+        self.tail_buffer.release(self.last_flush_end)
         data = self.tail_buffer[self.last_flush_end : args['offset']]
         self.last_flush_end = args['offset']
         self.end_of_last_hit = args['offset']
@@ -230,6 +252,7 @@ class RecipeFinder(GenericStateMachine):
 
     def feed(self, s):
         #print "Feeding", len(s), "bytes"
+        assert type(s) == str
         assert not self.closed
         self.feed_byte_count += len(s)
         self.rs.feed_string(s)
