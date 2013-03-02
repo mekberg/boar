@@ -39,13 +39,18 @@ class BlockSequenceFinder:
 
     def get_matches(self):
         length = self.block_size * self.feeded_blocks
-        for blob, end_pos in self.candidates:
+        for blob, end_pos in sorted(self.candidates):
+            # By sorting, we get a predictable order which makes
+            # testing easier. As a secondary effect, we also
+            # concentrate the hits to fewer blobs (the ones with lower
+            # blob-ids), which may have positive cache effects on
+            # access.
             start_pos = end_pos - length
             assert start_pos >= 0
             yield blob, start_pos, length
 
     def can_add(self, block_md5):
-        return self.firstblock or self.__filter_and_extend_candidates(block_md5)
+        return self.firstblock or bool(self.__filter_and_extend_candidates(block_md5))
 
     def __filter_and_extend_candidates(self, block_md5):
         """ Returns the candidates that can be extended with the given block."""
@@ -64,7 +69,7 @@ class BlockSequenceFinder:
         else:
             self.candidates = self.__filter_and_extend_candidates(block_md5)
         assert self.candidates, "No remaining candidates"
-        print "Candidates are", list(self.get_matches())
+        #print "Candidates are", list(self.get_matches())
 
 def block_row_checksum(blob, offset, block_md5):
     return md5sum("%s-%s-%s" % (blob, offset, block_md5))
@@ -150,7 +155,7 @@ class BlockLocationsDB:
 
     def add_rolling(self, rolling):
         assert 0 <= rolling <= (2**64 - 1)
-        print rolling
+        #print rolling
         self.conn.execute("INSERT OR IGNORE INTO rolling (value) VALUES (?)", [str(rolling)])
 
     def verify(self):
