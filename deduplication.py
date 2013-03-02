@@ -113,7 +113,7 @@ DEDUP_BLOCK_FOUND_EVENT = "DEDUP_BLOCK_FOUND_EVENT"
 EOF_EVENT = "EOF_EVENT"
 
 class RecipeFinder(GenericStateMachine):
-    def __init__(self, blocksdb, block_size, intset, blob_source, original_piece_handler = OriginalPieceHandler(), tmpdir = None):
+    def __init__(self, blocksdb, block_size, intset, __unused_blobsource_, original_piece_handler, tmpdir = None):
         GenericStateMachine.__init__(self)
 
         # State machine init
@@ -138,6 +138,14 @@ class RecipeFinder(GenericStateMachine):
         self.add_transition(ORIGINAL_STATE, EOF_EVENT, END_STATE)
         self.add_transition(DEDUP_STATE, EOF_EVENT, END_STATE)
         self.add_transition(START_STATE, EOF_EVENT, END_STATE)
+
+        self.last_seen_offset = 0
+        def assert_offset_ok(**args):
+            assert self.last_seen_offset <= args['offset'], args['offset']
+            self.last_seen_offset = args['offset']
+        self.add_exit_handler(START_STATE, assert_offset_ok)
+        self.add_exit_handler(ORIGINAL_STATE, assert_offset_ok)
+        self.add_exit_handler(DEDUP_STATE, assert_offset_ok)
         
         self.add_transition_handler(START_STATE, ORIGINAL_DATA_FOUND_EVENT, ORIGINAL_STATE, 
                                     self.__on_original_data_start)
@@ -165,7 +173,6 @@ class RecipeFinder(GenericStateMachine):
         self.blocksdb = blocksdb
         self.block_size = block_size
         self.rs = RollingChecksum(block_size, intset)
-        self.blob_source = blob_source
         self.original_piece_handler = original_piece_handler
 
         self.tail_buffer = TailBuffer(self.block_size*2, tmpdir = tmpdir)
@@ -191,7 +198,7 @@ class RecipeFinder(GenericStateMachine):
         self.last_flush_end = args['offset']
         self.original_piece_handler.add_piece_data(self.seq_number, data)
         self.restored_md5summer.update(data)
-        #print "Flushing", len(data), "bytes of original data"
+        print "Flushing", len(data), "bytes of original data"
 
     def __on_original_data_end(self, **args):
         size = args['offset'] - self.original_start
@@ -220,6 +227,7 @@ class RecipeFinder(GenericStateMachine):
         pass
 
     def feed(self, s):
+        print "Feeding", len(s), "bytes"
         assert not self.closed
         self.feed_byte_count += len(s)
         self.rs.feed_string(s)
@@ -231,28 +239,39 @@ class RecipeFinder(GenericStateMachine):
                 continue
             block_data = self.tail_buffer[offset : offset + self.block_size]
             md5 = md5sum(block_data)
+            self.end_of_last_hit >= 0
             if self.blocksdb.has_block(md5):
+                assert self.end_of_last_hit >= 0
                 if offset - self.end_of_last_hit > 0:
                     # If this hit is NOT a continuation of the last
                     # one, there must be original data in between.
+                    print "Gap found between block hits"
                     self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.end_of_last_hit)
                 self.dispatch(DEDUP_BLOCK_FOUND_EVENT, md5 = md5, offset = offset, block_data = block_data)
 
-        if self.get_state() == ORIGINAL_STATE and self.end_of_last_hit < self.feed_byte_count - self.block_size:
-            # We know here that all data, except the last block_size
-            # bytes (which may still be part of a hit when we feed
-            # more data), are original. Let's tell the state machine
-            # that. By doing this, we chop up the sequence, as opposed
-            # to just doing one unpredictably huge sequence at the
-            # end.
+        print "State after feeding is", self.get_state()
+        # We know here that all data, except the last block_size
+        # bytes (which may still be part of a hit when we feed
+        # more data), are original. Let's tell the state machine
+        # that. By doing this, we chop up the sequence, as opposed
+        # to just doing one unpredictably huge sequence at the
+        # end.
+        print "Half-time flush!"
+        if self.end_of_last_hit < self.feed_byte_count - self.block_size:
+            print "Last hit leaves a gap - state is", self.get_state()
+            if self.get_state() != ORIGINAL_STATE:
+                self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.end_of_last_hit)
+            print "Before flush:", self.get_state()
             self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.feed_byte_count - self.block_size)
-            pass
+        print "Half-time flush complete"
 
     def close(self):
+        print "Closing"
         assert not self.closed
         self.closed = True
         if self.end_of_last_hit != self.feed_byte_count:
-            self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.end_of_last_hit)
+            offset = max(self.feed_byte_count - self.block_size, self.end_of_last_hit)
+            self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = offset)
         self.dispatch(EOF_EVENT,offset = self.feed_byte_count)
         assert len(self.tail_buffer) == self.feed_byte_count
         assert self.get_state() == END_STATE
@@ -333,25 +352,6 @@ def print_recipe(recipe):
     except ZeroDivisionError:
         print "Zero size recipe"
         pass
-
-def recepify(front, filename, local_blob_dir = None):
-    WINDOW_SIZE = front.get_dedup_block_size()
-    blob_source = UniformBlobGetter(front.repo, local_blob_dir)
-    original_size = os.path.getsize(filename)
-    if original_size == 0:
-        # Zero length files don't deduplicate well...
-        return None
-
-    finder = RecipeFinder(front.repo, WINDOW_SIZE, front.get_all_rolling(), blob_source)
-    f = safe_open(filename, "rb")
-    for block in file_reader(f, blocksize = WINDOW_SIZE):
-        finder.feed(block)
-    finder.close()
-    f.close()
-
-    recipe = finder.get_recipe()
-
-    return recipe
 
 def benchmark():
     import time
