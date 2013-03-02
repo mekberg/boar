@@ -28,9 +28,43 @@ from common import get_tree, my_relpath, convert_win_path_to_unix, md5sum, DevNu
 from boar_exceptions import UserError
 from front import Front
 from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs
-from deduplication import print_recipe
 
-class TestDeduplication(unittest.TestCase, WorkdirHelper):
+from deduplication import print_recipe
+from deduplication import RecipeFinder
+from blobrepo.derived import BlockLocationsDB
+from rollingcs import IntegerSet, calc_rolling
+
+class FakePieceHandler:
+    def init_piece(self, index): pass
+    def add_piece_data(self, index, data): pass
+    def end_piece(self, index): return ("FAKEBLOB", 0)
+
+class TestRecipeFinder(unittest.TestCase):
+    def setUp(self):
+        self.blocksdb = BlockLocationsDB(block_size = 3)
+        self.piece_handler = FakePieceHandler()
+        self.integer_set = IntegerSet(1)
+
+    def testSimpleUnaligned(self):
+        self.integer_set.add(3298534883712) # "aaa"
+        recipe_finder = RecipeFinder(self.blocksdb, 3, self.integer_set, None, original_piece_handler = self.piece_handler)
+        self.blocksdb.add_block("47bce5c74f589f4867dbd57e9ca9f808", 0, "47bce5c74f589f4867dbd57e9ca9f808")
+        self.blocksdb.commit() 
+        recipe_finder.feed("XX")
+        recipe_finder.feed("Xa")
+        recipe_finder.feed("aa")
+        recipe_finder.close()
+        recipe = recipe_finder.get_recipe()
+        self.assertEquals(recipe, {'md5sum': '5afc35e6684b843ceb498f5031f22660',
+                                   'method': 'concat', 'size': 6,
+                                   'pieces': [{'source': 'FAKEBLOB', 'size': 3L,
+                                               'original': True, 'repeat': 1, 'offset': 0},
+                                              {'source': u'47bce5c74f589f4867dbd57e9ca9f808', 'size': 3,
+                                               'original': False, 'repeat': 1, 'offset': 0}]
+                                   })
+        print recipe
+        
+class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
     def setUp(self):
         self.remove_at_teardown = []
         self.workdir = self.createTmpName()
