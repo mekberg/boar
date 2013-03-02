@@ -81,6 +81,7 @@ class TailBuffer:
         self.buffer.append(s)
 
     def get_blocks(self, start, size):
+        assert False
         return file_reader(self.tmpfo, start, start + size)
 
     def __len__(self):
@@ -199,7 +200,7 @@ class RecipeFinder(GenericStateMachine):
         self.end_of_last_hit = args['offset']
         self.original_piece_handler.add_piece_data(self.seq_number, data)
         self.restored_md5summer.update(data)
-        print "Flushing", len(data), "bytes of original data"
+        #print "Flushing", len(data), "bytes of original data"
 
     def __on_original_data_end(self, **args):
         size = args['offset'] - self.original_start
@@ -228,7 +229,7 @@ class RecipeFinder(GenericStateMachine):
         pass
 
     def feed(self, s):
-        print "Feeding", len(s), "bytes"
+        #print "Feeding", len(s), "bytes"
         assert not self.closed
         self.feed_byte_count += len(s)
         self.rs.feed_string(s)
@@ -246,28 +247,28 @@ class RecipeFinder(GenericStateMachine):
                 if offset - self.end_of_last_hit > 0:
                     # If this hit is NOT a continuation of the last
                     # one, there must be original data in between.
-                    print "Gap found between block hits"
+                    #print "Gap found between block hits"
                     self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.end_of_last_hit)
                 self.dispatch(DEDUP_BLOCK_FOUND_EVENT, md5 = md5, offset = offset, block_data = block_data)
 
-        print "State after feeding is", self.get_state()
+        #print "State after feeding is", self.get_state()
         # We know here that all data, except the last block_size
         # bytes (which may still be part of a hit when we feed
         # more data), are original. Let's tell the state machine
         # that. By doing this, we chop up the sequence, as opposed
         # to just doing one unpredictably huge sequence at the
         # end.
-        print "Half-time flush!"
+        # print "Half-time flush!"
         if self.end_of_last_hit < self.feed_byte_count - self.block_size:
-            print "Last hit leaves a gap - state is", self.get_state()
+            # print "Last hit leaves a gap - state is", self.get_state()
             if self.get_state() != ORIGINAL_STATE:
                 self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.end_of_last_hit)
-            print "Before flush:", self.get_state()
+            #print "Before flush:", self.get_state()
             self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.feed_byte_count - self.block_size)
-        print "Half-time flush complete"
+        #print "Half-time flush complete"
 
     def close(self):
-        print "Closing"
+        #print "Closing"
         assert not self.closed
         self.closed = True
         if self.end_of_last_hit != self.feed_byte_count:
