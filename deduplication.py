@@ -196,6 +196,7 @@ class RecipeFinder(GenericStateMachine):
     def __on_original_data_part_end(self, **args):
         data = self.tail_buffer[self.last_flush_end : args['offset']]
         self.last_flush_end = args['offset']
+        self.end_of_last_hit = args['offset']
         self.original_piece_handler.add_piece_data(self.seq_number, data)
         self.restored_md5summer.update(data)
         print "Flushing", len(data), "bytes of original data"
