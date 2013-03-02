@@ -26,7 +26,7 @@ import array
 
 class BlockChecksum:
     def __init__(self, window_size, tmpdir = None):
-        self.buffer = FileAsString(tempfile.SpooledTemporaryFile(max_size=2**23, dir=tmpdir))
+        self.buffer = TailBuffer()
         self.window_size = window_size
         self.position = 0
         self.blocks = []
@@ -39,6 +39,7 @@ class BlockChecksum:
             block_rolling = calc_rolling(block, self.window_size)
             self.blocks.append((self.position, block_rolling, block_md5))
             self.position += self.window_size
+        self.buffer.release(self.position)
 
     def harvest(self):
         result = self.blocks
@@ -88,8 +89,8 @@ class TailBuffer:
         #print "Tail buffer is now virtually", (len(self)), "bytes, but only", len(self.buffer), "in reality"
 
     def __len__(self):
-        return self.shifted + len(self.buffer)
-
+        return int(self.shifted + len(self.buffer))
+    
     def __getitem__(self, index):
         assert isinstance(index, slice)
         assert index.step == None, index
