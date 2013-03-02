@@ -102,7 +102,6 @@ class OriginalPieceHandler:
         pass
 
 from statemachine import GenericStateMachine
-START, MATCH, ORIGINAL, DEDUP, END = range(0,5)
 
 START_STATE = "START"
 ORIGINAL_STATE = "ORIGINAL"
@@ -112,9 +111,6 @@ END_STATE = "END"
 ORIGINAL_DATA_FOUND_EVENT = "ORIGINAL_EVENT"
 DEDUP_BLOCK_FOUND_EVENT = "DEDUP_BLOCK_FOUND_EVENT"
 EOF_EVENT = "EOF_EVENT"
-
-def say(s):
-    print s
 
 class RecipeFinder(GenericStateMachine):
     def __init__(self, blocksdb, block_size, intset, blob_source, original_piece_handler = OriginalPieceHandler(), tmpdir = None):
@@ -166,9 +162,6 @@ class RecipeFinder(GenericStateMachine):
         self.add_enter_handler(END_STATE, self.__on_end_of_file)
         self.start(START_STATE)
 
-
-
-
         self.blocksdb = blocksdb
         self.block_size = block_size
         self.rs = RollingChecksum(block_size, intset)
@@ -178,52 +171,53 @@ class RecipeFinder(GenericStateMachine):
         self.tail_buffer = TailBuffer(self.block_size*2, tmpdir = tmpdir)
         self.end_of_last_hit = 0 # The end of the last matched block
         self.md5summer = hashlib.md5()
+        self.restored_md5summer = hashlib.md5()
 
         self.closed = False
         self.feed_byte_count = 0
 
-        self.new_sequences = []
-        self.new_seq_number = -1
+        self.sequences = []
+        self.seq_number = -1
         self.recipe = None
 
     def __on_original_data_start(self, **args):
-        print "SM: Start of original data at %s" % args
         self.original_start = args['offset']
         self.last_flush_end = args['offset']
-        self.new_seq_number += 1
-        self.original_piece_handler.init_piece(self.new_seq_number)
+        self.seq_number += 1
+        self.original_piece_handler.init_piece(self.seq_number)
 
     def __on_original_data_part_end(self, **args):
-        print "SM: Original data part end %s" % args
         data = self.tail_buffer[self.last_flush_end : args['offset']]
-        print "SM: Flushing data (seq %s) '%s'" % (self.new_seq_number, data)
         self.last_flush_end = args['offset']
-        self.original_piece_handler.add_piece_data(self.new_seq_number, data)
+        self.original_piece_handler.add_piece_data(self.seq_number, data)
+        self.restored_md5summer.update(data)
+        #print "Flushing", len(data), "bytes of original data"
 
     def __on_original_data_end(self, **args):
-        print "SM: End of original data at %s" % args
         size = args['offset'] - self.original_start
         del self.original_start
         del self.last_flush_end
-        blob, blob_offset = self.original_piece_handler.end_piece(self.new_seq_number)
-        self.new_sequences.append(Struct(blob=blob, blob_offset=blob_offset, size=size))
+        blob, blob_offset = self.original_piece_handler.end_piece(self.seq_number)
+        self.sequences.append(Struct(blob=blob, blob_offset=blob_offset, size=size))
 
     def __on_dedup_data_start(self, **args):
-        print "SM: Start of dedup data at %s" % args
-        self.new_seq_number += 1
-        self.new_sequences.append([])
+        self.seq_number += 1
+        self.sequences.append([])
 
     def __on_dedup_block(self, **args):
-        print "SM: Dedup block found %s" % args
-        self.new_sequences[-1].append(args['md5'])
+        self.sequences[-1].append(args['md5'])
+        data = self.tail_buffer[args['offset']: args['offset'] + self.block_size] # TODO: use args['block_data'] in production
         self.end_of_last_hit = args['offset'] + self.block_size
+        self.restored_md5summer.update(data)
+        assert md5sum(data) == args['md5'] # TODO: remove in production
+        assert args['md5'] == md5sum(args['block_data'])
+        
 
     def __on_dedup_data_end(self, **args):
-        print "SM: End of dedup data at %s" % args
+        pass
 
     def __on_end_of_file(self, **args):
-        print "END OF FILE %s" % args
-        print "New sequences:", self.new_sequences
+        pass
 
     def feed(self, s):
         assert not self.closed
@@ -235,32 +229,46 @@ class RecipeFinder(GenericStateMachine):
             if offset < self.end_of_last_hit:
                 # Ignore overlapping blocks
                 continue
-            md5 = md5sum(self.tail_buffer[offset : offset + self.block_size])
+            block_data = self.tail_buffer[offset : offset + self.block_size]
+            md5 = md5sum(block_data)
             if self.blocksdb.has_block(md5):
                 if offset - self.end_of_last_hit > 0:
+                    # If this hit is NOT a continuation of the last
+                    # one, there must be original data in between.
                     self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.end_of_last_hit)
-                self.dispatch(DEDUP_BLOCK_FOUND_EVENT, md5 = md5, offset = offset)
+                self.dispatch(DEDUP_BLOCK_FOUND_EVENT, md5 = md5, offset = offset, block_data = block_data)
+
+        if self.get_state() == ORIGINAL_STATE and self.end_of_last_hit < self.feed_byte_count - self.block_size:
+            # We know here that all data, except the last block_size
+            # bytes (which may still be part of a hit when we feed
+            # more data), are original. Let's tell the state machine
+            # that. By doing this, we chop up the sequence, as opposed
+            # to just doing one unpredictably huge sequence at the
+            # end.
+            self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.feed_byte_count - self.block_size)
+            pass
 
     def close(self):
         assert not self.closed
         self.closed = True
         if self.end_of_last_hit != self.feed_byte_count:
             self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.end_of_last_hit)
-            self.dispatch(EOF_EVENT,offset = self.feed_byte_count)
-        original_size = len(self.tail_buffer)
-        assert original_size == self.feed_byte_count
-        #recipe_size = 0
-        #for a in self.addresses:
-        #    recipe_size += a.size * a.repeat
-        print_recipe(self.get_recipe())
-        #assert original_size == recipe_size
-        #assert self.md5summer.hexdigest() == self.md5summer_reconstruct.hexdigest()
+        self.dispatch(EOF_EVENT,offset = self.feed_byte_count)
+        assert len(self.tail_buffer) == self.feed_byte_count
+        assert self.get_state() == END_STATE
+        assert self.restored_md5summer.hexdigest() == self.md5summer.hexdigest()
+        #print_recipe(self.get_recipe())
+        restored_size = 0
+        for piece in self.get_recipe()['pieces']:
+            restored_size += piece['size']
+        assert restored_size == self.feed_byte_count, "Restored is %s, feeded is %s" % (restored_size, self.feed_byte_count)
         del self.rs
 
     def seq2rec(self):
-        for s in self.new_sequences:
+        restored_size = 0
+        for s in self.sequences:
             if isinstance(s, Struct):
-                print s.size, "bytes of original data"
+                restored_size += s.size
                 yield {"source": s.blob,
                        "offset": s.blob_offset,
                        "size": s.size,
@@ -272,6 +280,7 @@ class RecipeFinder(GenericStateMachine):
                 for md5 in s:
                     if not seqfinder.can_add(md5):
                         blob, offset, size = seqfinder.get_matches().next()
+                        restored_size += size
                         yield {"source": blob,
                                "offset": offset,
                                "size": size,
@@ -279,8 +288,10 @@ class RecipeFinder(GenericStateMachine):
                                "repeat": 1}
                         seqfinder = self.blocksdb.get_sequence_finder()
                     seqfinder.add_block(md5)
-                for match in seqfinder.get_matches():
-                    blob, offset, size = seqfinder.get_matches().next()
+                matches = list(seqfinder.get_matches()) # We only need one
+                if matches:
+                    blob, offset, size = matches[0]
+                    restored_size += size
                     yield {"source": blob,
                        "offset": offset,
                        "size": size,
@@ -288,6 +299,7 @@ class RecipeFinder(GenericStateMachine):
                        "repeat": 1}
             else:
                 assert False, s
+        assert restored_size == self.feed_byte_count
 
     def get_recipe(self):
         assert self.closed
@@ -306,6 +318,7 @@ def print_recipe(recipe):
     pos = 0
     dedup_size = 0
     for p in recipe['pieces']:
+        print "  Original     :", p['original']
         print "  Source blob  :", p['source'] if p['source'] else "SELF"
         print "  Source offset:", p['offset']
         print "  Size         :", p['size']
