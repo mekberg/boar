@@ -2,6 +2,7 @@
 #define ROLLSUM_H
 
 #include "stdint.h"
+#include "circularbuffer.h"
 
 typedef struct _Rollsum {
   unsigned long count;               /* count of bytes included in sum */
@@ -11,16 +12,14 @@ typedef struct _Rollsum {
 
 typedef struct _RollingState {
   Rollsum sum;
-  int size;
-  char* cbuf; // Circular buffer
-  int ps; // Start position for circular buffer
-  int pe; // End position for circular buffer (next empty position)
+  CircularBuffer* cb;
 } RollingState;
 
-RollingState* create_rolling(int window_size);
+RollingState* create_rolling(uint32_t window_size);
 int is_full(RollingState* state);
 int is_empty(RollingState* state);
 void push_rolling(RollingState* state, unsigned char c_add);
+void push_buffer_rolling(RollingState* state, const char* buf, unsigned len);
 unsigned value_rolling(RollingState* state);
 uint64_t value64_rolling(RollingState* state);
 void destroy_rolling(RollingState* state);
