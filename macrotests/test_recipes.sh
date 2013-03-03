@@ -161,6 +161,38 @@ rm -r $REPO Dedup || exit 1
 
 #########################
 
+echo "*** Testing case of A followed by A with minor change"
+#
+# This test is primarily to do a sanity check on the size of a simple recipe.
+#
+$BOAR mkrepo $REPO || exit 1
+$BOAR --repo=$REPO mksession Dedup || exit 1
+$BOAR --repo=$REPO co Dedup || exit 1
+(cd Dedup && cat $BIGFILE $BIGFILE $BIGFILE $BIGFILE $BIGFILE >bigfile.bin && $BOAR ci -q) || exit 1 # Data blob A
+
+(cd Dedup && 
+    echo "Tjosan" >>bigfile.bin &&
+    md5sum bigfile.bin >manifest.md5 &&
+    cat manifest.md5 &&
+    $BOAR ci -q ) || exit 1
+RECIPE_PATH="$REPO/recipes/0ae8ec99045123ab029be41125d3426a.recipe"
+cat $RECIPE_PATH || exit 1
+echo
+
+recipe_size=$(stat -c%s "$RECIPE_PATH")
+if test $recipe_size -gt 1000; then
+    echo "Recipe $RECIPE_PATH is unexpectedly large: $recipe_size"
+    exit 1
+fi
+
+rm -r Dedup || exit 1
+$BOAR --repo=$REPO verify || { echo "Verify 2 failed"; exit 1; }
+$BOAR --repo=$REPO co Dedup || { echo "Check-out 2 failed"; exit 1; }
+(cd Dedup && md5sum -c manifest.md5 ) || exit 1
+rm -r $REPO Dedup || exit 1
+
+#################
+
 # echo "*** Testing case of single checkin of AA (redundancy within a single file)"
 # $BOAR mkrepo $REPO || exit 1
 # $BOAR --repo=$REPO mksession Dedup || exit 1
