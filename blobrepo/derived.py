@@ -24,6 +24,15 @@ from common import *
 from boar_common import safe_delete_file
 import atexit
 import repository
+import struct
+
+def unsigned2signed(u):
+    s = struct.pack("Q", long(u))
+    return struct.unpack("q", s)[0]
+
+def signed2unsigned(d):
+    s = struct.pack("q", long(d))
+    return struct.unpack("Q", s)[0]
 
 class BlockSequenceFinder:
     def __init__(self, blocksdb):
@@ -131,7 +140,7 @@ class BlockLocationsDB:
         c = self.conn.cursor()
         c.execute("SELECT value FROM rolling")
         rows = c.fetchall()
-        values = [row[0] for row in rows]
+        values = [signed2unsigned(row[0]) for row in rows]
         return values
 
     def has_block(self, md5):
@@ -153,10 +162,13 @@ class BlockLocationsDB:
         except sqlite3.DatabaseError, e:
             raise repository.SoftCorruptionError("Exception while writing to the blocks cache: "+str(e))
 
-    def add_rolling(self, rolling):
-        assert 0 <= rolling <= (2**64 - 1)
-        #print rolling
-        self.conn.execute("INSERT OR IGNORE INTO rolling (value) VALUES (?)", [str(rolling)])
+    def add_rolling(self, rolling):        
+        assert 0 <= rolling <= (2**64 - 1) # Must be within the SIGNED range - stupid sqlite
+        rolling_signed = unsigned2signed(rolling)
+        assert -2**63 <= rolling_signed <= 2**63 -1
+        self.conn.execute("INSERT OR IGNORE INTO rolling (value) VALUES (?)", [str(rolling_signed)])
+        assert rolling in self.get_all_rolling(), rolling
+
 
     def verify(self):
         assert False, "not implemented"
