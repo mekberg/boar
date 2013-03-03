@@ -877,23 +877,34 @@ class Struct:
         self.__dict__.update(entries)
 
     def __repr__(self):
-        return "Struct: " + repr(self.__dict__)
+        return "<Struct: %s>" % repr(self.__dict__) 
 
 
 import time
 class StopWatch:
-    def __init__(self, enabled = True):
-        self.t_init = time.time()
-        self.t_last = time.time()
+    def __init__(self, enabled = True, name = None):
+        self.t_init = time.clock()
+        self.t_last = time.clock()
         self.enabled = enabled
+        self.name = name
 
-    def mark(self, msg):
-        now = time.time()
+    def mark(self, msg = None):
+        now = time.clock()
         if self.enabled:
-            print "MARK: %s %s (total %s)" % ( msg, now - self.t_last, now - self.t_init )
-        self.t_last = time.time()
+            prefix = ("SW (%s):" % self.name) if self.name else "SW:"
+            print "%s %s %s (total %s)" % (prefix, msg, now - self.t_last, now - self.t_init )
+        self.t_last = time.clock()
 
 
 class DevNull:
     def write(self, *args):
         pass
+
+
+def overrides(interface_class):
+    """ This is a method decorator that can be used to ensure/document
+    that a method overrides a method in a superclass."""
+    def overrider(method):
+        assert(method.__name__ in dir(interface_class))
+        return method
+    return overrider
