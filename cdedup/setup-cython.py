@@ -4,7 +4,7 @@ from Cython.Distutils import build_ext
 
 ext_modules = [Extension("rollingcs", 
                          ["rollingcs.pyx", "rollsum.c", "intset.c", "bitfield.c", "circularbuffer.c"],
-                         extra_compile_args=["-O9", "-std=c99"],
+                         extra_compile_args=["-O9", "-std=c99", "-Wall"],
                          )]
 
 setup(
