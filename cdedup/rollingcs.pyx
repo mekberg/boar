@@ -25,6 +25,7 @@ cdef extern from "rollsum.h":
     int is_full(RollingState* state)
     int is_empty(RollingState* state)
     void push_rolling(RollingState* state, unsigned char c_add)
+    void push_buffer_rolling(RollingState* state, char* buf, unsigned len)
     uint64_t value64_rolling(RollingState* state)
 
 cdef extern from "intset.h":
@@ -81,10 +82,11 @@ cdef class RollingChecksum:
         self.feed_s = ""
 
     def __cinit__(self):
-        pass
+        self.state = NULL
 
     def __dealloc__(self):
-        destroy_rolling(self.state)
+        if self.state != NULL:
+            destroy_rolling(self.state)
 
     def feed_string(self, s):
         self.feed_queue.append(s)
@@ -138,8 +140,9 @@ cdef uint64_t _calc_rolling(char[] buf, unsigned buf_length, unsigned window_siz
     cdef RollingState* state 
     cdef uint64_t result
     state = create_rolling(window_size)
-    for n in xrange(0, buf_length):
-        push_rolling(state, buf[n])
+    #for n in xrange(0, buf_length):
+    #    push_rolling(state, buf[n])
+    push_buffer_rolling(state, buf, buf_length)
     result = value64_rolling(state)
     destroy_rolling(state)
     return result;
