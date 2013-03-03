@@ -16,7 +16,9 @@ void print_circular_buffer(CircularBuffer* state);
 CircularBuffer* create_circular_buffer(uint32_t window_size);
 void destroy_circular_buffer(CircularBuffer* state);
 void push_circular_buffer(CircularBuffer* state, char c);
+char rotate_circular_buffer(CircularBuffer* state, const char c);
 char get_circular_buffer(CircularBuffer* state, const uint32_t pos);
 void print_circular_buffer(CircularBuffer* state);
+int is_full_circular_buffer(CircularBuffer* state);
 
 #endif
