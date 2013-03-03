@@ -4,6 +4,7 @@
 #include "stdint.h"
 
 typedef struct _CircularBuffer {
+  uint32_t magic;
   uint32_t circular_buffer_size; // Circular buffer size
   uint32_t physical_buffer_size; // Actual size of the physical buffer
   uint32_t pos; // Current start position in the physical buffer
