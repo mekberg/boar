@@ -10,6 +10,7 @@ typedef struct _CircularBuffer {
   uint32_t pos; // Current start position in the physical buffer
   uint32_t length; // The number of stored bytes in the circular buffer
   char* buf; // buffer
+  // char* next_p; // A pointer to the next insertion point
   uint32_t sentinel;
 } CircularBuffer;
 
