@@ -25,7 +25,7 @@ import tempfile
 import array
 
 class BlockChecksum:
-    def __init__(self, window_size, tmpdir = None):
+    def __init__(self, window_size):
         self.buffer = TailBuffer()
         self.window_size = window_size
         self.position = 0
