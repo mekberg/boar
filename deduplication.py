@@ -69,46 +69,6 @@ class UniformBlobGetter:
                 return FileDataSource(fo, size)
         return self.repo.get_blob_reader(blob_name, offset, size)
 
-class TailBuffer:
-    """ A buffer that only physically keeps the last tail_size bytes
-    of the data that is appended to it, but can be accessed using the
-    positions of the original data. """
-
-    def __init__(self):
-        self.buffer = array.array("c")
-        self.shifted = 0
-        
-    def append(self, s):
-        self.buffer.fromstring(s)
-
-    def release(self, offset):
-        assert offset >= self.shifted
-        shift = offset - self.shifted
-        self.shifted += shift
-        del self.buffer[:shift]
-        #print "Tail buffer is now virtually", (len(self)), "bytes, but only", len(self.buffer), "in reality"
-
-    def __len__(self):
-        return int(self.shifted + len(self.buffer))
-    
-    def __getitem__(self, index):
-        assert isinstance(index, slice)
-        assert index.step == None, index
-        assert index.start >= self.shifted and index.stop >= self.shifted, \
-            "Requested slice %s overlaps with the released part of the buffer (up to %s)" % (index, self.shifted) 
-        index2 = slice(index.start - self.shifted, index.stop - self.shifted)
-        #print index, "->", index2
-        return self.buffer.__getitem__(index2).tostring()
-
-"""
-tb = TailBuffer()
-tb.append("abc")
-tb.append("def")
-print tb[2:6]
-tb.release(3)
-print tb[2:6]
-"""
-
 class OriginalPieceHandler:
     def init_piece(self, index):
         pass
@@ -384,10 +344,12 @@ def benchmark():
     b = BlockChecksum(2**16)
     data = "x" * 12345
     t0 = time.time()
+    size = 0
     for n in range(0,10000):
         b.feed_string(data)
+        size += len(data)
         b.harvest()
-    print time.time() - t0
+    print size, time.time() - t0
 
 #res=cProfile.run('main()', "prof.txt")
 #import pstats
