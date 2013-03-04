@@ -908,3 +908,36 @@ def overrides(interface_class):
         assert(method.__name__ in dir(interface_class))
         return method
     return overrider
+
+import array
+class TailBuffer:
+    """ A buffer that only physically keeps the last bytes of the data
+    that is appended to it, but can be accessed using the positions of
+    the original data. All data is kept until release() is called by
+    the user."""
+
+    def __init__(self):
+        self.buffer = array.array("c")
+        self.shifted = 0
+        
+    def append(self, s):
+        self.buffer.fromstring(s)
+
+    def release(self, offset):
+        assert offset >= self.shifted
+        shift = offset - self.shifted
+        self.shifted += shift
+        del self.buffer[:shift]
+        #print "Tail buffer is now virtually", (len(self)), "bytes, but only", len(self.buffer), "in reality"
+
+    def __len__(self):
+        return int(self.shifted + len(self.buffer))
+    
+    def __getitem__(self, index):
+        assert isinstance(index, slice)
+        assert index.step == None, index
+        assert index.start >= self.shifted and index.stop >= self.shifted, \
+            "Requested slice %s overlaps with the released part of the buffer (up to %s)" % (index, self.shifted) 
+        index2 = slice(index.start - self.shifted, index.stop - self.shifted)
+        #print index, "->", index2
+        return self.buffer.__getitem__(index2).tostring()
