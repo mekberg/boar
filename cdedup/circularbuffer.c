@@ -5,7 +5,7 @@
 #include "stdio.h"
 #include "string.h"
 
-static void assert(int c, const char* msg){
+static inline void assert(int c, const char* msg){
   if(c == 0){
     printf("ASSERT FAILED: %s\n", msg);
     exit(1);
@@ -24,6 +24,7 @@ CircularBuffer* create_circular_buffer(const uint32_t window_size){
   state->buf = calloc(1, state->physical_buffer_size);
   assert(state->buf != NULL, "CircularBuffer: Failed to allocate memory for buf");
   state->pos = 0;
+  // state->next_p = state->buf;
   state->length = 0;
   state->sentinel = SENTINEL;
 
@@ -39,29 +40,30 @@ void destroy_circular_buffer(CircularBuffer* state){
 }
 
 
-static void circular_buffer_rebalance(CircularBuffer* state){
-  assert(state->sentinel == SENTINEL, "CircularBuffer: Sentinel failed rb 1");
+static inline void circular_buffer_rebalance(CircularBuffer* state){
+  assert(state->magic == MAGIC, "CircularBuffer: Magic failed at rebalance");
   if(state->pos + state->length == state->physical_buffer_size - 1){
     //printf("Rebalancing\n");
     memcpy(state->buf, &state->buf[state->pos], state->length);
     state->pos = 0;
+    //state->next_p = state->buf + state->length;
   }
-  assert(state->sentinel == SENTINEL, "CircularBuffer: Sentinel failed rb 2");
+  assert(state->sentinel == SENTINEL, "CircularBuffer: Sentinel failed at rebalance");
 }
 
-void push_circular_buffer(CircularBuffer* state, const char c) {
-  //printf("Doing stuff...\n");
-  
-  assert(state->magic == MAGIC, "CircularBuffer: Magic number failed 1");
-  assert(state->sentinel == SENTINEL, "CircularBuffer: Sentinel failed 1");
+void inline push_circular_buffer(CircularBuffer* state, const char c) {
+  //assert(state->magic == MAGIC, "CircularBuffer: Magic number failed 1");
+  //assert(state->sentinel == SENTINEL, "CircularBuffer: Sentinel failed 1");
   circular_buffer_rebalance(state);
   state->buf[state->pos + state->length] = c;
+  //printf("Next_p = %u, real_p = %u\n", state->next_p, &state->buf[state->pos + state->length]);
+  //*(state->next_p)++ = c;
   if(state->length < state->circular_buffer_size){
     state->length += 1;
   } else {
     state->pos += 1;
   }
-  assert(state->sentinel == SENTINEL, "CircularBuffer: Sentinel failed 2");
+  //assert(state->sentinel == SENTINEL, "CircularBuffer: Sentinel failed 2");
 }
 
 char get_circular_buffer(CircularBuffer* state, const uint32_t pos){
@@ -91,21 +93,12 @@ void print_circular_buffer(CircularBuffer* state){
 
 /*
 int main() {
-  CircularBuffer* state = create_circular_buffer(1);
+  CircularBuffer* state = create_circular_buffer(3);
   push_circular_buffer(state, 'x');
   push_circular_buffer(state, 'x');
   push_circular_buffer(state, 'x');
-  rotate_circular_buffer(state, 'a');
-  rotate_circular_buffer(state, 'b');
-  rotate_circular_buffer(state, 'c');
-  is_full_circular_buffer(state);
-  rotate_circular_buffer(state, 'd');
-  rotate_circular_buffer(state, 'e');
-  rotate_circular_buffer(state, 'f');
-  rotate_circular_buffer(state, 'g');
-  rotate_circular_buffer(state, 'h');
-  rotate_circular_buffer(state, 'i');
-  rotate_circular_buffer(state, 'j');
+  for(int i=0;i<100000000; i++){
+    rotate_circular_buffer(state, 'a');
+  }
 }
-
 */
