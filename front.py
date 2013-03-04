@@ -25,7 +25,7 @@ from blobrepo import repository
 from boar_exceptions import *
 import sys
 from time import ctime, time
-from common import md5sum, is_md5sum, warn, get_json_module
+from common import md5sum, is_md5sum, warn, get_json_module, StopWatch
 from blobrepo.sessions import bloblist_fingerprint
 import copy
 
@@ -164,9 +164,13 @@ def __clone_single_snapshot(from_front, to_front, session_id):
             md5sum = blobinfo['md5sum']
             if not (to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum)):
                 print "Sending blob %s of %s (%s MB)" % (n, len(other_raw_bloblist), blobinfo['size'] / (1.0 * 2**20))
+                sw = StopWatch(enabled=False, name="front.clone")
                 to_front.init_new_blob(md5sum, blobinfo['size'])
+                sw.mark("front.init_new_blob()")
                 to_front.add_blob_data_streamed(md5sum, datasource = from_front.get_blob(md5sum))
+                sw.mark("front.add_blob_data_streamed()")
                 to_front.blob_finished(md5sum)
+                sw.mark("front.finished()")
             to_front.add(blobinfo)
         elif action == "remove":
             to_front.remove(blobinfo['filename'])
@@ -428,12 +432,12 @@ class Front:
         assert is_md5sum(blob_md5)
         summer = hashlib.md5()
         while datasource.bytes_left() > 0:
-            block = datasource.read(2**12)
+            # repository.DEDUP_BLOCK_SIZE is a reasonable size - no other reason
+            block = datasource.read(repository.DEDUP_BLOCK_SIZE) 
             summer.update(block)
             self.new_session.add_blob_data(blob_md5, block)
         if summer.hexdigest() != blob_md5:
             raise common.ConstraintViolation("Received blob data differs from promised.")
-
     def blob_finished(self, blob_md5):
         self.new_session.blob_finished(blob_md5)
 
