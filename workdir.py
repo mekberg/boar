@@ -378,10 +378,10 @@ class Workdir:
                 raise UserError("File changed during commit: %s" % wd_path)
             except EnvironmentError, e:
                 if ignore_errors:
-                    warn("Ignoring unreadable file: %s" % abspath)
+                    warn("Ignoring unreadable (%s) file: %s" % (e, abspath))
                 else:
                     front.cancel_snapshot()
-                    raise UserError("Unreadable file: %s" % abspath)
+                    raise UserError("Unreadable (%s) file: %s" % (e, abspath))
 
         for f in deleted_files:
             print >>self.output, "Deleting", f
