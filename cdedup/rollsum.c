@@ -8,7 +8,7 @@
 // Snipped from rsynclib
 // (http://stackoverflow.com/questions/6178201/zlib-adler32-rolling-checksum-problem)
 
-void assert(int c, const char* msg){
+static void assert(int c, const char* msg){
   if(c == 0){
     printf("ASSERT FAILED: %s\n", msg);
     exit(1);
@@ -72,7 +72,7 @@ int is_full(RollingState* state) {
 }
 
 void push_buffer_rolling(RollingState* const state, const char* const buf, const unsigned len){
-  for(int i=0;i<len;i++){
+  for(unsigned i=0;i<len;i++){
     push_rolling(state, buf[i]);
   }
 }
