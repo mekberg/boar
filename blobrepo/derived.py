@@ -167,8 +167,12 @@ class BlockLocationsDB:
         rolling_signed = unsigned2signed(rolling)
         assert -2**63 <= rolling_signed <= 2**63 -1
         self.conn.execute("INSERT OR IGNORE INTO rolling (value) VALUES (?)", [str(rolling_signed)])
-        assert rolling in self.get_all_rolling(), rolling
 
+        # TODO: Remove this in production
+        c = self.conn.cursor()
+        c.execute("SELECT value FROM rolling WHERE value = ?", [str(rolling_signed)])
+        rows = c.fetchall()
+        assert len(rows) == 1
 
     def verify(self):
         assert False, "not implemented"
