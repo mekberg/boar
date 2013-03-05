@@ -204,7 +204,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
             Struct(filename=filename,
                    fileobj = open(filename, "wb"),
                    md5summer = hashlib.md5(),
-                   blockifyer = deduplication.BlockChecksum(self.block_size, tmpdir = self.tmpdir))
+                   blockifyer = deduplication.BlockChecksum(self.block_size))
         self.current_index = index
 
     def add_piece_data(self, index, data):
@@ -212,8 +212,10 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         self.pieces[index].fileobj.write(data)
         self.pieces[index].md5summer.update(data)
         self.pieces[index].blockifyer.feed_string(data)
+        #print "Adding", len(data), "bytes"
 
     def end_piece(self, index):
+        sw = StopWatch()
         assert self.current_index == index
         self.current_index = None
 
@@ -239,7 +241,8 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         del piece.filename
         del piece.md5summer
         del piece.blockifyer
-        
+        sw.mark("sessions.end_piece()")
+        return piece.md5, 0
 
         
 class SessionWriter:
@@ -260,7 +263,13 @@ class SessionWriter:
         self.blob_deduplicator = {}
 
         all_rolling = self.repo.blocksdb.get_all_rolling()
-        self.rolling_set = rollingcs.IntegerSet(max(len(all_rolling), 1))
+
+        # bucket count must be a power of two
+        bucket_count = 1
+        while bucket_count < len(all_rolling):
+            bucket_count *= 2
+
+        self.rolling_set = rollingcs.IntegerSet(bucket_count)
         self.rolling_set.add_all(all_rolling)
 
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
@@ -328,13 +337,17 @@ class SessionWriter:
         self.blob_deduplicator[blob_md5].feed(fragment)
 
     def blob_finished(self, blob_md5):
+        sw = StopWatch(enabled=False, name="session.blob_finished")
         self.blob_deduplicator[blob_md5].close()
         for index, piece in self.blob_deduplicator[blob_md5].original_piece_handler.pieces.items():
-            self.blob_deduplicator[blob_md5].modify_piece(index, blob=piece.md5, offset=0)
+            #self.blob_deduplicator[blob_md5].modify_piece(index, blob=piece.md5, offset=0)
             self.found_uncommitted_blocks += piece.blocks
+        sw.mark(1)
         recipe = self.blob_deduplicator[blob_md5].get_recipe()
+        print "sessions.py: Recipe:", recipe
         if len(recipe['pieces']) == 1 and recipe['pieces'][0]['source'] == blob_md5:
             recipe = None
+        sw.mark(2)
         if recipe:
             recipe = self.blob_deduplicator[blob_md5].get_recipe()
             recipe_json = json.dumps(recipe, indent = 4)
@@ -343,7 +356,7 @@ class SessionWriter:
             if not os.path.exists(recipe_path): # If it already exists, don't write it again
                 with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
                     recipe_file.write(recipe_json)
-
+        sw.mark(3)
         del self.blob_deduplicator[blob_md5]
                 
     def has_blob(self, csum):
