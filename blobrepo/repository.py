@@ -403,6 +403,16 @@ class Repo:
             if not dir_exists(os.path.join(self.repopath, RECIPES_DIR)):
                 os.mkdir(os.path.join(self.repopath, RECIPES_DIR))
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            queued_session_id = self.get_queued_session_id()
+            if queued_session_id:
+                # There is a transaction in progress. In v5 and up a
+                # transaction must contain a "blocks.json" file. Add
+                # an empty one to make process_queue() happy.
+                blocks_file = os.path.join(self.get_queue_path(queued_session_id), "blocks.json")
+                if not os.path.exists(blocks_file):
+                    with open(blocks_file, "wb") as f:
+                        f.write("[]")
+                
             replace_file(os.path.join(self.repopath, VERSION_FILE), "5")
         except OSError, e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
@@ -771,7 +781,7 @@ class Repo:
         return len(orphan_blobs)
 
     def process_queue(self):
-        sw = StopWatch(name="process_queue")
+        sw = StopWatch(enabled=False, name="process_queue")
         assert self.repo_mutex.is_locked()
         assert not self.readonly, "Repo is read only, cannot process queue"
         session_id = self.get_queued_session_id()
