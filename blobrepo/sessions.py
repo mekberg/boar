@@ -215,7 +215,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         #print "Adding", len(data), "bytes"
 
     def end_piece(self, index):
-        sw = StopWatch()
+        sw = StopWatch(enabled=False)
         assert self.current_index == index
         self.current_index = None
 
@@ -344,7 +344,7 @@ class SessionWriter:
             self.found_uncommitted_blocks += piece.blocks
         sw.mark(1)
         recipe = self.blob_deduplicator[blob_md5].get_recipe()
-        print "sessions.py: Recipe:", recipe
+        #print "sessions.py: Recipe:", recipe
         if len(recipe['pieces']) == 1 and recipe['pieces'][0]['source'] == blob_md5:
             recipe = None
         sw.mark(2)
