@@ -62,7 +62,7 @@ class TestRecipeFinder(unittest.TestCase):
                                               {'source': u'47bce5c74f589f4867dbd57e9ca9f808', 'size': 3,
                                                'original': False, 'repeat': 1, 'offset': 0}]
                                    })
-        print recipe
+        #print recipe
         
 class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
     def setUp(self):
