@@ -200,7 +200,8 @@ class Repo:
             try:
                 self.__upgrade_repo()
                 self.__quick_check()
-                self.blocksdb = derived.blobs_blocks(os.path.join(self.repopath, DERIVED_BLOCKS_DB))
+                self.blocksdb = derived.BlockLocationsDB(DEDUP_BLOCK_SIZE, 
+                                                         os.path.join(self.repopath, DERIVED_BLOCKS_DB))
                 self.process_queue()
             finally:
                 self.repo_mutex.release()
@@ -503,6 +504,8 @@ class Repo:
     def get_blob_reader(self, sum, offset = 0, size = None):
         """ Returns a blob reader object that can be used to stream
         the requested data. """
+        assert offset >= 0, offset
+        assert size == None or size >= 0, size
         if self.has_raw_blob(sum):
             blobsize = self.get_blob_size(sum)
             if size == None:
@@ -768,6 +771,7 @@ class Repo:
         return len(orphan_blobs)
 
     def process_queue(self):
+        sw = StopWatch(name="process_queue")
         assert self.repo_mutex.is_locked()
         assert not self.readonly, "Repo is read only, cannot process queue"
         session_id = self.get_queued_session_id()
@@ -779,10 +783,12 @@ class Repo:
         from front import Front
 
         # Check the checksums of all blobs 
+        sw.mark("Prepare")
         for filename in items:
             full_path = os.path.join(queued_item, filename)
             if is_md5sum(filename):
                 assert filename == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
+        sw.mark("Verify blobs")
 
         # Check the checksums of all recipes
         for filename in items:
@@ -792,12 +798,14 @@ class Repo:
                 recipe = read_json(full_path)
                 reader = blobreader.RecipeReader(recipe, self, local_path=queued_item)
                 while reader.bytes_left():
-                    md5summer.update(reader.read(4096))
+                    # DEDUP_BLOCK_SIZE should fit the data nicely, as
+                    # a recipe will be chunked suchwise.q
+                    md5summer.update(reader.read(DEDUP_BLOCK_SIZE))
                 assert filename == md5summer.hexdigest() + ".recipe", "Invalid recipe found in queue dir:" + full_path
+        sw.mark("Verify recipes")
         # Check the existence of all required files
         # TODO: check the contents for validity
         meta_info = read_json(os.path.join(queued_item, "session.json"))
-        
         contents = os.listdir(queued_item)
         snapshots_to_delete = []
 
@@ -829,6 +837,7 @@ class Repo:
                      "session.json", "bloblist.json", "session.md5", "blocks.json"]), \
                      "Missing files in queue dir: "+str(contents)
 
+        sw.mark("Expected files existence check")
         # Everything seems OK, move the blobs and consolidate the session
         for filename in items:
             if is_md5sum(filename):
@@ -847,7 +856,7 @@ class Repo:
                 move_file(recipe_to_move, destination_path, mkdirs = False)
             else:
                 pass # The rest becomes a snapshot definition directory
-
+        sw.mark("Files integrated")
         if snapshots_to_delete:
             # Intentionally redundant check for erase enable flag
             assert os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
@@ -855,23 +864,31 @@ class Repo:
         if os.path.exists(os.path.join(queued_item, "delete.json")):
             self.erase_orphan_blobs()
             safe_delete_file(os.path.join(queued_item, "delete.json"))
+            sw.mark("Snapshots deleted")
 
+        #print "Inserting blocks..."
         blocks_fname = os.path.join(queued_item, "blocks.json")
+        n = 0
         for block_spec in read_json(blocks_fname):
+            #print n, block_spec
+            n += 1
             blob_md5, offset, rolling, sha256 = block_spec
             self.blocksdb.add_block(blob_md5, offset, sha256)
             self.blocksdb.add_rolling(rolling)
+
+        #print "done"
         # This is not entirely safe. If the commit fails, the block
         # list will be lost. This is however acceptable, as it is
         # unlikely and just results in degraded deduplication.
         safe_delete_file(blocks_fname)
         self.blocksdb.commit()
+        sw.mark("Block specifications inserted")
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
         shutil.move(queued_item, session_path)
         assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
-
+        sw.mark("done")
 
 def get_all_ids_in_directory(path):
     result = []
