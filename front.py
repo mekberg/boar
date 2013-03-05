@@ -437,7 +437,7 @@ class Front:
             summer.update(block)
             self.new_session.add_blob_data(blob_md5, block)
         if summer.hexdigest() != blob_md5:
-            raise common.ConstraintViolation("Received blob data differs from promised.")
+            raise common.ContentViolation("Received blob data differs from promised.")
     def blob_finished(self, blob_md5):
         self.new_session.blob_finished(blob_md5)
 
