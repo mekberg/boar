@@ -39,12 +39,16 @@ cdef extern from "intset.h":
 
 cdef class IntegerSet:
     cdef IntSet* intset
+
+    def __cinit__(self):
+        self.intset = NULL
    
     def __init__(self, bucket_count):
         self.intset = create_intset(bucket_count)
 
     def __dealloc__(self):
-        destroy_intset(self.intset)
+        if self.intset != NULL:
+            destroy_intset(self.intset)
 
     def add(self, uint64_t int_to_add):
         add_intset(self.intset, int_to_add)
@@ -72,7 +76,8 @@ cdef class RollingChecksum:
 
     def __init__(self, int window_size, m_intset):
         self.state = create_rolling(window_size)
-        assert self.state
+        assert self.state, "Create_rolling returned None"
+        assert m_intset, "Intset must not be None"
         self.my_intset = m_intset
         self.feeded_bytecount = 0
         self.window_size = window_size
