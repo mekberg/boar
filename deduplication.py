@@ -20,9 +20,14 @@ from common import *
 from jsonrpc import FileDataSource
 
 import sys
-from rollingcs import calc_rolling, IntegerSet
 import tempfile
 import array
+
+try:
+    from rollingcs import RollingChecksum, calc_rolling, IntegerSet
+    dedup_available = True
+except ImportError:
+    dedup_available = False
 
 def CreateIntegerSet(ints):
     # bucket count must be a power of two
@@ -31,11 +36,12 @@ def CreateIntegerSet(ints):
         bucket_count *= 2
     intset = IntegerSet(bucket_count)
     intset.add_all(ints)
+    return intset
 
-class RollingChecksum:
+class FakeRollingChecksum:
     def __init__(self, window_size, intset):
         pass
-    
+
     def feed_string(self, s):
         pass
 
@@ -44,9 +50,23 @@ class RollingChecksum:
 
     def next(self):
         raise StopIteration()
-    
-    #def value(self):
-    #    return 0
+
+class FakeIntegerSet:
+    def __init__(self, bucket_count):
+        pass
+
+    def add_all(self, integers):
+        pass
+
+class FakeBlockChecksum:
+    def __init__(self, window_size):
+        pass
+
+    def feed_string(self, s):
+        pass
+
+    def harvest(self):
+        return []
 
 class BlockChecksum:
     def __init__(self, window_size):
@@ -69,7 +89,12 @@ class BlockChecksum:
         result = self.blocks
         self.blocks = []
         return result
-            
+
+if not dedup_available:
+    BlockChecksum = FakeBlockChecksum
+    IntegerSet = FakeIntegerSet
+    RollingChecksum = FakeRollingChecksum
+
 class UniformBlobGetter:
     def __init__(self, repo, local_blob_dir = None):
         self.repo = repo
