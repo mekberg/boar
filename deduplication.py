@@ -20,9 +20,33 @@ from common import *
 from jsonrpc import FileDataSource
 
 import sys
-from rollingcs import RollingChecksum, calc_rolling
+from rollingcs import calc_rolling, IntegerSet
 import tempfile
 import array
+
+def CreateIntegerSet(ints):
+    # bucket count must be a power of two
+    bucket_count = 1
+    while bucket_count < len(ints):
+        bucket_count *= 2
+    intset = IntegerSet(bucket_count)
+    intset.add_all(ints)
+
+class RollingChecksum:
+    def __init__(self, window_size, intset):
+        pass
+    
+    def feed_string(self, s):
+        pass
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        raise StopIteration()
+    
+    #def value(self):
+    #    return 0
 
 class BlockChecksum:
     def __init__(self, window_size):
