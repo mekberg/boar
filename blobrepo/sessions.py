@@ -32,7 +32,6 @@ import types
 from common import *
 
 import deduplication
-import rollingcs
 
 """
 The SessionWriter and SessionReader are together with Repository the
@@ -263,14 +262,7 @@ class SessionWriter:
         self.blob_deduplicator = {}
 
         all_rolling = self.repo.blocksdb.get_all_rolling()
-
-        # bucket count must be a power of two
-        bucket_count = 1
-        while bucket_count < len(all_rolling):
-            bucket_count *= 2
-
-        self.rolling_set = rollingcs.IntegerSet(bucket_count)
-        self.rolling_set.add_all(all_rolling)
+        self.rolling_set = deduplication.CreateIntegerSet(all_rolling)
 
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
