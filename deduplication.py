@@ -17,6 +17,7 @@
 from __future__ import with_statement
 
 from common import *
+from ordered_dict import OrderedDict
 from jsonrpc import FileDataSource
 
 import sys
@@ -320,14 +321,23 @@ class RecipeFinder(GenericStateMachine):
 
     def seq2rec(self):
         restored_size = 0
+
+        def get_dict(source, offset, size, original):
+            #assert is_md5sum(source)
+            assert offset >= 0 
+            assert size >= 0
+            assert type(original) == bool
+            
+            return OrderedDict([("source", source),
+                                ("offset", offset),
+                                ("size", size),
+                                ("original", original),
+                                ("repeat", 1)])
+
         for s in self.sequences:
             if isinstance(s, Struct):
                 restored_size += s.size
-                yield {"source": s.blob,
-                       "offset": s.blob_offset,
-                       "size": s.size,
-                       "original": True,
-                       "repeat": 1}
+                yield get_dict(s.blob, s.blob_offset, s.size, True)
             elif type(s) == list:
                 assert s
                 seqfinder = self.blocksdb.get_sequence_finder()
@@ -335,22 +345,14 @@ class RecipeFinder(GenericStateMachine):
                     if not seqfinder.can_add(md5):
                         blob, offset, size = seqfinder.get_matches().next()
                         restored_size += size
-                        yield {"source": blob,
-                               "offset": offset,
-                               "size": size,
-                               "original": False,
-                               "repeat": 1}
+                        yield get_dict(blob, offset, size, False)
                         seqfinder = self.blocksdb.get_sequence_finder()
                     seqfinder.add_block(md5)
                 matches = list(seqfinder.get_matches()) # We only need one
                 if matches:
                     blob, offset, size = matches[0]
                     restored_size += size
-                    yield {"source": blob,
-                       "offset": offset,
-                       "size": size,
-                       "original": False,
-                       "repeat": 1}
+                    yield get_dict(blob, offset, size, False)
             else:
                 assert False, s
         assert restored_size == self.feed_byte_count
@@ -358,10 +360,10 @@ class RecipeFinder(GenericStateMachine):
     def get_recipe(self):
         assert self.closed
         if self.recipe == None:
-            self.recipe = {"method": "concat",
-                           "md5sum": self.md5summer.hexdigest(),
-                           "size": len(self.tail_buffer),
-                           "pieces": list(self.seq2rec())}
+            self.recipe = OrderedDict([("md5sum", self.md5summer.hexdigest()),
+                                       ("size", len(self.tail_buffer)),
+                                       ("method", "concat"),
+                                       ("pieces", list(self.seq2rec()))])
         return self.recipe
             
 def print_recipe(recipe):
