@@ -29,6 +29,9 @@ class RecipeReader(DataSource):
     def __init__(self, recipe, repo, offset = 0, size = None, local_path = None):
         assert offset >= 0
         assert size == None or size >= 0
+        assert recipe['method'] == "concat"
+        assert 'md5sum' in recipe and is_md5sum(recipe['md5sum'])
+        assert 'size' in recipe and recipe['size'] >= 0
         self.repo = repo
         self.local_path = local_path
 
