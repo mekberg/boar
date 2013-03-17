@@ -1,6 +1,8 @@
 #!/bin/bash
 
 export BOAR_CACHEDIR=`mktemp --tmpdir=/tmp/ -d "boar_tests_cache_XXXXX"`
+export BOAR_SERVER_CLI="`pwd`/boar"
+
 for unittest in tests/test_*.py blobrepo/tests/test_*.py; do
     echo "Excuting $unittest (cachedir $BOAR_CACHEDIR)"
     python $unittest || { echo "Unittest $unittest failed"; exit 1; }

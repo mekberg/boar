@@ -127,7 +127,10 @@ def connect_ssh(url):
     else:
         raise UserError("Not a valid boar ssh URL: "+str(url))
     ssh_cmd = __get_ssh_command()
-    cmd = '%s "%s" boar serve -S "%s"' % (ssh_cmd, host, path)
+    boar_cmd = "boar"
+    if os.getenv("BOAR_SERVER_CLI"):
+        boar_cmd = os.getenv("BOAR_SERVER_CLI")
+    cmd = '%s "%s" "%s" serve -S "%s"' % (ssh_cmd, host, boar_cmd, path)
     if user:
         cmd = '%s -l "%s" "%s" boar serve -S "%s"' % (ssh_cmd, user, host, path)
     return _connect_cmd(cmd)
