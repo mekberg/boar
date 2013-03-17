@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+__version__ = "1.0" # Major, minor. Major == API changes
+
 cdef extern from "stdint.h":
     ctypedef unsigned long long uint64_t
 
