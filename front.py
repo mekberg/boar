@@ -572,6 +572,8 @@ class Front:
     def get_repo_identifier(self):
         return self.repo.get_repo_identifier()
 
+    def deduplication_enabled(self):
+        return self.repo.deduplication_enabled()
 
 class DryRunFront:
 
