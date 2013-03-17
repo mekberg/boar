@@ -183,7 +183,7 @@ class _NaiveSessionWriter:
 
 
 class PieceHandler(deduplication.OriginalPieceHandler):
-    def __init__(self, session_dir, block_size, tmpdir):
+    def __init__(self, session_dir, block_size, tmpdir, BlockifierClass):
         assert os.path.isdir(session_dir)
         assert block_size > 0
         self.block_size = block_size
@@ -191,6 +191,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         self.pieces = {}
         self.current_index = None
         self.tmpdir = tmpdir
+        self.BlockifierClass = BlockifierClass
 
     def init_piece(self, index):
         assert index >= 0
@@ -203,7 +204,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
             Struct(filename=filename,
                    fileobj = open(filename, "wb"),
                    md5summer = hashlib.md5(),
-                   blockifyer = deduplication.BlockChecksum(self.block_size))
+                   blockifyer = self.BlockifierClass(self.block_size))
         self.current_index = index
 
     def add_piece_data(self, index, data):
@@ -313,8 +314,10 @@ class SessionWriter:
         if self.repo.deduplication_enabled():
             assert deduplication.dedup_available, "Deduplication module not available"
             rollingchecksumclass = deduplication.RollingChecksum
+            blockifierclass = deduplication.BlockChecksum
         else:
             rollingchecksumclass = deduplication.FakeRollingChecksum
+            blockifierclass = deduplication.FakeBlockChecksum
 
         fname = os.path.join(self.session_path, blob_md5)
         blobsource = deduplication.UniformBlobGetter(self.repo, self.session_path)
@@ -324,7 +327,8 @@ class SessionWriter:
                                        self.rolling_set,
                                        blobsource,
                                        PieceHandler(self.session_path, repository.DEDUP_BLOCK_SIZE,
-                                                    tmpdir = self.repo.get_tmpdir()),
+                                                    tmpdir = self.repo.get_tmpdir(),
+                                                    BlockifierClass = blockifierclass),
                                        tmpdir = self.repo.get_tmpdir(),
                                        RollingChecksumClass = rollingchecksumclass)
         
