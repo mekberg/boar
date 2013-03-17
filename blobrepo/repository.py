@@ -38,6 +38,8 @@ from jsonrpc import FileDataSource
 from boar_exceptions import *
 from blobreader import create_blob_reader
 
+import deduplication
+
 LATEST_REPO_FORMAT = 5
 REPOID_FILE = "repoid.txt"
 VERSION_FILE = "version.txt"
@@ -142,6 +144,10 @@ def integrity_assert(test, errormsg = None):
         raise CorruptionError(errormsg)
 
 def create_repository(repopath, enable_deduplication = True):
+    if enable_deduplication and not deduplication.dedup_available:
+        # Ok, we COULD create a deduplicated repo without the module,
+        # but the user is likely to be confused when he cannot use it.
+        raise UserError("Cannot create deduplicated repository: deduplication module is not installed")
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
     for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR:
@@ -198,7 +204,6 @@ class Repo:
             notice("Repo is write protected - only read operations can be performed")
             self.readonly = True
 
-        import deduplication
         if self.deduplication_enabled() and not deduplication.dedup_available:
             self.readonly = True
             notice("This repository requires the native deduplication module for writing - only read operations can be performed.")
