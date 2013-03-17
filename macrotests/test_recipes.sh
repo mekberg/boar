@@ -28,7 +28,7 @@ rm -r $REPO Alice || exit 1
 ############################
 
 echo "*** Testing case of files with identical blocks"
-$BOAR mkrepo $REPO || exit 1
+$BOAR mkrepo --enable-deduplication $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
 $BOAR --repo=$REPO co Dedup || exit 1
 
@@ -59,7 +59,7 @@ rm -r $REPO Dedup || exit 1
 
 echo "*** Testing case of B followed by ABC"
 
-$BOAR mkrepo $REPO || exit 1
+$BOAR mkrepo --enable-deduplication $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
 $BOAR --repo=$REPO co Dedup || exit 1
 (cd Dedup && cp $BIGFILE bigfile.bin && $BOAR ci -q) || exit 1 # Data blob B
@@ -83,7 +83,7 @@ rm -r $REPO Dedup || exit 1
 #################
 
 echo "*** Testing case of ABC followed by B"
-$BOAR mkrepo $REPO || exit 1
+$BOAR mkrepo --enable-deduplication $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
 $BOAR --repo=$REPO co Dedup || exit 1
 
@@ -110,7 +110,7 @@ rm -r $REPO Dedup || exit 1
 
 echo "*** Testing case of A followed by ABC followed by C"
 
-$BOAR mkrepo $REPO || exit 1
+$BOAR mkrepo --enable-deduplication $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
 $BOAR --repo=$REPO co Dedup || exit 1
 
@@ -138,7 +138,7 @@ rm -r $REPO Dedup || exit 1
 
 echo "*** Testing case of A followed by {AB, AB}"
 
-$BOAR mkrepo $REPO || exit 1
+$BOAR mkrepo --enable-deduplication $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
 $BOAR --repo=$REPO co Dedup || exit 1
 
@@ -165,7 +165,7 @@ echo "*** Testing case of A followed by A with minor change"
 #
 # This test is primarily to do a sanity check on the size of a simple recipe.
 #
-$BOAR mkrepo $REPO || exit 1
+$BOAR mkrepo --enable-deduplication $REPO || exit 1
 $BOAR --repo=$REPO mksession Dedup || exit 1
 $BOAR --repo=$REPO co Dedup || exit 1
 (cd Dedup && cat $BIGFILE $BIGFILE $BIGFILE $BIGFILE $BIGFILE >bigfile.bin && $BOAR ci -q) || exit 1 # Data blob A
@@ -194,7 +194,7 @@ rm -r $REPO Dedup || exit 1
 #################
 
 # echo "*** Testing case of single checkin of AA (redundancy within a single file)"
-# $BOAR mkrepo $REPO || exit 1
+# $BOAR mkrepo --enable-deduplication $REPO || exit 1
 # $BOAR --repo=$REPO mksession Dedup || exit 1
 # $BOAR --repo=$REPO co Dedup || exit 1
 
