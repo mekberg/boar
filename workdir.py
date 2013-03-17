@@ -46,7 +46,7 @@ METADIR = ".boar"
 CCACHE_FILE = "ccache.db"
 
 class Workdir:
-    def __init__(self, repoUrl, sessionName, offset, revision, root):
+    def __init__(self, repoUrl, sessionName, offset, revision, root, front = None):
         assert repoUrl == None or isinstance(repoUrl, unicode)
         assert isinstance(sessionName, unicode)
         assert isinstance(offset, unicode)
@@ -61,9 +61,15 @@ class Workdir:
         self.revision = revision
         self.root = root
         self.metadir = os.path.join(self.root, METADIR)
-        self.front = None
+        self.front = front
         self.use_progress_printer(True)
         self.__upgrade()
+
+        if os.path.exists(self.metadir):
+            # The "front" argument is a kludge to avoid connecting to
+            # the repo twice for new workdirs. Don't use it for
+            # anything else.
+            assert not front, "A front object can only be passed to an empty workdir"
 
         if self.repoUrl:
             self.front = self.get_front()
