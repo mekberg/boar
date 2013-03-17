@@ -354,9 +354,9 @@ class Front:
         completed()."""
         assert isinstance(session_name, basestring), session_name
         assert not self.new_session, "There already exists an active new snapshot"
-        self.new_session = self.repo.create_session(session_name = session_name, 
-                                                    base_session = base_session,
-                                                    force_base_snapshot = force_base_snapshot)
+        self.new_session = self.repo.create_snapshot(session_name = session_name, 
+                                                     base_session = base_session,
+                                                     force_base_snapshot = force_base_snapshot)
 
     def create_base_snapshot(self, session_name, truncate = False):
         assert not self.new_session

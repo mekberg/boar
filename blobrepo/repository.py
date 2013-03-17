@@ -595,8 +595,8 @@ class Repo:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]
 
-    def create_session(self, session_name, base_session = None, session_id = None, force_base_snapshot = False):
-        misuse_assert(not self.readonly, "Cannot create a session in a write protected repo")
+    def create_snapshot(self, session_name, base_session = None, session_id = None, force_base_snapshot = False):
+        misuse_assert(not self.readonly, "Repository is read-only")
         assert isinstance(session_name, unicode)
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
