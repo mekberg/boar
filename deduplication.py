@@ -28,9 +28,11 @@ try:
     if os.getenv("BOAR_DISABLE_DEDUP") == "1": raise ImportError()
     import rollingcs
     assert rollingcs.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % rollingcs.__version__
+    cdedup_version = rollingcs.__version__
     from rollingcs import RollingChecksum, calc_rolling, IntegerSet
     dedup_available = True
 except ImportError:
+    cdedup_version = None
     dedup_available = False
 
 def CreateIntegerSet(ints):
