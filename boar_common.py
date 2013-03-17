@@ -77,14 +77,21 @@ def sorted_bloblist(bloblist):
 def parse_manifest_name(path):
     """Returns a tuple (lowercase hash name, hash). Both are None if
     the path is not a valid manifest filename."""
-    m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5)", path, flags=re.IGNORECASE)
+    m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5|(manifest.md5))", path, flags=re.IGNORECASE)
     if not m:
         return None, None
+    if m.group(5):
+        return "md5", None
     if m.group(3):
         hashname = m.group(3).lower()
         return hashname, None
-    else:
-        hashname = "md5"
-        manifest_hash = m.group(4).lower()
-        return hashname, manifest_hash
+    hashname = "md5"
+    manifest_hash = m.group(4).lower()
+    return hashname, manifest_hash
 
+assert parse_manifest_name("/tmp/manifest.md5") == ("md5", None)
+assert parse_manifest_name("/tmp/manifest-d41d8cd98f00b204e9800998ecf8427e.md5") == ("md5", "d41d8cd98f00b204e9800998ecf8427e")
+assert parse_manifest_name("/tmp/manifest-md5.txt") == ("md5", None)
+assert parse_manifest_name("/tmp/manifest-sha256.txt") == ("sha256", None)
+assert parse_manifest_name("/tmp/tjohej.txt") == (None, None)
+assert parse_manifest_name("/tmp/tjohej.md5") == (None, None)
