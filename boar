@@ -1157,7 +1157,7 @@ def cmd_clone(args):
     repopath1, repopath2 = args
     source_front = client.connect(repopath1)
     if not client.is_boar_url(repopath2) and not os.path.exists(repopath2):
-        repository.create_repository(repopath2)
+        repository.create_repository(repopath2, enable_deduplication = source_front.deduplication_enabled())
     target_front = client.connect(repopath2)
     if not front.is_continuation(base_front = target_front, cont_front = source_front):
         raise UserError("The source repo is not a continuation of the destination repo. Cannot clone.")
