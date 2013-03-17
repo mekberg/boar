@@ -69,7 +69,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         self.remove_at_teardown = []
         self.workdir = self.createTmpName()
         self.repopath = self.createTmpName()
-        repository.create_repository(self.repopath)
+        repository.create_repository(self.repopath, enable_deduplication = True)
         os.mkdir(self.workdir)
         self.wd = workdir.Workdir(self.repopath, u"TestSession", u"", None, self.workdir)
         self.wd.setLogOutput(DevNull())
