@@ -309,7 +309,13 @@ class SessionWriter:
         # It is ok for a blob to already exist in the repo
         # here. Possibly some other session is uploading, or has
         # uploaded this blob, before we get here. But that is ok. 
-        assert not self.dead
+        assert not self.dead  
+        if self.repo.deduplication_enabled():
+            assert deduplication.dedup_available, "Deduplication module not available"
+            rollingchecksumclass = deduplication.RollingChecksum
+        else:
+            rollingchecksumclass = deduplication.FakeRollingChecksum
+
         fname = os.path.join(self.session_path, blob_md5)
         blobsource = deduplication.UniformBlobGetter(self.repo, self.session_path)
         self.blob_deduplicator[blob_md5] = \
@@ -319,7 +325,8 @@ class SessionWriter:
                                        blobsource,
                                        PieceHandler(self.session_path, repository.DEDUP_BLOCK_SIZE,
                                                     tmpdir = self.repo.get_tmpdir()),
-                                       tmpdir = self.repo.get_tmpdir())
+                                       tmpdir = self.repo.get_tmpdir(),
+                                       RollingChecksumClass = rollingchecksumclass)
         
 
     def add_blob_data(self, blob_md5, fragment):

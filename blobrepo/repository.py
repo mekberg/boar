@@ -141,13 +141,16 @@ def integrity_assert(test, errormsg = None):
     if not test:
         raise CorruptionError(errormsg)
 
-def create_repository(repopath):
+def create_repository(repopath, enable_deduplication = True):
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
     for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR:
         os.mkdir(os.path.join(repopath, d))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
     create_file(os.path.join(repopath, REPOID_FILE), generate_random_repoid())
+    if enable_deduplication:
+        with open(os.path.join(repopath, "ENABLE_DEDUPLICATION"), "wb"):
+            pass
 
 def is_recipe_filename(filename):
     filename_parts = filename.split(".")
@@ -195,6 +198,11 @@ class Repo:
             notice("Repo is write protected - only read operations can be performed")
             self.readonly = True
 
+        import deduplication
+        if self.deduplication_enabled() and not deduplication.dedup_available:
+            self.readonly = True
+            notice("This repository requires the native deduplication module for writing - only read operations can be performed.")
+
         if not self.readonly:
             self.repo_mutex.lock_with_timeout(60)
             try:
@@ -235,6 +243,9 @@ class Repo:
 
     def allows_permanent_erase(self):
         return os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
+
+    def deduplication_enabled(self):
+        return os.path.exists(os.path.join(self.repopath, "ENABLE_DEDUPLICATION"))
 
     def __upgrade_repo(self):
         assert not self.readonly, "Repo is read only, cannot upgrade"
