@@ -25,21 +25,33 @@ import tempfile
 import array
 
 try:
+    if os.getenv("BOAR_DISABLE_DEDUP") == "1": raise ImportError()
     from rollingcs import RollingChecksum, calc_rolling, IntegerSet
     dedup_available = True
 except ImportError:
     dedup_available = False
 
 def CreateIntegerSet(ints):
+    """This method will return an IntegerSet containing the given
+    ints. The IntegerSet is suitable for use with the RecipeFinder
+    class. An IntegerSet created with this function should not be used
+    for other purposes. Note that in case the c extension is
+    unavailable (dedup_available == False), then a FakeIntegerSet
+    instance will be returned instead."""
     # bucket count must be a power of two
     bucket_count = 1
     while bucket_count < len(ints):
         bucket_count *= 2
-    intset = IntegerSet(bucket_count)
+    if dedup_available:
+        intset = IntegerSet(bucket_count)
+    else:
+        intset = FakeIntegerSet(bucket_count)
     intset.add_all(ints)
     return intset
 
 class FakeRollingChecksum:
+    """This is a dummy version of RollingChecksum. An instance of this
+    class will never report any hits."""
     def __init__(self, window_size, intset):
         pass
 
@@ -53,13 +65,21 @@ class FakeRollingChecksum:
         raise StopIteration()
 
 class FakeIntegerSet:
+    """This is a dummy version of IntegerSet. An instance of this
+    class will always return False when contains() is called."""
     def __init__(self, bucket_count):
         pass
 
     def add_all(self, integers):
         pass
+    
+    def contains(self, n):
+        return False
 
 class FakeBlockChecksum:
+    """This is a dummy version of BlockChecksum. An instance of this
+    class will always return an empty list when harvest() is
+    called."""
     def __init__(self, window_size):
         pass
 
@@ -92,9 +112,7 @@ class BlockChecksum:
         return result
 
 if not dedup_available:
-    BlockChecksum = FakeBlockChecksum
-    IntegerSet = FakeIntegerSet
-    RollingChecksum = FakeRollingChecksum
+    del BlockChecksum
 
 class UniformBlobGetter:
     def __init__(self, repo, local_blob_dir = None):
@@ -143,8 +161,12 @@ DEDUP_BLOCK_FOUND_EVENT = "DEDUP_BLOCK_FOUND_EVENT"
 EOF_EVENT = "EOF_EVENT"
 
 class RecipeFinder(GenericStateMachine):
-    def __init__(self, blocksdb, block_size, intset, __unused_blobsource_, original_piece_handler, tmpdir = None):
+    def __init__(self, blocksdb, block_size, intset, __unused_blobsource_, original_piece_handler, tmpdir = None,
+                 RollingChecksumClass = None):
         GenericStateMachine.__init__(self)
+
+        if not RollingChecksumClass:
+            RollingChecksumClass = RollingChecksum
 
         # State machine init
         self.add_state(START_STATE)
@@ -202,7 +224,7 @@ class RecipeFinder(GenericStateMachine):
 
         self.blocksdb = blocksdb
         self.block_size = block_size
-        self.rs = RollingChecksum(block_size, intset)
+        self.rs = RollingChecksumClass(block_size, intset)
         self.original_piece_handler = original_piece_handler
 
         self.tail_buffer = TailBuffer()
@@ -365,7 +387,7 @@ class RecipeFinder(GenericStateMachine):
                                        ("method", "concat"),
                                        ("pieces", list(self.seq2rec()))])
         return self.recipe
-            
+
 def print_recipe(recipe):
     print "Md5sum:", recipe["md5sum"]
     print "Size  :", recipe["size"]
