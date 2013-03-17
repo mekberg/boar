@@ -310,15 +310,16 @@ def cmd_info(args):
 def cmd_mkrepo(args):
     if len(args) == 0:
         args = ["--help"]
-    parser = OptionParser(usage="usage: boar mkrepo <new repo path>")
+    parser = OptionParser(usage="usage: boar mkrepo [-d|--enable-deduplication] <new repo path>")
+    parser.add_option("-d", "--enable-deduplication", dest = "dedup", action="store_true",
+                      help="Enable deduplication for this repository")
     (options, args) = parser.parse_args(args)
     if len(args) > 1:
         raise UserError("Too many arguments")
     repopath, = args
     if os.path.exists(repopath):
         raise UserError("File or directory already exists: %s" % repopath)
-    repository.create_repository(repopath)
-
+    repository.create_repository(repopath, enable_deduplication = options.dedup)
 
 def cmd_list(args):
     parser = OptionParser(usage="usage: boar list [session name [snapshot id]]")
@@ -1244,6 +1245,10 @@ def main():
         if len(args) != 1:
             raise UserError("The --version option can not be combined with other options")
         print "Boar, version %s" % BOAR_VERSION
+        if not deduplication.cdedup_version:
+            print "Deduplication module not installed"
+        else:
+            print "Deduplication module v%s" % deduplication.cdedup_version
         print "Copyright (C) 2010-2012 Mats Ekberg."
         print "Licensed under the Apache License, Version 2.0"
         return 0
