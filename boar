@@ -1022,7 +1022,7 @@ def cmd_co(args):
     print "Checking out to workdir", workdir_path
 
     os.mkdir(workdir_path)
-    wd = workdir.Workdir(repourl, session_name, offset, sid, workdir_path)
+    wd = workdir.Workdir(repourl, session_name, offset, sid, workdir_path, front = front)
     wd.checkout()
 
 def cmd_setprop(args):
