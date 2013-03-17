@@ -143,7 +143,7 @@ def integrity_assert(test, errormsg = None):
     if not test:
         raise CorruptionError(errormsg)
 
-def create_repository(repopath, enable_deduplication = True):
+def create_repository(repopath, enable_deduplication = False):
     if enable_deduplication and not deduplication.dedup_available:
         # Ok, we COULD create a deduplicated repo without the module,
         # but the user is likely to be confused when he cannot use it.
