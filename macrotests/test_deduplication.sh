@@ -13,7 +13,7 @@ EOF
 (BOAR_DISABLE_DEDUP=1 $BOAR --version | grep "Deduplication module not installed") || { 
     echo "Deduplication module could not be disabled for testing"; exit 1; }
 
-function fill_repo_and_clone() {
+function fill_repo() {
 $BOAR --repo="$REPO" mksession Session || exit 1
 $BOAR --repo="$REPO" co Session || exit 1
 
@@ -33,7 +33,9 @@ $BOAR --repo="$REPO" verify || { echo "Verify failed"; exit 1; }
 rm -r Session || exit 1
 $BOAR --repo="$REPO" co Session || exit 1
 (cd Session && md5sum -c manifest.md5) || exit 1
+}
 
+function clone_repo() {
 $BOAR clone "$REPO" "$CLONE" || exit 1
 test -d "$CLONE/recipes" || exit 1
 }
@@ -43,7 +45,8 @@ test -d "$CLONE/recipes" || exit 1
 #
 
 $BOAR mkrepo "$REPO" || exit 1
-fill_repo_and_clone
+fill_repo
+clone_repo
 test -z $(ls -A "$REPO/recipes") || { echo "Recipe dir should be empty for non-dedup repo"; exit 1; }
 test -z $(ls -A "$CLONE/recipes") || { echo "Cloned recipe dir should be empty for non-dedup repo"; exit 1; }
 rm -r Session "$REPO" "$CLONE" || exit 1
@@ -53,7 +56,8 @@ rm -r Session "$REPO" "$CLONE" || exit 1
 #
 
 $BOAR mkrepo -d "$REPO" || exit 1
-fill_repo_and_clone
+fill_repo
+clone_repo
 test ! -z $(ls -A "$REPO/recipes") || { echo "Recipe dir should NOT be empty for dedup repo"; exit 1; }
 test ! -z $(ls -A "$CLONE/recipes") || { echo "Cloned recipe dir should NOT be empty for dedup repo"; exit 1; }
 rm -r Session "$REPO" "$CLONE" || exit 1
@@ -115,8 +119,30 @@ EOF
 txtmatch.py expected.txt output.txt || {
     echo "Committing in dedup repo without dedup module gave unexpected error message"; exit 1; }
 
+rm -r expected.txt output.txt "$REPO" Session || exit 1
+
 #
-# 
+# Test cloning from non-dedup to dedup
 #
+
+$BOAR mkrepo "$REPO" || exit 1
+fill_repo
+$BOAR mkrepo -d "$CLONE" || exit 1
+$BOAR clone "$REPO" "$CLONE" || exit 1
+test -z $(ls -A "$REPO/recipes") || { echo "Non-dedup repo should not have recipes"; exit 1; }
+test ! -z $(ls -A "$CLONE/recipes") || { echo "Dedup clone should have recipes"; exit 1; }
+rm -r "$REPO" "$CLONE" Session || exit 1
+
+#
+# Test cloning from dedup to non-dedup
+#
+
+$BOAR mkrepo -d "$REPO" || exit 1
+fill_repo
+$BOAR mkrepo "$CLONE" || exit 1
+$BOAR clone "$REPO" "$CLONE" || exit 1
+test ! -z $(ls -A "$REPO/recipes") || { echo "Dedup repo should have recipes"; exit 1; }
+test -z $(ls -A "$CLONE/recipes") || { echo "Non-dedup clone should not have recipes"; exit 1; }
+rm -r "$REPO" "$CLONE" Session || exit 1
 
 exit 0
