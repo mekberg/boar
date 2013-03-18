@@ -879,7 +879,10 @@ class Repo:
             elif is_recipe_filename(filename):
                 recipe_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_recipe_path(filename)
-                move_file(recipe_to_move, destination_path, mkdirs = False)
+                if self.has_recipe_blob(filename):
+                    os.remove(recipe_to_move)
+                else:
+                    move_file(recipe_to_move, destination_path, mkdirs = False)
             else:
                 pass # The rest becomes a snapshot definition directory
         sw.mark("Files integrated")
