@@ -91,12 +91,14 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
         write_file(self.workdir2, "b2.txt", "aaaaaa")
         write_file(self.workdir1, "b1.txt", "aaaaaa")
 
+        # Make the checkin() go just almost all the way...
         wd2_commit = self.wd2.front.commit
         self.wd2.front.commit = lambda session_name, log_message: None
 
-        self.wd2.checkin()
+        self.wd2.checkin() # Will not complete
         self.wd1.checkin()
-        wd2_commit(u"TestSession2", None)
+
+        wd2_commit(u"TestSession2", None) # Resume the commit
         
         
 class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
