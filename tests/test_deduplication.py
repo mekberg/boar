@@ -27,7 +27,7 @@ repository.DEDUP_BLOCK_SIZE = 3 # Make deduplication cases more manageble
 from common import get_tree, my_relpath, convert_win_path_to_unix, md5sum, DevNull
 from boar_exceptions import UserError
 from front import Front
-from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs
+from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 
 from deduplication import print_recipe
 from deduplication import RecipeFinder
@@ -63,6 +63,41 @@ class TestRecipeFinder(unittest.TestCase):
                                                'original': False, 'repeat': 1, 'offset': 0}]
                                    })
         #print recipe
+
+class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
+    def setUp(self):
+        self.remove_at_teardown = []
+        self.workdir1 = self.createTmpName()
+        self.workdir2 = self.createTmpName()
+        self.repopath = self.createTmpName()
+        repository.create_repository(self.repopath, enable_deduplication = True)
+
+        os.mkdir(self.workdir1)
+        self.wd1 = workdir.Workdir(self.repopath, u"TestSession1", u"", None, self.workdir1)
+        self.wd1.setLogOutput(DevNull())
+        self.wd1.use_progress_printer(False)
+        self.wd1.get_front().mksession(u"TestSession1")
+
+        os.mkdir(self.workdir2)
+        self.wd2 = workdir.Workdir(self.repopath, u"TestSession2", u"", None, self.workdir2)
+        self.wd2.setLogOutput(DevNull())
+        self.wd2.use_progress_printer(False)
+        self.wd2.get_front().mksession(u"TestSession2")
+
+    def testIdenticalCommits(self):
+        write_file(self.workdir1, "a.txt", "aaa")
+        self.wd1.checkin()
+
+        write_file(self.workdir2, "b2.txt", "aaaaaa")
+        write_file(self.workdir1, "b1.txt", "aaaaaa")
+
+        wd2_commit = self.wd2.front.commit
+        self.wd2.front.commit = lambda session_name, log_message: None
+
+        self.wd2.checkin()
+        self.wd1.checkin()
+        wd2_commit(u"TestSession2", None)
+        
         
 class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
     def setUp(self):

@@ -45,6 +45,14 @@ def write_tree(path, filemap, create_root = True):
         with open(fullpath, "wb") as f:
             f.write(filemap[filename])
 
+def write_file(directory, path, content):
+    assert not os.path.isabs(path)
+    filepath = os.path.join(directory, path)
+    md5 = md5sum(content)
+    with open(filepath, "w") as f:
+        f.write(content)
+    return md5
+
 class WorkdirHelper:
     def mkdir(self, path):
         assert not os.path.isabs(path)
