@@ -99,6 +99,47 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
         self.wd1.checkin()
 
         wd2_commit(u"TestSession2", None) # Resume the commit
+
+    def testIdenticalNewBlob(self):
+        write_file(self.workdir1, "a.txt", "aaa")
+        write_file(self.workdir1, "b.txt", "bbb")
+        self.wd1.checkin()
+
+        write_file(self.workdir1, "c1.txt", "aaaccc")
+        write_file(self.workdir2, "c2.txt", "bbbccc")
+
+        # Make the checkin() go just almost all the way...
+        wd2_commit = self.wd2.front.commit
+        self.wd2.front.commit = lambda session_name, log_message: None
+
+        self.wd2.checkin() # Will not complete
+        self.wd1.checkin()
+
+        wd2_commit(u"TestSession2", None) # Resume the commit
+        self.assertEquals("ccc", self.wd1.front.get_blob("9df62e693988eb4e1e1444ece0578579").read())
+
+    def testRedundantNewBlob(self):
+        write_file(self.workdir1, "a.txt", "aaa")
+        self.wd1.checkin()
+
+        write_file(self.workdir2, "b.txt", "aaabbbccc")
+        # Is deduplicated to aaa + bbbccc
+
+        # Make the checkin() go just almost all the way...
+        wd2_commit = self.wd2.front.commit
+        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.checkin() # Will not complete
+
+        # Is deduplicated to aaa + bbb
+        write_file(self.workdir1, "b.txt", "aaabbb")
+        self.wd1.checkin() 
+
+        # Is deduplicated to aaa + bbb + ccc
+        write_file(self.workdir1, "b.txt", "aaabbbccc")
+        self.wd1.checkin() 
+
+        wd2_commit(u"TestSession2", None) # Resume the commit
+        self.assertEquals(set(), self.wd1.front.repo.get_orphan_blobs())
         
         
 class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
