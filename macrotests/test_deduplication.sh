@@ -77,8 +77,9 @@ rm output.txt || exit 1
 #
 
 $BOAR mkrepo -d $REPO || exit 1
+echo "Creating forbidden session..."
 BOAR_DISABLE_DEDUP=1 $BOAR --repo="$REPO" mksession Session >output.txt 2>&1 && { 
-    echo "Should not be possible to create session in dedup repo without the dedup module"; exit 1; }
+    cat output.txt; echo "Should not be possible to create session in dedup repo without the dedup module"; exit 1; }
 
 cat >expected.txt <<EOF
 NOTICE: This repository requires the native deduplication module for writing -
