@@ -805,44 +805,37 @@ class Repo:
             os.rename(self.get_blob_path(blob), os.path.join(trashdir, blob))
         return len(orphan_blobs)
 
-    def process_queue(self):
-        sw = StopWatch(enabled=False, name="process_queue")
-        assert self.repo_mutex.is_locked()
-        assert not self.readonly, "Repo is read only, cannot process queue"
+    def get_transaction_path(self):
         session_id = self.get_queued_session_id()
         if session_id == None:
-            return
-        queued_item = self.get_queue_path(session_id)
+            return None
+        return self.get_queue_path(session_id)
 
-        items = os.listdir(queued_item)
-        from front import Front
+    def __transaction_verify_blobs(self, transaction_path):
+        blob_names = [fn for fn in os.listdir(transaction_path) if is_md5sum(fn)]
+        for filename in blob_names:
+            full_path = os.path.join(transaction_path, filename)
+            assert filename == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
 
-        # Check the checksums of all blobs 
-        sw.mark("Prepare")
-        for filename in items:
-            full_path = os.path.join(queued_item, filename)
-            if is_md5sum(filename):
-                assert filename == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
-        sw.mark("Verify blobs")
+    def __transaction_verify_recipes(self, transaction_path):
+        recipe_names = [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]
+        for filename in recipe_names:
+            full_path = os.path.join(transaction_path, filename)
+            md5summer = hashlib.md5()
+            recipe = read_json(full_path)
+            reader = blobreader.RecipeReader(recipe, self, local_path=transaction_path)
+            while reader.bytes_left():
+                # DEDUP_BLOCK_SIZE should fit the data nicely, as
+                # a recipe will be chunked suchwise.
+                md5summer.update(reader.read(DEDUP_BLOCK_SIZE))
+            assert filename == md5summer.hexdigest() + ".recipe", "Invalid recipe found in queue dir:" + full_path
+        
 
-        # Check the checksums of all recipes
-        for filename in items:
-            full_path = os.path.join(queued_item, filename)
-            if is_recipe_filename(filename):
-                md5summer = hashlib.md5()
-                recipe = read_json(full_path)
-                reader = blobreader.RecipeReader(recipe, self, local_path=queued_item)
-                while reader.bytes_left():
-                    # DEDUP_BLOCK_SIZE should fit the data nicely, as
-                    # a recipe will be chunked suchwise.q
-                    md5summer.update(reader.read(DEDUP_BLOCK_SIZE))
-                assert filename == md5summer.hexdigest() + ".recipe", "Invalid recipe found in queue dir:" + full_path
-        sw.mark("Verify recipes")
+    def __transaction_verify_meta(self, transaction_path):
         # Check the existence of all required files
         # TODO: check the contents for validity
-        meta_info = read_json(os.path.join(queued_item, "session.json"))
-        contents = os.listdir(queued_item)
-        snapshots_to_delete = []
+        meta_info = read_json(os.path.join(transaction_path, "session.json"))
+        contents = os.listdir(transaction_path)
 
         # Check that there are no unexpected files in the snapshot,
         # and perform a simple test for json well-formedness
@@ -852,17 +845,18 @@ class Repo:
             if filename == meta_info['fingerprint']+".fingerprint":
                 continue # Fingerprint file
             if filename in ["session.json", "bloblist.json"]:
-                read_json(os.path.join(queued_item, filename)) # Check if malformed
+                read_json(os.path.join(transaction_path, filename)) # Check if malformed
                 continue
             if filename in ["session.md5"]:
                 continue
             if is_recipe_filename(filename):
-                read_json(os.path.join(queued_item, filename)) # Check if malformed
+                read_json(os.path.join(transaction_path, filename)) # Check if malformed
                 continue
             if filename == "delete.json":
-                snapshots_to_delete = read_json(os.path.join(queued_item, "delete.json"))
+                read_json(os.path.join(transaction_path, "delete.json"))
                 continue
             if filename == "blocks.json":
+                read_json(os.path.join(transaction_path, "blocks.json"))
                 continue
             assert False, "Unexpected file in new session:" + filename
 
@@ -872,33 +866,72 @@ class Repo:
                      "session.json", "bloblist.json", "session.md5", "blocks.json"]), \
                      "Missing files in queue dir: "+str(contents)
 
-        sw.mark("Expected files existence check")
+
+    def __transaction_trim(self, transaction_path):
+        """Some items in the transaction may have become redundant due
+        to commits that have occured since we started this
+        commit. Trim them away."""
+
+        for blob in [fn for fn in os.listdir(transaction_path) if is_md5sum(fn)]:
+            if self.has_raw_blob(blob):
+                # Blob already exists in the repo
+                path_to_remove = os.path.join(transaction_path, blob)
+                os.remove(path_to_remove)
+
+        for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
+            if self.has_recipe_blob(recipe):
+                path_to_remove = os.path.join(transaction_path, recipe)
+                os.remove(path_to_remove)
+
+        
+        
+    def process_queue(self):
+        sw = StopWatch(enabled=False, name="process_queue")
+        assert self.repo_mutex.is_locked()
+        assert not self.readonly, "Repo is read only, cannot process queue"
+        session_id = self.get_queued_session_id()
+        if session_id == None:
+            return
+        queued_item = self.get_queue_path(session_id)
+        sw.mark("Lock mutex and init")
+
+        self.__transaction_verify_meta(queued_item)
+        sw.mark("Meta check 1")
+
+        self.__transaction_trim(queued_item)
+        sw.mark("Trim")
+
+        self.__transaction_verify_blobs(queued_item)
+        sw.mark("Verify blobs")
+
+        self.__transaction_verify_recipes(queued_item)
+        sw.mark("Verify recipes")
+
+        self.__transaction_verify_meta(queued_item)
+        sw.mark("Meta check 2")
+
         # Everything seems OK, move the blobs and consolidate the session
-        for filename in items:
+        for filename in os.listdir(queued_item):
             if is_md5sum(filename):
                 blob_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_blob_path(filename)
-                # Check for existence before moving. Another
-                # snapshot might have checked in this same file
-                # concurrently, see issue 70.
-                if os.path.exists(destination_path):
-                    os.remove(blob_to_move)
-                else:
-                    move_file(blob_to_move, destination_path, mkdirs = True)
+                move_file(blob_to_move, destination_path, mkdirs = True)
             elif is_recipe_filename(filename):
                 recipe_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_recipe_path(filename)
-                if self.has_recipe_blob(filename):
-                    os.remove(recipe_to_move)
-                else:
-                    move_file(recipe_to_move, destination_path, mkdirs = False)
+                move_file(recipe_to_move, destination_path, mkdirs = False)
             else:
                 pass # The rest becomes a snapshot definition directory
         sw.mark("Files integrated")
-        if snapshots_to_delete:
+        
+        snapshots_to_delete = []
+        snapshots_to_delete_file = os.path.join(queued_item, "delete.json")
+        if os.path.exists(snapshots_to_delete_file):
             # Intentionally redundant check for erase enable flag
             assert os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
+            snapshots_to_delete = read_json(snapshots_to_delete_file)
             self.__erase_snapshots(snapshots_to_delete)
+
         if os.path.exists(os.path.join(queued_item, "delete.json")):
             self.erase_orphan_blobs()
             safe_delete_file(os.path.join(queued_item, "delete.json"))
