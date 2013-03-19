@@ -29,7 +29,7 @@ from boar_exceptions import *
 import client
 import front
 
-from front import Front, set_file_contents
+from front import Front, set_file_contents, verify_repo
 import workdir
 from common import *
 import deduplication
@@ -167,42 +167,6 @@ def verify_manifests(front, sid, verbose = False, required_manifests = []):
         result = False
         print "Missing manifests:", remaining_required_manifests
     return result
-
-def verify_repo(front, verify_blobs = True):
-    """Returns True if the repo was clean. Otherwise throws an
-    exception."""
-    for rev in range(1, front.repo_get_highest_used_revision() + 1):
-        front.repo_verify_snapshot(rev)
-    session_ids = front.get_session_ids()
-    print "Verifying %s snapshots" % (len(session_ids))
-    existing_blobs = set(front.get_all_blobs()) | set(front.get_all_recipes())
-    for i in range(0, len(session_ids)):
-        id = session_ids[i]
-        bloblist = front.get_session_bloblist(id) # We must not use a
-                                                  # cached bloblist
-                                                  # here - we're
-                                                  # verifying the
-                                                  # repo!
-        calc_fingerprint = bloblist_fingerprint(bloblist)
-        if calc_fingerprint != front.get_session_fingerprint(id):
-            raise CorruptionError("Fingerprint didn't match for snapshot %s" % id)
-        for bi in bloblist:
-            if bi['md5sum'] not in existing_blobs:
-                raise CorruptionError("Snapshot %s is missing blob %s" % (session_ids[i], bi['md5sum']))
-        print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
-    if not verify_blobs:
-        print "Skipping blob verification"
-        return True
-    print "Collecting a list of all blobs..."
-    count = front.init_verify_blobs()
-    print "Verifying %s blobs..." % (count)
-    done = 0
-    while done < count:
-        done += len(front.verify_some_blobs())
-        print done, "of "+str(count)+" blobs verified, "+ \
-            str(round(1.0*done/count * 100,1)) + "% done."
-    return True
-
 
 def cmd_locate(args):
     if len(args) == 0:
@@ -533,7 +497,7 @@ def cmd_verify(args):
     if args:
         raise UserError("Too many arguments")
     front = connect_to_repo(get_repo_url())
-    verify_repo(front, verify_blobs = not options.quick)
+    verify_repo(front, verify_blobs = not options.quick, verbose = True)
 
 def cmd_manifests(args):
     parser = OptionParser(usage="usage: boar manifests [options] <session name>")
