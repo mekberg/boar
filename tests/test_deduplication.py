@@ -26,7 +26,7 @@ repository.DEDUP_BLOCK_SIZE = 3 # Make deduplication cases more manageble
 
 from common import get_tree, my_relpath, convert_win_path_to_unix, md5sum, DevNull
 from boar_exceptions import UserError
-from front import Front
+from front import Front, verify_repo
 from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 
 from deduplication import print_recipe
@@ -140,6 +140,11 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
 
         wd2_commit(u"TestSession2", None) # Resume the commit
         self.assertEquals(set(), self.wd1.front.repo.get_orphan_blobs())
+
+    def tearDown(self):
+        verify_repo(self.wd1.get_front())
+        for d in self.remove_at_teardown:
+            shutil.rmtree(d, ignore_errors = True)
         
         
 class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
