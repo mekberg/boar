@@ -203,6 +203,41 @@ def is_continuation(base_front, cont_front):
             return False
     return True
 
+def verify_repo(front, verify_blobs = True, verbose = False):
+    """Returns True if the repo was clean. Otherwise throws an
+    exception."""
+    for rev in range(1, front.repo_get_highest_used_revision() + 1):
+        front.repo_verify_snapshot(rev)
+    session_ids = front.get_session_ids()
+    if verbose: print "Verifying %s snapshots" % (len(session_ids))
+    existing_blobs = set(front.get_all_blobs()) | set(front.get_all_recipes())
+    for i in range(0, len(session_ids)):
+        id = session_ids[i]
+        bloblist = front.get_session_bloblist(id) # We must not use a
+                                                  # cached bloblist
+                                                  # here - we're
+                                                  # verifying the
+                                                  # repo!
+        calc_fingerprint = bloblist_fingerprint(bloblist)
+        if calc_fingerprint != front.get_session_fingerprint(id):
+            raise CorruptionError("Fingerprint didn't match for snapshot %s" % id)
+        for bi in bloblist:
+            if bi['md5sum'] not in existing_blobs:
+                raise CorruptionError("Snapshot %s is missing blob %s" % (session_ids[i], bi['md5sum']))
+        if verbose: print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
+    if not verify_blobs:
+        if verbose: print "Skipping blob verification"
+        return True
+    if verbose: print "Collecting a list of all blobs..."
+    count = front.init_verify_blobs()
+    if verbose: print "Verifying %s blobs..." % (count)
+    done = 0
+    while done < count:
+        done += len(front.verify_some_blobs())
+        if verbose: print done, "of "+str(count)+" blobs verified, "+ \
+            str(round(1.0*done/count * 100,1)) + "% done."
+    return True
+
 
 class Front:
     def __init__(self, repo):
