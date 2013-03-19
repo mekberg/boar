@@ -872,18 +872,33 @@ class Repo:
         to commits that have occured since we started this
         commit. Trim them away."""
 
-        for blob in [fn for fn in os.listdir(transaction_path) if is_md5sum(fn)]:
-            if self.has_raw_blob(blob):
-                # Blob already exists in the repo
-                path_to_remove = os.path.join(transaction_path, blob)
-                os.remove(path_to_remove)
+        def get_recipe_blobs(recipe_filename):
+            result = set()
+            recipe = read_json(recipe_filename)
+            for piece in recipe['pieces']:
+                result.add(piece['source'])
+            return result
+
+        session = sessions.SessionReader(self, transaction_path)
 
         for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
             if self.has_recipe_blob(recipe):
                 path_to_remove = os.path.join(transaction_path, recipe)
                 os.remove(path_to_remove)
-
         
+        used_blobs = set() # All the blobs that this commit must have
+        for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
+            recipe_path = os.path.join(transaction_path, recipe)
+            used_blobs.update(get_recipe_blobs(recipe_path))
+        for blobinfo in session.get_raw_bloblist():
+            if 'action' not in blobinfo:
+                used_blobs.add(blobinfo['md5sum'])
+        
+        for blob in [fn for fn in os.listdir(transaction_path) if is_md5sum(fn)]:
+            if self.has_raw_blob(blob) or blob not in used_blobs:
+                path_to_remove = os.path.join(transaction_path, blob)
+                os.remove(path_to_remove)
+
         
     def process_queue(self):
         sw = StopWatch(enabled=False, name="process_queue")
