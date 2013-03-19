@@ -178,6 +178,11 @@ def has_pending_operations(repo_path):
     dirpath = os.path.join(repo_path, QUEUE_DIR)
     return len(os.listdir(dirpath)) != 0
 
+def get_recipe_md5(recipe_filename):
+    md5 = recipe_filename.split(".")[0]
+    assert is_md5sum(md5)
+    return md5
+
 class Repo:
     def __init__(self, repopath):
         # The path must be absolute to avoid problems with clients
@@ -490,7 +495,7 @@ class Repo:
 
     def get_recipe_path(self, recipe):
         if is_recipe_filename(recipe):
-            recipe = recipe.split(".")[0]
+            recipe = get_recipe_md5(recipe)
         assert is_md5sum(recipe)
         return os.path.join(self.repopath, RECIPES_DIR, recipe + ".recipe")
 
@@ -881,18 +886,22 @@ class Repo:
 
         session = sessions.SessionReader(self, transaction_path)
 
-        for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
-            if self.has_recipe_blob(recipe):
-                path_to_remove = os.path.join(transaction_path, recipe)
-                os.remove(path_to_remove)
-        
         used_blobs = set() # All the blobs that this commit must have
-        for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
-            recipe_path = os.path.join(transaction_path, recipe)
-            used_blobs.update(get_recipe_blobs(recipe_path))
         for blobinfo in session.get_raw_bloblist():
             if 'action' not in blobinfo:
                 used_blobs.add(blobinfo['md5sum'])
+
+        for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
+            recipe_md5 = get_recipe_md5(recipe)
+            assert recipe_md5 in used_blobs
+            
+            if self.has_recipe_blob(recipe) or self.has_raw_blob(recipe_md5):
+                path_to_remove = os.path.join(transaction_path, recipe)
+                os.remove(path_to_remove)
+        
+        for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
+            recipe_path = os.path.join(transaction_path, recipe)
+            used_blobs.update(get_recipe_blobs(recipe_path))
         
         for blob in [fn for fn in os.listdir(transaction_path) if is_md5sum(fn)]:
             if self.has_raw_blob(blob) or blob not in used_blobs:
@@ -928,10 +937,12 @@ class Repo:
         # Everything seems OK, move the blobs and consolidate the session
         for filename in os.listdir(queued_item):
             if is_md5sum(filename):
+                assert not self.has_blob(filename)
                 blob_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_blob_path(filename)
                 move_file(blob_to_move, destination_path, mkdirs = True)
             elif is_recipe_filename(filename):
+                assert not self.has_blob(get_recipe_md5(filename))
                 recipe_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_recipe_path(filename)
                 move_file(recipe_to_move, destination_path, mkdirs = False)
