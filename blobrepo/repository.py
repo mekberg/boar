@@ -658,6 +658,15 @@ class Repo:
             for blobinfo in queued_session.get_raw_bloblist():
                 if 'md5sum' in blobinfo:
                     used_blobs.add(blobinfo['md5sum'])
+
+        for blob in set(used_blobs):
+            recipe = self.get_recipe(blob)
+            if recipe:
+                for piece in recipe['pieces']:
+                    used_blobs.add(piece['source'])
+
+        # TODO: consider recipes in any enqueued snapshot?
+
         orphans = set(self.get_blob_names()) - used_blobs
         return orphans
 
