@@ -13,6 +13,13 @@ EOF
 (BOAR_DISABLE_DEDUP=1 $BOAR --version | grep "Deduplication module not installed") || { 
     echo "Deduplication module could not be disabled for testing"; exit 1; }
 
+function dir_empty() {
+    # Returns true if the given directory is empty
+    d="$1"
+    test -d "$d" || { echo "$d is not an existing directory"; exit 1; }
+    ! (ls -A "$d" | grep . >/dev/null)
+}
+
 function fill_repo() {
 $BOAR --repo="$REPO" mksession Session || exit 1
 $BOAR --repo="$REPO" co Session || exit 1
@@ -24,7 +31,7 @@ cp $BIGFILE Session/a.bin || exit 1
 
 (cd Session && 
     echo "Tjosan" >>a.bin &&
-    md5sum a.bin >>manifest.md5 &&
+    md5sum a.bin >manifest.md5 &&
     $BOAR ci -q ) || exit 1
 
 test -d "$REPO/recipes" || exit 1
@@ -47,8 +54,8 @@ test -d "$CLONE/recipes" || exit 1
 $BOAR mkrepo "$REPO" || exit 1
 fill_repo
 clone_repo
-test -z $(ls -A "$REPO/recipes") || { echo "Recipe dir should be empty for non-dedup repo"; exit 1; }
-test -z $(ls -A "$CLONE/recipes") || { echo "Cloned recipe dir should be empty for non-dedup repo"; exit 1; }
+dir_empty "$REPO/recipes" || { echo "Recipe dir should be empty for non-dedup repo"; exit 1; }
+dir_empty "$CLONE/recipes" || { echo "Cloned recipe dir should be empty for non-dedup repo"; exit 1; }
 rm -r Session "$REPO" "$CLONE" || exit 1
 
 #
@@ -58,8 +65,8 @@ rm -r Session "$REPO" "$CLONE" || exit 1
 $BOAR mkrepo -d "$REPO" || exit 1
 fill_repo
 clone_repo
-test ! -z $(ls -A "$REPO/recipes") || { echo "Recipe dir should NOT be empty for dedup repo"; exit 1; }
-test ! -z $(ls -A "$CLONE/recipes") || { echo "Cloned recipe dir should NOT be empty for dedup repo"; exit 1; }
+dir_empty "$REPO/recipes" && { echo "Recipe dir should NOT be empty for dedup repo"; exit 1; }
+dir_empty "$CLONE/recipes" && { echo "Cloned recipe dir should NOT be empty for dedup repo"; exit 1; }
 rm -r Session "$REPO" "$CLONE" || exit 1
 
 #
@@ -130,8 +137,8 @@ $BOAR mkrepo "$REPO" || exit 1
 fill_repo
 $BOAR mkrepo -d "$CLONE" || exit 1
 $BOAR clone "$REPO" "$CLONE" || exit 1
-test -z $(ls -A "$REPO/recipes") || { echo "Non-dedup repo should not have recipes"; exit 1; }
-test ! -z $(ls -A "$CLONE/recipes") || { echo "Dedup clone should have recipes"; exit 1; }
+dir_empty "$REPO/recipes" || { echo "Non-dedup repo should not have recipes"; exit 1; }
+dir_empty "$CLONE/recipes" && { echo "Dedup clone should have recipes"; exit 1; }
 rm -r "$REPO" "$CLONE" Session || exit 1
 
 #
@@ -142,8 +149,18 @@ $BOAR mkrepo -d "$REPO" || exit 1
 fill_repo
 $BOAR mkrepo "$CLONE" || exit 1
 $BOAR clone "$REPO" "$CLONE" || exit 1
-test ! -z $(ls -A "$REPO/recipes") || { echo "Dedup repo should have recipes"; exit 1; }
-test -z $(ls -A "$CLONE/recipes") || { echo "Non-dedup clone should not have recipes"; exit 1; }
+dir_empty "$REPO/recipes" && { echo "Dedup repo should have recipes"; exit 1; }
+dir_empty "$CLONE/recipes" || { echo "Non-dedup clone should not have recipes"; exit 1; }
 rm -r "$REPO" "$CLONE" Session || exit 1
+
+#
+# Test truncation of deduplicated repo
+#
+
+
+$BOAR mkrepo -d "$REPO" || exit 1
+fill_repo
+touch $REPO/ENABLE_PERMANENT_ERASE || exit 1
+$BOAR --repo="$REPO" truncate || exit 1
 
 exit 0
