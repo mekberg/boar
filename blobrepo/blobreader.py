@@ -1,6 +1,7 @@
 from common import *
 from jsonrpc import DataSource
 import deduplication
+import boar_exceptions
 
 """ A recipe has the following format:
 
@@ -37,6 +38,7 @@ class RecipeReader(DataSource):
 
         self.pieces = []
         self.blob_paths = {} # Blob id -> blob path
+        self.file_handles = {} # blob -> handle
 
         # Expand repeated pieces
         for piece in recipe['pieces']:
@@ -50,7 +52,8 @@ class RecipeReader(DataSource):
                 blobpath =  os.path.join(self.local_path, blob)
             if not blobpath or not os.path.exists(blobpath):
                 blobpath = self.repo.get_blob_path(blob)
-            assert os.path.exists(blobpath)
+            if not os.path.exists(blobpath):
+                raise boar_exceptions.CorruptionError("A recipe (%s) refers to a missing blob (%s)" % (recipe['md5sum'], blob))
             self.blob_paths[piece['source']] = blobpath
 
         self.blob_size = recipe['size']
@@ -68,7 +71,6 @@ class RecipeReader(DataSource):
         self.__seek(self.pos)
         #print "Reader opening recipe:"
         #deduplication.print_recipe(recipe)
-        self.file_handles = {} # blob -> handle
 
     def remaining(self): # TODO: make less silly
         return self.bytes_left(self)
