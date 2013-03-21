@@ -210,7 +210,7 @@ def verify_repo(front, verify_blobs = True, verbose = False):
         front.repo_verify_snapshot(rev)
     session_ids = front.get_session_ids()
     if verbose: print "Verifying %s snapshots" % (len(session_ids))
-    existing_blobs = set(front.get_all_blobs()) | set(front.get_all_recipes())
+    existing_blobs = set(front.get_all_raw_blobs()) | set(front.get_all_recipes())
     for i in range(0, len(session_ids)):
         id = session_ids[i]
         bloblist = front.get_session_bloblist(id) # We must not use a
@@ -557,8 +557,8 @@ class Front:
     def has_blob(self, sum):
         return self.repo.has_blob(sum)
 
-    def get_all_blobs(self):
-        return self.repo.get_blob_names()
+    def get_all_raw_blobs(self):
+        return self.repo.get_raw_blob_names()
 
     def get_all_recipes(self):
         return self.repo.get_recipe_names()
@@ -574,7 +574,7 @@ class Front:
 
     def init_verify_blobs(self):
         assert self.blobs_to_verify == []
-        self.blobs_to_verify = self.repo.get_blob_names() + self.repo.get_recipe_names()
+        self.blobs_to_verify = self.repo.get_raw_blob_names() + self.repo.get_recipe_names()
         for scanner in self.repo.scanners:
             scanner.scan_init()
         return len(self.blobs_to_verify)
