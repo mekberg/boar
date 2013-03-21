@@ -628,7 +628,7 @@ class Repo:
     def find_next_session_id(self):
         return self.get_highest_used_revision() + 1
 
-    def get_blob_names(self):
+    def get_raw_blob_names(self):
         blobpattern = re.compile("/([0-9a-f]{32})$")
         assert blobpattern.search("b5/b5fb453aeaaef8343353cc1b641644f9")
         tree = get_tree(os.path.join(self.repopath, BLOB_DIR))
@@ -651,28 +651,36 @@ class Repo:
         return list(matches)
 
     def get_orphan_blobs(self):
+        """Returns a list of all blobs (recipes and raw blobs) that
+        exists in the repo but aren't referred to by any snapshot."""
         used_blobs = set()
         for sid in self.get_all_sessions():
             snapshot = self.get_session(sid)
             for blobinfo in snapshot.get_raw_bloblist():
                 if 'md5sum' in blobinfo:
                     used_blobs.add(blobinfo['md5sum'])
+
         if self.get_queued_session_id():
             # Must ensure that any queued new snapshot is considered as well
-            queued_session = sessions.SessionReader(None, self.get_path(QUEUE_DIR, str(self.get_queued_session_id())))
+            queue_dir = self.get_path(QUEUE_DIR, str(self.get_queued_session_id()))
+            queued_session = sessions.SessionReader(None, queue_dir)
             for blobinfo in queued_session.get_raw_bloblist():
                 if 'md5sum' in blobinfo:
                     used_blobs.add(blobinfo['md5sum'])
+            for item in os.listdir(queue_dir):
+                # We don't need this case.
+                assert not (is_recipe_filename(item) or is_md5sum(item)), "get_orphan_blobs() must not be called while a non-truncate commit is in progress"
 
         for blob in set(used_blobs):
             recipe = self.get_recipe(blob)
             if recipe:
                 for piece in recipe['pieces']:
                     used_blobs.add(piece['source'])
-
-        # TODO: consider recipes in any enqueued snapshot?
-
-        orphans = set(self.get_blob_names()) - used_blobs
+        
+        orphans = set()
+        orphans.update(self.get_raw_blob_names())
+        orphans.update(self.get_recipe_names())
+        orphans -= used_blobs
         return orphans
 
     def verify_blob(self, sum):
@@ -694,9 +702,9 @@ class Repo:
         return verified_ok 
 
     def find_redundant_raw_blobs(self):
-        all_blobs = self.get_blob_names()
+        all_blobs = self.get_raw_blob_names()
         for blob in all_blobs:
-            if self.has_recipe_blob(blob) and self.has_raw_blob(blob):
+            if self.has_recipe_blob(blob):
                 yield blob
 
     def get_queued_session_id(self):
@@ -807,7 +815,13 @@ class Repo:
         orphan_blobs = self.get_orphan_blobs()
         trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_blobs_", dir = self.get_path(TMP_DIR))
         for blob in orphan_blobs:
-            os.rename(self.get_blob_path(blob), os.path.join(trashdir, blob))
+            if self.has_recipe_blob(blob):
+                recipe_path = self.get_recipe_path(blob)
+                os.rename(recipe_path, os.path.join(trashdir, blob + ".recipe"))
+            elif self.has_raw_blob(blob):
+                os.rename(self.get_blob_path(blob), os.path.join(trashdir, blob))
+            else:
+                warn("Tried to erase a non-existing blob: %s" % blob)
         return len(orphan_blobs)
 
     def get_transaction_path(self):
@@ -842,10 +856,15 @@ class Repo:
         meta_info = read_json(os.path.join(transaction_path, "session.json"))
         contents = os.listdir(transaction_path)
 
+        has_recipes = False
+        has_blobs = False
+        has_delete = False
+
         # Check that there are no unexpected files in the snapshot,
         # and perform a simple test for json well-formedness
         for filename in contents:
             if is_md5sum(filename): 
+                has_blobs = True
                 continue # Blob
             if filename == meta_info['fingerprint']+".fingerprint":
                 continue # Fingerprint file
@@ -856,14 +875,18 @@ class Repo:
                 continue
             if is_recipe_filename(filename):
                 read_json(os.path.join(transaction_path, filename)) # Check if malformed
+                has_recipes = True
                 continue
             if filename == "delete.json":
                 read_json(os.path.join(transaction_path, "delete.json"))
+                has_delete = True
                 continue
             if filename == "blocks.json":
                 read_json(os.path.join(transaction_path, "blocks.json"))
                 continue
             assert False, "Unexpected file in new session:" + filename
+        if has_delete:
+            assert not (has_blobs or has_recipes), "Truncation commits must not contain any blobs or recipes"
 
         # Check that all necessary files are present in the snapshot
         assert set(contents) >= \
