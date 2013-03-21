@@ -34,6 +34,7 @@ import workdir
 from common import *
 import deduplication
 
+from ordered_dict import OrderedDict
 from boar_common import *
 import boarserve
 
@@ -758,11 +759,17 @@ def cmd_contents(args):
     stdout = dedicated_stdout()
     globals()["suppress_finishmessage"] = True
     front = connect_to_repo(get_repo_url())
-    sessionId = front.find_last_revision(session_name)
-    if not sessionId:
-        raise UserError("No such session found: %s" % (session_name))
+    if options.revision:
+        if options.revision in front.get_session_ids(session_name):
+            sessionId = options.revision
+        else:
+            raise UserError("There is no snapshot %s for session %s" % (options.revision, session_name))
+    else:
+        sessionId = front.find_last_revision(session_name)
+        if not sessionId:
+            raise UserError("No such session found: %s" % (session_name))
 
-    dump = {}
+    dump = OrderedDict()
     dump['session_name'] = session_name
     dump['revision'] = sessionId
     dump['fingerprint'] = front.get_session_fingerprint(sessionId)
@@ -780,7 +787,8 @@ def cmd_contents(args):
             stdout.write(bi['filename'].encode("utf-8"))
             stdout.write("\n")
     else:
-        json.dump(dump, stdout, indent = 4, sort_keys=True)
+        json.dump(dump, stdout, indent = 4)
+        stdout.write("\n")
 
 
 def cmd_mksession(args):
