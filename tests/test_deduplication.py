@@ -267,7 +267,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         rebuilt_content = self.wd.front.get_blob(b_blob).read()
         self.assertEquals(rebuilt_content, "aaa")
         #print_recipe(recipe)
-
+ 
     def testRepeatedHit(self):
         a_blob = self.addWorkdirFile("a.txt", "aaa")
         self.wd.checkin()
@@ -276,8 +276,23 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         x_blob = md5sum("X")
         recipe = self.repo.get_recipe(b_blob)
         #print_recipe(recipe)
-        
+
+    def testSameRecipeTwice(self):
+        a_blob = self.addWorkdirFile("a.txt", "aaa")
+        self.wd.checkin()
+        b_blob = self.addWorkdirFile("b.txt", "aaaccc")
+        c_blob = self.addWorkdirFile("c.txt", "aaaccc")
+        self.wd.checkin()
+        #print_recipe(recipe)
+
+    def testEmptyFile(self):
+        a_blob = self.addWorkdirFile("empty.txt", "")
+        self.wd.checkin()
+        self.assertTrue("d41d8cd98f00b204e9800998ecf8427e" in self.wd.get_front().get_all_raw_blobs())
+        #print_recipe(recipe)
+       
     def tearDown(self):
+        verify_repo(self.wd.get_front())
         for d in self.remove_at_teardown:
             shutil.rmtree(d, ignore_errors = True)
 
