@@ -824,114 +824,6 @@ class Repo:
                 warn("Tried to erase a non-existing blob: %s" % blob)
         return len(orphan_blobs)
 
-    def get_transaction_path(self):
-        session_id = self.get_queued_session_id()
-        if session_id == None:
-            return None
-        return self.get_queue_path(session_id)
-
-    def __transaction_verify_blobs(self, transaction_path):
-        blob_names = [fn for fn in os.listdir(transaction_path) if is_md5sum(fn)]
-        for filename in blob_names:
-            full_path = os.path.join(transaction_path, filename)
-            assert filename == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
-
-    def __transaction_verify_recipes(self, transaction_path):
-        recipe_names = [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]
-        for filename in recipe_names:
-            full_path = os.path.join(transaction_path, filename)
-            md5summer = hashlib.md5()
-            recipe = read_json(full_path)
-            reader = blobreader.RecipeReader(recipe, self, local_path=transaction_path)
-            while reader.bytes_left():
-                # DEDUP_BLOCK_SIZE should fit the data nicely, as
-                # a recipe will be chunked suchwise.
-                md5summer.update(reader.read(DEDUP_BLOCK_SIZE))
-            assert filename == md5summer.hexdigest() + ".recipe", "Invalid recipe found in queue dir:" + full_path
-        
-
-    def __transaction_verify_meta(self, transaction_path):
-        # Check the existence of all required files
-        # TODO: check the contents for validity
-        meta_info = read_json(os.path.join(transaction_path, "session.json"))
-        contents = os.listdir(transaction_path)
-
-        has_recipes = False
-        has_blobs = False
-        has_delete = False
-
-        # Check that there are no unexpected files in the snapshot,
-        # and perform a simple test for json well-formedness
-        for filename in contents:
-            if is_md5sum(filename): 
-                has_blobs = True
-                continue # Blob
-            if filename == meta_info['fingerprint']+".fingerprint":
-                continue # Fingerprint file
-            if filename in ["session.json", "bloblist.json"]:
-                read_json(os.path.join(transaction_path, filename)) # Check if malformed
-                continue
-            if filename in ["session.md5"]:
-                continue
-            if is_recipe_filename(filename):
-                read_json(os.path.join(transaction_path, filename)) # Check if malformed
-                has_recipes = True
-                continue
-            if filename == "delete.json":
-                read_json(os.path.join(transaction_path, "delete.json"))
-                has_delete = True
-                continue
-            if filename == "blocks.json":
-                read_json(os.path.join(transaction_path, "blocks.json"))
-                continue
-            assert False, "Unexpected file in new session:" + filename
-        if has_delete:
-            assert not (has_blobs or has_recipes), "Truncation commits must not contain any blobs or recipes"
-
-        # Check that all necessary files are present in the snapshot
-        assert set(contents) >= \
-            set([meta_info['fingerprint']+".fingerprint",\
-                     "session.json", "bloblist.json", "session.md5", "blocks.json"]), \
-                     "Missing files in queue dir: "+str(contents)
-
-
-    def __transaction_trim(self, transaction_path):
-        """Some items in the transaction may have become redundant due
-        to commits that have occured since we started this
-        commit. Trim them away."""
-
-        def get_recipe_blobs(recipe_filename):
-            result = set()
-            recipe = read_json(recipe_filename)
-            for piece in recipe['pieces']:
-                result.add(piece['source'])
-            return result
-
-        session = sessions.SessionReader(self, transaction_path)
-
-        used_blobs = set() # All the blobs that this commit must have
-        for blobinfo in session.get_raw_bloblist():
-            if 'action' not in blobinfo:
-                used_blobs.add(blobinfo['md5sum'])
-
-        for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
-            recipe_md5 = get_recipe_md5(recipe)
-            assert recipe_md5 in used_blobs
-            
-            if self.has_recipe_blob(recipe) or self.has_raw_blob(recipe_md5):
-                path_to_remove = os.path.join(transaction_path, recipe)
-                os.remove(path_to_remove)
-        
-        for recipe in [fn for fn in os.listdir(transaction_path) if is_recipe_filename(fn)]:
-            recipe_path = os.path.join(transaction_path, recipe)
-            used_blobs.update(get_recipe_blobs(recipe_path))
-        
-        for blob in [fn for fn in os.listdir(transaction_path) if is_md5sum(fn)]:
-            if self.has_raw_blob(blob) or blob not in used_blobs:
-                path_to_remove = os.path.join(transaction_path, blob)
-                os.remove(path_to_remove)
-
-        
     def process_queue(self):
         sw = StopWatch(enabled=False, name="process_queue")
         assert self.repo_mutex.is_locked()
@@ -942,19 +834,20 @@ class Repo:
         queued_item = self.get_queue_path(session_id)
         sw.mark("Lock mutex and init")
 
-        self.__transaction_verify_meta(queued_item)
+        transaction = Transaction(self, queued_item)
+        transaction.verify_meta()
         sw.mark("Meta check 1")
 
-        self.__transaction_trim(queued_item)
+        transaction.trim()
         sw.mark("Trim")
 
-        self.__transaction_verify_blobs(queued_item)
+        transaction.verify_blobs()
         sw.mark("Verify blobs")
 
-        self.__transaction_verify_recipes(queued_item)
+        transaction.verify_recipes()
         sw.mark("Verify recipes")
 
-        self.__transaction_verify_meta(queued_item)
+        transaction.verify_meta()
         sw.mark("Meta check 2")
 
         # Everything seems OK, move the blobs and consolidate the session
@@ -1009,6 +902,118 @@ class Repo:
         shutil.move(queued_item, session_path)
         assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
         sw.mark("done")
+
+class Transaction:
+    
+    def __init__(self, repo, transaction_dir):
+        self.repo = repo
+        self.path = transaction_dir
+        self.session_reader = sessions.SessionReader(repo, self.path)
+        
+
+    def verify_blobs(self):
+        blob_names = [fn for fn in os.listdir(self.path) if is_md5sum(fn)]
+        for filename in blob_names:
+            full_path = os.path.join(self.path, filename)
+            assert filename == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
+
+    def verify_recipes(self):
+        recipe_names = [fn for fn in os.listdir(self.path) if is_recipe_filename(fn)]
+        for filename in recipe_names:
+            full_path = os.path.join(self.path, filename)
+            md5summer = hashlib.md5()
+            recipe = read_json(full_path)
+            reader = blobreader.RecipeReader(recipe, self.repo, local_path=self.path)
+            while reader.bytes_left():
+                # DEDUP_BLOCK_SIZE should fit the data nicely, as
+                # a recipe will be chunked suchwise.
+                md5summer.update(reader.read(DEDUP_BLOCK_SIZE))
+            assert filename == md5summer.hexdigest() + ".recipe", "Invalid recipe found in queue dir:" + full_path
+        
+
+    def verify_meta(self):
+        # Check the existence of all required files
+        # TODO: check the contents for validity
+        meta_info = read_json(os.path.join(self.path, "session.json"))
+        contents = os.listdir(self.path)
+
+        has_recipes = False
+        has_blobs = False
+        has_delete = False
+
+        # Check that there are no unexpected files in the snapshot,
+        # and perform a simple test for json well-formedness
+        for filename in contents:
+            if is_md5sum(filename): 
+                has_blobs = True
+                continue # Blob
+            if filename == meta_info['fingerprint']+".fingerprint":
+                continue # Fingerprint file
+            if filename in ["session.json", "bloblist.json"]:
+                read_json(os.path.join(self.path, filename)) # Check if malformed
+                continue
+            if filename in ["session.md5"]:
+                continue
+            if is_recipe_filename(filename):
+                read_json(os.path.join(self.path, filename)) # Check if malformed
+                has_recipes = True
+                continue
+            if filename == "delete.json":
+                read_json(os.path.join(self.path, "delete.json"))
+                has_delete = True
+                continue
+            if filename == "blocks.json":
+                read_json(os.path.join(self.path, "blocks.json"))
+                continue
+            assert False, "Unexpected file in new session:" + filename
+        if has_delete:
+            assert not (has_blobs or has_recipes), "Truncation commits must not contain any blobs or recipes"
+
+        # Check that all necessary files are present in the snapshot
+        assert set(contents) >= \
+            set([meta_info['fingerprint']+".fingerprint",\
+                     "session.json", "bloblist.json", "session.md5", "blocks.json"]), \
+                     "Missing files in queue dir: "+str(contents)
+
+
+    def trim(self):
+        """Some items in the transaction may have become redundant due
+        to commits that have occured since we started this
+        commit. Trim them away."""
+
+        def get_recipe_blobs(recipe_filename):
+            result = set()
+            recipe = read_json(recipe_filename)
+            for piece in recipe['pieces']:
+                result.add(piece['source'])
+            return result
+
+        session = sessions.SessionReader(self.repo, self.path)
+
+        used_blobs = set() # All the blobs that this commit must have
+        for blobinfo in session.get_raw_bloblist():
+            if 'action' not in blobinfo:
+                used_blobs.add(blobinfo['md5sum'])
+
+        for recipe in [fn for fn in os.listdir(self.path) if is_recipe_filename(fn)]:
+            recipe_md5 = get_recipe_md5(recipe)
+            assert recipe_md5 in used_blobs
+            
+            if self.repo.has_recipe_blob(recipe) or self.repo.has_raw_blob(recipe_md5):
+                path_to_remove = os.path.join(self.path, recipe)
+                os.remove(path_to_remove)
+        
+        for recipe in [fn for fn in os.listdir(self.path) if is_recipe_filename(fn)]:
+            recipe_path = os.path.join(self.path, recipe)
+            used_blobs.update(get_recipe_blobs(recipe_path))
+        
+        for blob in [fn for fn in os.listdir(self.path) if is_md5sum(fn)]:
+            if self.repo.has_raw_blob(blob) or blob not in used_blobs:
+                path_to_remove = os.path.join(self.path, blob)
+                os.remove(path_to_remove)
+
+        
+    
 
 def get_all_ids_in_directory(path):
     result = []
