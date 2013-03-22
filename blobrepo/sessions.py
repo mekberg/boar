@@ -347,7 +347,7 @@ class SessionWriter:
             self.found_uncommitted_blocks += piece.blocks
         sw.mark(1)
         recipe = self.blob_deduplicator[blob_md5].get_recipe()
-        #print "sessions.py: Recipe:", recipe
+        assert len(recipe['pieces']) > 0
         if len(recipe['pieces']) == 1 and recipe['pieces'][0]['source'] == blob_md5:
             recipe = None
         sw.mark(2)
