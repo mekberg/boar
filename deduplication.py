@@ -219,7 +219,10 @@ class RecipeFinder(GenericStateMachine):
                                     self.__on_dedup_data_end)
         self.add_transition_handler(DEDUP_STATE, EOF_EVENT, END_STATE, 
                                     self.__on_dedup_data_end)
-
+        self.add_transition_handler(START_STATE, EOF_EVENT, END_STATE,
+                                    self.__on_original_data_start)
+        self.add_transition_handler(START_STATE, EOF_EVENT, END_STATE,
+                                    self.__on_original_data_end)
         self.add_enter_handler(DEDUP_STATE, self.__on_dedup_block)
         self.add_exit_handler(ORIGINAL_STATE, self.__on_original_data_part_end)
 
