@@ -911,16 +911,37 @@ class Transaction:
         self.session_reader = sessions.SessionReader(repo, self.path)
         
 
-    def verify_blobs(self):
-        blob_names = [fn for fn in os.listdir(self.path) if is_md5sum(fn)]
-        for filename in blob_names:
-            full_path = os.path.join(self.path, filename)
-            assert filename == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
+    def get_raw_blobs(self):
+        """Returns a list of all raw blobs that are present in the transaction directory"""
+        return [fn for fn in os.listdir(self.path) if is_md5sum(fn)]
+
+    def get_recipes(self):
+        """Returns a list of all blob recipes that are present in the
+        transaction directory."""
+        return [get_recipe_md5(fn) for fn in os.listdir(self.path) if is_recipe_filename(fn)]
+
+    def get_path(self, filename):
+        """Returns the full path to a filename in this transaction directory."""
+        assert os.path.dirname(filename) == ""
+        return os.path.join(self.path, filename)
+    
+    def get_recipe_path(self, md5):
+        """Returns the full path to a recipe in this transaction directory."""
+        assert is_md5sum(md5)
+        return self.get_path(md5 + ".recipe")
+
+    def verify_blobs(self): 
+        """Read and checksum all raw blobs in the transaction. An
+        assertion error is raised if any errors are found."""
+        for blob in self.get_raw_blobs():
+            full_path = self.get_path(blob)
+            assert blob == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
 
     def verify_recipes(self):
-        recipe_names = [fn for fn in os.listdir(self.path) if is_recipe_filename(fn)]
-        for filename in recipe_names:
-            full_path = os.path.join(self.path, filename)
+        """Read and checksum all recipes in the transaction. An
+        assertion error is raised if any errors are found."""        
+        for recipe_blob in self.get_recipes():
+            full_path = self.get_recipe_path(recipe_blob)
             md5summer = hashlib.md5()
             recipe = read_json(full_path)
             reader = blobreader.RecipeReader(recipe, self.repo, local_path=self.path)
@@ -928,13 +949,15 @@ class Transaction:
                 # DEDUP_BLOCK_SIZE should fit the data nicely, as
                 # a recipe will be chunked suchwise.
                 md5summer.update(reader.read(DEDUP_BLOCK_SIZE))
-            assert filename == md5summer.hexdigest() + ".recipe", "Invalid recipe found in queue dir:" + full_path
+            assert recipe_blob == md5summer.hexdigest(), "Invalid recipe found in queue dir:" + full_path
         
 
     def verify_meta(self):
-        # Check the existence of all required files
+        """Check the existence of all required files in the
+        transaction and make sure everything is consistent. This
+        method does not verify the integrity of blobs or recipes."""
         # TODO: check the contents for validity
-        meta_info = read_json(os.path.join(self.path, "session.json"))
+        meta_info = read_json(self.get_path("session.json"))
         contents = os.listdir(self.path)
 
         has_recipes = False
@@ -950,20 +973,20 @@ class Transaction:
             if filename == meta_info['fingerprint']+".fingerprint":
                 continue # Fingerprint file
             if filename in ["session.json", "bloblist.json"]:
-                read_json(os.path.join(self.path, filename)) # Check if malformed
+                read_json(self.get_path(filename)) # Check if malformed
                 continue
             if filename in ["session.md5"]:
                 continue
             if is_recipe_filename(filename):
-                read_json(os.path.join(self.path, filename)) # Check if malformed
+                read_json(self.get_path(filename)) # Check if malformed
                 has_recipes = True
                 continue
             if filename == "delete.json":
-                read_json(os.path.join(self.path, "delete.json"))
+                read_json(self.get_path("delete.json"))
                 has_delete = True
                 continue
             if filename == "blocks.json":
-                read_json(os.path.join(self.path, "blocks.json"))
+                read_json(self.get_path("blocks.json"))
                 continue
             assert False, "Unexpected file in new session:" + filename
         if has_delete:
@@ -974,7 +997,6 @@ class Transaction:
             set([meta_info['fingerprint']+".fingerprint",\
                      "session.json", "bloblist.json", "session.md5", "blocks.json"]), \
                      "Missing files in queue dir: "+str(contents)
-
 
     def trim(self):
         """Some items in the transaction may have become redundant due
@@ -988,32 +1010,23 @@ class Transaction:
                 result.add(piece['source'])
             return result
 
-        session = sessions.SessionReader(self.repo, self.path)
-
         used_blobs = set() # All the blobs that this commit must have
-        for blobinfo in session.get_raw_bloblist():
+        for blobinfo in self.session_reader.get_raw_bloblist():
             if 'action' not in blobinfo:
                 used_blobs.add(blobinfo['md5sum'])
 
-        for recipe in [fn for fn in os.listdir(self.path) if is_recipe_filename(fn)]:
-            recipe_md5 = get_recipe_md5(recipe)
-            assert recipe_md5 in used_blobs
+        for recipe_blob in self.get_recipes():
+            assert recipe_blob in used_blobs
             
-            if self.repo.has_recipe_blob(recipe) or self.repo.has_raw_blob(recipe_md5):
-                path_to_remove = os.path.join(self.path, recipe)
-                os.remove(path_to_remove)
+            if self.repo.has_recipe_blob(recipe_blob) or self.repo.has_raw_blob(recipe_blob):
+                os.remove(self.get_recipe_path(recipe_blob))
         
-        for recipe in [fn for fn in os.listdir(self.path) if is_recipe_filename(fn)]:
-            recipe_path = os.path.join(self.path, recipe)
-            used_blobs.update(get_recipe_blobs(recipe_path))
+        for recipe_blob in self.get_recipes():
+            used_blobs.update(get_recipe_blobs(self.get_recipe_path(recipe_blob)))
         
-        for blob in [fn for fn in os.listdir(self.path) if is_md5sum(fn)]:
+        for blob in self.get_raw_blobs():
             if self.repo.has_raw_blob(blob) or blob not in used_blobs:
-                path_to_remove = os.path.join(self.path, blob)
-                os.remove(path_to_remove)
-
-        
-    
+                os.remove(self.get_path(blob))
 
 def get_all_ids_in_directory(path):
     result = []
