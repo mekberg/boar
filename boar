@@ -775,10 +775,10 @@ def cmd_contents(args):
     dump['fingerprint'] = front.get_session_fingerprint(sessionId)
     entries = []
     for bi in front.get_session_bloblist(sessionId):
-        entries.append({'filename': bi['filename'],
-                        'md5': bi['md5sum'],
-                        'size': bi['size']})
-    dump['files'] = entries
+        entries.append(OrderedDict([('filename', bi['filename']),
+                                    ('size', bi['size']),
+                                    ('md5', bi['md5sum'])]))
+        dump['files'] = entries
 
     if options.md5sum:
         for bi in dump['files']:
