@@ -119,12 +119,16 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
         self.assertEquals("ccc", self.wd1.front.get_blob("9df62e693988eb4e1e1444ece0578579").read())
 
     def testRedundantNewBlob(self):
+        # aaa    47bce5c74f589f4867dbd57e9ca9f808
+        # bbb    08f8e0260c64418510cefb2b06eee5cd
+        # ccc    9df62e693988eb4e1e1444ece0578579
+        # bbbccc 71d27475242f6b50db02ddf1476107ee
+
         write_file(self.workdir1, "a.txt", "aaa")
         self.wd1.checkin()
 
         write_file(self.workdir2, "b.txt", "aaabbbccc")
-        # Is deduplicated to aaa + bbbccc
-
+        # b.txt is deduplicated to aaa + bbbccc
         # Make the checkin() go just almost all the way...
         wd2_commit = self.wd2.front.commit
         self.wd2.front.commit = lambda session_name, log_message: None
