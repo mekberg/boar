@@ -30,9 +30,24 @@ def safe_delete_file(path):
     path = os.path.normcase(path)
     filename = os.path.basename(path)
     assert not is_md5sum(filename), "safe_delete prevented deletion of blob"
+    assert not is_recipe_filename(filename), "safe_delete prevented deletion of recipe"
     assert filename not in ("bloblist.json", "session.json", "session.md5"), "safe_delete prevented deletion of session data"
     assert not filename.endswith(".fingerprint"), "safe_delete prevented deletion of session fingerprint"
-    assert not filename.endswith(".recipe"), "safe_delete prevented deletion of recipe data"
+    os.remove(path)
+
+def safe_delete_recipe(path):
+    path = os.path.normcase(path)
+    filename = os.path.basename(path)
+    assert is_recipe_filename(filename), "safe_delete_recipe can only delete recipes"
+    os.remove(path)
+
+def safe_delete_blob(path):
+    path = os.path.normcase(path)
+    filename = os.path.basename(path)
+    assert is_md5sum(filename), "safe_delete_recipe can only delete blobs"
+    os.remove(path)
+
+def unsafe_delete(path):
     os.remove(path)
 
 def bloblist_to_dict(bloblist):
@@ -95,3 +110,10 @@ assert parse_manifest_name("/tmp/manifest-md5.txt") == ("md5", None)
 assert parse_manifest_name("/tmp/manifest-sha256.txt") == ("sha256", None)
 assert parse_manifest_name("/tmp/tjohej.txt") == (None, None)
 assert parse_manifest_name("/tmp/tjohej.md5") == (None, None)
+
+def is_recipe_filename(filename):
+    filename_parts = filename.split(".")
+    return len(filename_parts) == 2 \
+        and filename_parts[1] == "recipe" \
+        and is_md5sum(filename_parts[0])
+
