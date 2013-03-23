@@ -158,12 +158,6 @@ def create_repository(repopath, enable_deduplication = False):
         with open(os.path.join(repopath, "ENABLE_DEDUPLICATION"), "wb"):
             pass
 
-def is_recipe_filename(filename):
-    filename_parts = filename.split(".")
-    return len(filename_parts) == 2 \
-        and filename_parts[1] == "recipe" \
-        and is_md5sum(filename_parts[0])
-
 def looks_like_repo(repo_path):
     """Superficial check to see if the given path contains anything
     resembling a repo of any version."""
@@ -797,7 +791,7 @@ class Repo:
         for filename in "session.json", "bloblist.json", "session.md5", session_data['fingerprint'] + ".fingerprint":
             full_path = os.path.join(session_path, filename)
             if os.path.exists(full_path):
-                os.unlink(full_path)
+                unsafe_delete(full_path)
 
         _snapshot_delete_test_hook(rev)
 
@@ -1019,14 +1013,14 @@ class Transaction:
             assert recipe_blob in used_blobs
             
             if self.repo.has_recipe_blob(recipe_blob) or self.repo.has_raw_blob(recipe_blob):
-                os.remove(self.get_recipe_path(recipe_blob))
+                safe_delete_recipe(self.get_recipe_path(recipe_blob))
         
         for recipe_blob in self.get_recipes():
             used_blobs.update(get_recipe_blobs(self.get_recipe_path(recipe_blob)))
         
         for blob in self.get_raw_blobs():
             if self.repo.has_raw_blob(blob) or blob not in used_blobs:
-                os.remove(self.get_path(blob))
+                safe_delete_blob(self.get_path(blob))
 
 def get_all_ids_in_directory(path):
     result = []

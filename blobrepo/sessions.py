@@ -30,6 +30,7 @@ import hashlib
 import types
 
 from common import *
+from boar_common import *
 
 import deduplication
 
@@ -233,7 +234,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         # so, just ignore it.
         if os.path.exists(real_name):
             # Necessary for windows. Posix silently replaces an existing file.
-            os.remove(piece.filename)
+            safe_delete_file(piece.filename)
         else:
             os.rename(piece.filename, real_name)
         
