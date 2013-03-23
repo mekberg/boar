@@ -166,13 +166,13 @@ rm -r "$REPO" "$CLONE" Session || exit 1
 $BOAR mkrepo -d "$REPO" || exit 1
 fill_repo
 touch $REPO/ENABLE_PERMANENT_ERASE || exit 1
-test -e $REPO/recipes/90d077e8f5d08222620ffc97bee8a19a.recipe || exit 1 # The previous one (should be culled)
-test -e $REPO/recipes/7efcbecf434ce1588570132fa61f53c6.recipe || exit 1 # The last one (should remain)
+test -e $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe || exit 1 # The previous one (should be culled)
+test -e $REPO/recipes/7e/7efcbecf434ce1588570132fa61f53c6.recipe || exit 1 # The last one (should remain)
 
 $BOAR --repo="$REPO" truncate Session || exit 1
 
-test ! -e $REPO/recipes/90d077e8f5d08222620ffc97bee8a19a.recipe || { echo "Should have been removed by truncate"; exit 1; }
-test -e $REPO/recipes/7efcbecf434ce1588570132fa61f53c6.recipe || { echo "Should remain after truncate"; exit 1; }
+test ! -e $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe || { echo "Should have been removed by truncate"; exit 1; }
+test -e $REPO/recipes/7e/7efcbecf434ce1588570132fa61f53c6.recipe || { echo "Should remain after truncate"; exit 1; }
 $BOAR --repo="$REPO" verify || { echo "Verify failed"; exit 1; }
 
 #exit 1
