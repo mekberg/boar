@@ -997,26 +997,17 @@ class Transaction:
         to commits that have occured since we started this
         commit. Trim them away."""
 
-        def get_recipe_blobs(recipe_filename):
-            result = set()
-            recipe = read_json(recipe_filename)
-            for piece in recipe['pieces']:
-                result.add(piece['source'])
-            return result
-
         used_blobs = set() # All the blobs that this commit must have
         for blobinfo in self.session_reader.get_raw_bloblist():
             if 'action' not in blobinfo:
                 used_blobs.add(blobinfo['md5sum'])
 
         for recipe_blob in self.get_recipes():
-            assert recipe_blob in used_blobs
-            
+            assert recipe_blob in used_blobs            
             if self.repo.has_recipe_blob(recipe_blob) or self.repo.has_raw_blob(recipe_blob):
                 safe_delete_recipe(self.get_recipe_path(recipe_blob))
-        
-        for recipe_blob in self.get_recipes():
-            used_blobs.update(get_recipe_blobs(self.get_recipe_path(recipe_blob)))
+            else:
+                used_blobs.update(get_recipe_blobs(self.get_recipe_path(recipe_blob)))
         
         for blob in self.get_raw_blobs():
             if self.repo.has_raw_blob(blob) or blob not in used_blobs:
@@ -1031,6 +1022,14 @@ def get_all_ids_in_directory(path):
     assert len(result) == len(set(result))
     result.sort()
     return result
+
+def get_recipe_blobs(recipe_filename):
+    result = set()
+    recipe = read_json(recipe_filename)
+    for piece in recipe['pieces']:
+        result.add(piece['source'])
+    return result
+
 
 def _snapshot_delete_test_hook(rev):
     """ This method is intended to be replaced during testing to
