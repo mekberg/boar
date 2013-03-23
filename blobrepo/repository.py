@@ -491,7 +491,7 @@ class Repo:
         if is_recipe_filename(recipe):
             recipe = get_recipe_md5(recipe)
         assert is_md5sum(recipe)
-        return os.path.join(self.repopath, RECIPES_DIR, recipe + ".recipe")
+        return os.path.join(self.repopath, RECIPES_DIR, recipe[0:2], recipe + ".recipe")
 
     def has_raw_blob(self, sum):
         """Returns true if there is an actual (non-recipe based)
@@ -855,7 +855,7 @@ class Repo:
                 assert not self.has_blob(get_recipe_md5(filename))
                 recipe_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_recipe_path(filename)
-                move_file(recipe_to_move, destination_path, mkdirs = False)
+                move_file(recipe_to_move, destination_path, mkdirs = True)
             else:
                 pass # The rest becomes a snapshot definition directory
         sw.mark("Files integrated")

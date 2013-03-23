@@ -11,20 +11,6 @@ mkrandfile.py 0 1000000 A || exit 1
 mkrandfile.py 1 1000000 B || exit 1
 mkrandfile.py 2 1000000 C || exit 1
 
-# Verify simple recipe repo NOTE: this repo does not contain a block
-# db. Commits will not be correctly deduplicated.
-
-echo "*** Testing legacy recipe repo"
-
-tar -xzf $BOARTESTHOME/reciperepo.tar.gz || exit 1
-$BOAR --repo=$REPO co Alice || { echo "Check-out failed"; exit 1; }
-$BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
-(cd Alice && md5sum -c || exit 1) <<EOF
-9b97d0a697dc503fb4c53ea01bd23dc7  alice.txt
-EOF
-cp Alice/alice.txt . || exit 1
-rm -r $REPO Alice || exit 1
-
 ############################
 
 echo "*** Testing case of files with identical blocks"
@@ -47,7 +33,7 @@ rm -r Dedup || exit 1
 #b6d81b360a5672d80c27430f39153e2c  zero1024.bin
 #59071590099d21dd439896592338bf95  zero512.bin
 
-test -e $REPO/recipes/b6d81b360a5672d80c27430f39153e2c.recipe || exit 1
+test -e $REPO/recipes/b6/b6d81b360a5672d80c27430f39153e2c.recipe || exit 1
 test -e $REPO/blobs/59/59071590099d21dd439896592338bf95 || exit 1
 
 $BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
@@ -73,7 +59,7 @@ $BOAR --repo=$REPO co Dedup || exit 1
     cat manifest.md5 &&
     $BOAR ci -q ) || exit 1
 
-test -e $REPO/recipes/e4050f3033f8b378843afeeea0b2f0e4.recipe || exit 1
+test -e $REPO/recipes/e4/e4050f3033f8b378843afeeea0b2f0e4.recipe || exit 1
 rm -r Dedup || exit 1
 $BOAR --repo=$REPO verify || { echo "Verify 2 failed"; exit 1; }
 $BOAR --repo=$REPO co Dedup || { echo "Check-out 2 failed"; exit 1; }
@@ -98,7 +84,7 @@ $BOAR --repo=$REPO co Dedup || exit 1
     md5sum *.bin *.txt >manifest.md5 && 
     $BOAR ci -q ) || exit 1
 
-test -e $REPO/recipes/d978f6138c52b8be4f07bbbf571cd450.recipe || exit 1
+test -e $REPO/recipes/d9/d978f6138c52b8be4f07bbbf571cd450.recipe || exit 1
 rm -r Dedup || exit 1
 
 $BOAR --repo=$REPO verify || { echo "Verify failed"; exit 1; }
@@ -175,7 +161,7 @@ $BOAR --repo=$REPO co Dedup || exit 1
     md5sum bigfile.bin >manifest.md5 &&
     cat manifest.md5 &&
     $BOAR ci -q ) || exit 1
-RECIPE_PATH="$REPO/recipes/0ae8ec99045123ab029be41125d3426a.recipe"
+RECIPE_PATH="$REPO/recipes/0a/0ae8ec99045123ab029be41125d3426a.recipe"
 cat $RECIPE_PATH || exit 1
 echo
 
