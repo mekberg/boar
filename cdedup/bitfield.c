@@ -54,7 +54,7 @@ void bf_destroy(BitField* bf){
   free(bf);
 }
 
-int main() {
+int main_bitfield() {
   /* BitField* bf = bf_create(100); */
   /* bf_set(bf, 99, 1); */
   /* bf_print(bf); */
@@ -70,4 +70,5 @@ int main() {
     }
   }
   bf_destroy(bf);
+  return 0;
 }
