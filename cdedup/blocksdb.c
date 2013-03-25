@@ -6,6 +6,8 @@
 #include "md5.h"
 #include "time.h"
 
+#include "blocksdb.h"
+
 static inline void assert(int c, const char* msg){
   if(c == 0){
     printf("ASSERT FAILED: %s\n", msg);
@@ -13,21 +15,15 @@ static inline void assert(int c, const char* msg){
   }
 }
 
-typedef struct _BlockRecord {
-  uint8_t  in_use; // Boolean 0 == false
-  char     blob[32];
-  uint32_t offset; // In blocksize
-  char     md5[32];
-  char     record_md5[32];
-} BlockRecord;
-
-append_record(FILE* f, BlockRecord* br) {
+void append_record(FILE* f, BlockRecord* br) {
   fseek(f, 0, SEEK_END);
-  fwrite(br, sizeof(BlockRecord), 1, f);
+  size_t result = fwrite(br, sizeof(BlockRecord), 1, f);
+  assert(result == 1, "fwrite failed");
 }
 
-load_record(FILE* f, BlockRecord* br) {
-  fread(br, sizeof(BlockRecord), 1, f);
+void load_record(FILE* f, BlockRecord* br) {
+  size_t result = fread(br, sizeof(BlockRecord), 1, f);
+  assert(result == 1, "fread failed");
 }
 
 void populate_file(){
@@ -54,9 +50,15 @@ int locate_record_linear(const char* md5){
   return -1;
 }
 
+BlockRecord* get_record(unsigned int pos){
+  assert(pos < NO_OF_RECORDS, "Tried to access position outside of db");
+  return &records[pos];
+}
+
 int locate_record(const char* md5){
   int low = 0;
   int high = NO_OF_RECORDS - 1;  
+  int found = -1;
   while(1){
     //printf("low=%d, high=%d\n", low, high);
     int mid = low + (high-low)/2;
@@ -66,14 +68,28 @@ int locate_record(const char* md5){
     } else if(cmp > 0){
       low = mid;
     } else {
-      return mid;
+      found = mid;
+      break;
     }
     if (low == high) {
-      if(strncmp(records[low].md5, md5, 32) == 0)
-	return low;
+      if(strncmp(records[low].md5, md5, 32) == 0) {
+	found = low;
+	break;
+      }
       return -1;
     }
   }
+  /* We have found a hit. Now let's make sure it is the lowest
+     existing hit.*/
+  assert(found >= 0, "locate_record() error");
+  while(found != 0){
+    if(strcmp(records[found-1].md5, md5) == 0) {
+      found -= 1;
+    } else {
+      break;
+    }
+  }
+  return found;
 }
 
 int block_comparer(const void* a, const void* b) {
@@ -88,10 +104,11 @@ void sort_records(){
 
 int main_md5(){
   char md5[33];
-  md5[33] = '\0';
+  md5[32] = '\0';
   const char* buf = "";
   md5_buf(buf, strlen(buf), md5);
   printf("Md5 is %s\n", md5);
+  return 0;
 }
 
 int main() {
@@ -110,6 +127,6 @@ int main() {
   }
   printf("Position of blob is %d\n", pos);
   clock_t dt = clock() - t0;
-  printf ("It took %d clicks (%f seconds).\n",dt,((float)dt)/CLOCKS_PER_SEC);
-
+  printf ("It took %d clicks (%f seconds).\n", (int)dt,((float)dt)/CLOCKS_PER_SEC);
+  return 0;
 }
