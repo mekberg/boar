@@ -25,6 +25,7 @@ from boar_common import safe_delete_file
 import atexit
 import repository
 import struct
+import rollingcs
 
 def unsigned2signed(u):
     s = struct.pack("Q", long(u))
@@ -90,96 +91,41 @@ def assert_block_row_integrity(blob, offset, block_md5, expected_row_checksum):
 class BlockLocationsDB:
     def __init__(self, block_size, dbfile = ":memory:"):
         self.conn = None
-        self.dbfile = dbfile
-        self.__init_db(block_size)
-
-    def __init_db(self, block_size):
-        assert type(block_size) == int and block_size > 0
-        assert not self.conn
-        try:
-            self.conn = sqlite3.connect(self.dbfile, check_same_thread = False)
-            pragmas = \
-                "PRAGMA main.page_size = 4096;", \
-                "PRAGMA main.cache_size=10000;", \
-                "PRAGMA main.locking_mode=NORMAL;", \
-                "PRAGMA main.synchronous=OFF;" # TODO: replace with WAL
-                #"PRAGMA main.journal_mode=WAL;" # Requires sqlite 3.7.0
-            for pragma in pragmas:
-                self.conn.execute(pragma)
-            self.conn.execute("CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, md5 char(32) NOT NULL, row_md5 char(32))")
-            self.conn.execute("CREATE TABLE IF NOT EXISTS rolling (value INT NOT NULL)") 
-            self.conn.execute("CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)")
-            self.conn.execute("INSERT OR IGNORE INTO props VALUES ('block_size', ?)", [block_size])
-            self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)")
-            self.conn.execute("CREATE INDEX IF NOT EXISTS index_md5 ON blocks (md5)")
-            self.conn.commit()            
-            assert self.get_block_size() == block_size
-
-        except sqlite3.DatabaseError, e:
-            raise repository.SoftCorruptionError(e)
+        self.db = rollingcs.BlocksDB(dbfile)
+        self.block_size = block_size
 
     def get_sequence_finder(self):
         return BlockSequenceFinder(self)
 
     def get_block_size(self):
-        c = self.conn.cursor()
-        c.execute("SELECT value FROM props WHERE name = 'block_size'")
-        value, = c.fetchone()
-        return int(value)
+        return self.block_size
 
     def get_block_locations(self, block_md5, limit = -1):
-        c = self.conn.cursor()
-        c.execute("SELECT blob, offset, row_md5 FROM blocks WHERE md5 = ? LIMIT ?", [block_md5, limit])
-        rows = c.fetchall()
-        for row in rows:
+        for row in self.db.get_blocks(block_md5, limit):
             blob, offset, row_md5 = row
-            assert_block_row_integrity(blob, offset, block_md5, row_md5)
+            #assert_block_row_integrity(blob, offset, block_md5, row_md5)
             yield blob, offset
 
     def get_all_rolling(self):
-        c = self.conn.cursor()
-        c.execute("SELECT value FROM rolling")
-        rows = c.fetchall()
-        values = [signed2unsigned(row[0]) for row in rows]
-        return values
+        return self.db.get_all_rolling()
 
     def has_block(self, md5):
-        sw = StopWatch(False)
-        c = self.conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE md5 = ?", [md5])
-        rows = c.fetchall()
-        sw.mark("blocksdb.has_block()")
-        if rows:
-            return True
-        return False
+        return self.db.has_block(md5)
 
     def add_block(self, blob, offset, md5):
-        assert is_md5sum(blob)
-        assert len(md5) == 32, repr(md5)
-        md5_row = block_row_checksum(blob, offset, md5)
-        try:
-            self.conn.execute("INSERT INTO blocks (blob, offset, md5, row_md5) VALUES (?, ?, ?, ?)", (blob, offset, md5, md5_row))
-        except sqlite3.DatabaseError, e:
-            raise repository.SoftCorruptionError("Exception while writing to the blocks cache: "+str(e))
+        self.db.add_block(blob, offset, md5)
 
     def add_rolling(self, rolling):        
-        assert 0 <= rolling <= (2**64 - 1) # Must be within the SIGNED range - stupid sqlite
-        rolling_signed = unsigned2signed(rolling)
-        assert -2**63 <= rolling_signed <= 2**63 -1
-        self.conn.execute("INSERT OR IGNORE INTO rolling (value) VALUES (?)", [str(rolling_signed)])
-
-        # TODO: Remove this in production
-        c = self.conn.cursor()
-        c.execute("SELECT value FROM rolling WHERE value = ?", [str(rolling_signed)])
-        rows = c.fetchall()
-        assert len(rows) == 1
+        self.db.add_rolling(rolling)
 
     def verify(self):
         assert False, "not implemented"
-        
+
+    def begin(self):
+        self.db.begin()
+    
     def commit(self):
-        if self.conn:
-            self.conn.commit()
+        self.db.commit()
 
     def close(self):
         self.commit()

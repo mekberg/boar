@@ -43,11 +43,8 @@ def CreateIntegerSet(ints):
     unavailable (dedup_available == False), then a FakeIntegerSet
     instance will be returned instead."""
     # bucket count must be a power of two
-    bucket_count = 1
-    while bucket_count < len(ints):
-        bucket_count *= 2
     if dedup_available:
-        intset = IntegerSet(bucket_count)
+        intset = IntegerSet(len(ints))
     else:
         intset = FakeIntegerSet(bucket_count)
     intset.add_all(ints)
