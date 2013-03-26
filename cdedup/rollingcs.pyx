@@ -39,7 +39,7 @@ cdef extern from "intset.h":
     void destroy_intset(IntSet* intset)
 
 cdef extern from "blocksdb.h":
-    void* init_blocksdb()
+    void* init_blocksdb(const char* dbfile)
     void add_block(void *handle, const char* blob, uint32_t offset, const char* md5)
     void add_rolling(void* handle, uint64_t rolling)
 
@@ -47,7 +47,7 @@ cdef extern from "blocksdb.h":
     int get_rolling_next(void* stmt, uint64_t* rolling)
     void get_rolling_finish(void* stmt)
 
-    void* get_blocks_init(void *handle, char* md5)
+    void* get_blocks_init(void *handle, char* md5, int limit)
     int get_blocks_next(void* stmt, char* blob, uint32_t* offset, char* row_md5)
     void get_blocks_finish(void* stmt)
     
@@ -64,7 +64,10 @@ cdef class IntegerSet:
         self.intset = NULL
    
     def __init__(self, bucket_count):
-        self.intset = create_intset(bucket_count)
+        adjusted_bucket_count = 1
+        while adjusted_bucket_count < bucket_count:
+            adjusted_bucket_count *= 2
+        self.intset = create_intset(adjusted_bucket_count)
 
     def __dealloc__(self):
         if self.intset != NULL:
@@ -246,10 +249,15 @@ class StopWatch:
 cdef class BlocksDB:
    cdef void* dbhandle
    cdef int in_transaction
- 
-   def __init__(self):
-       self.dbhandle = init_blocksdb()
+   cdef IntegerSet all_rolling
+
+   def __init__(self, dbfile):
+       self.dbhandle = init_blocksdb(dbfile)
        self.in_transaction = False
+       self.begin()
+       rolling = self.get_all_rolling()
+       self.all_rolling = IntegerSet(min(len(rolling), 2**16))
+       self.all_rolling.add_all(rolling)
 
    def get_all_rolling(self):
         result = set()
@@ -260,9 +268,12 @@ cdef class BlocksDB:
         get_rolling_finish(handle)
         return result
 
-   def get_all_blocks(self, md5):
+   def has_block(self, md5):
+       return bool(self.get_blocks(md5, limit = 1))
+
+   def get_blocks(self, md5, limit = -1):
         result = set()
-        handle = get_blocks_init(self.dbhandle, md5)
+        handle = get_blocks_init(self.dbhandle, md5, limit)
         cdef char blob[33]
         cdef uint32_t offset
         cdef char row_md5[33]
@@ -274,32 +285,37 @@ cdef class BlocksDB:
         return result
 
    def add_rolling(self, rolling):
-       assert self.in_transaction
-       add_rolling(self.dbhandle, rolling)
+       assert self.in_transaction, "Tried to add a rolling cs outside of a transaction"
+       if not self.all_rolling.contains(rolling):
+           self.all_rolling.add(rolling)
+           add_rolling(self.dbhandle, rolling)
 
    def add_block(self, blob, offset, md5):
-       assert self.in_transaction
+       assert self.in_transaction, "Tried to add a block outside of a transaction"
        add_block(self.dbhandle, blob, offset, md5)
 
    def begin(self):
+       assert not self.in_transaction, "Tried to start a transaction while one was already in progress"
        begin_blocksdb(self.dbhandle)
        self.in_transaction = True
 
    def commit(self):
+       assert self.in_transaction, "Tried to a commit while no transaction was in progress"
        commit_blocksdb(self.dbhandle)
        self.in_transaction = False
+       self.begin()
 
 def test_blocksdb_class():
-    db = BlocksDB()
+    db = BlocksDB("testdb.sqlite")
     print db.get_all_rolling()
     print db.get_all_blocks("d41d8cd98f00b204e9800998ecf8427e")
     db.begin()
     db.add_rolling(12345)
     db.commit()
 
-def test_blocksdb():
-    print "Running"
-    blocksdb = init_blocksdb()
+#def test_blocksdb():
+    #print "Running"
+    #blocksdb = init_blocksdb()
     #add_block(blocksdb, "dummy1", 666, "d41d8cd98f00b204e9800998ecf8427e")
     #add_block(blocksdb, "dummy2", 666, "d41d8cd98f00b204e9800998ecf8427e")
     #add_rolling(blocksdb, 17)
@@ -313,4 +329,4 @@ def test_blocksdb():
 #benchmark()
 
 
-test_blocksdb_class()
+#test_blocksdb_class()

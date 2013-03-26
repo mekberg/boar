@@ -15,7 +15,7 @@ typedef struct _BlockRecord {
 int locate_record(const char* md5);
 BlockRecord* get_record(unsigned int pos);
 
-sqlite3* init_blocksdb();
+sqlite3* init_blocksdb(const char* dbfile);
 
 void add_block(sqlite3 *handle, const char* blob, uint32_t offset, const char* md5);
 
@@ -24,7 +24,7 @@ sqlite3_stmt* get_rolling_init(sqlite3 *handle);
 int get_rolling_next(sqlite3_stmt* stmt, uint64_t* rolling);
 void get_rolling_finish(sqlite3_stmt* stmt);
 
-sqlite3_stmt* get_blocks_init(sqlite3 *handle, char* md5);
+sqlite3_stmt* get_blocks_init(sqlite3 *handle, char* md5, int limit);
 int get_blocks_next(sqlite3_stmt* stmt, char* blob, uint32_t* offset, char* row_md5);
 void get_blocks_finish(sqlite3_stmt* stmt);
 
