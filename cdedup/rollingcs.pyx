@@ -50,6 +50,10 @@ cdef extern from "blocksdb.h":
     void* get_blocks_init(void *handle, char* md5)
     int get_blocks_next(void* stmt, char* blob, uint32_t* offset, char* row_md5)
     void get_blocks_finish(void* stmt)
+    
+    void begin_blocksdb(void* handle)
+    void commit_blocksdb(void* handle)
+    
 #class BlocksDB:
     
 
@@ -241,9 +245,11 @@ class StopWatch:
 
 cdef class BlocksDB:
    cdef void* dbhandle
+   cdef int in_transaction
  
    def __init__(self):
-        self.dbhandle = init_blocksdb()
+       self.dbhandle = init_blocksdb()
+       self.in_transaction = False
 
    def get_all_rolling(self):
         result = set()
@@ -266,12 +272,30 @@ cdef class BlocksDB:
             result.add((blob, offset, row_md5))
         get_blocks_finish(handle)
         return result
-        
+
+   def add_rolling(self, rolling):
+       assert self.in_transaction
+       add_rolling(self.dbhandle, rolling)
+
+   def add_block(self, blob, offset, md5):
+       assert self.in_transaction
+       add_block(self.dbhandle, blob, offset, md5)
+
+   def begin(self):
+       begin_blocksdb(self.dbhandle)
+       self.in_transaction = True
+
+   def commit(self):
+       commit_blocksdb(self.dbhandle)
+       self.in_transaction = False
 
 def test_blocksdb_class():
     db = BlocksDB()
     print db.get_all_rolling()
     print db.get_all_blocks("d41d8cd98f00b204e9800998ecf8427e")
+    db.begin()
+    db.add_rolling(12345)
+    db.commit()
 
 def test_blocksdb():
     print "Running"
@@ -280,21 +304,6 @@ def test_blocksdb():
     #add_block(blocksdb, "dummy2", 666, "d41d8cd98f00b204e9800998ecf8427e")
     #add_rolling(blocksdb, 17)
     #print "Done"
-    handle = get_rolling_init(blocksdb)
-    cdef uint64_t rolling
-    while get_rolling_next(handle, &rolling):
-        print rolling
-    get_rolling_finish(handle)
-
-    bhandle = get_blocks_init(blocksdb, "d41d8cd98f00b204e9800998ecf8427e")
-    cdef char blob[33]
-    cdef uint32_t offset
-    cdef char row_md5[33]
-    while get_blocks_next(handle, blob, &offset, row_md5):
-        blob[32] = 0
-        row_md5[32] = 0
-        print blob, offset, row_md5
-    get_rolling_finish(bhandle)
     
     
     

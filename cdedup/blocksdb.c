@@ -250,6 +250,13 @@ sqlite3* init_blocksdb(){
 }
 
 
+void begin_blocksdb(sqlite3 *handle) {
+  execute_simple(handle, "BEGIN");
+}
+
+void commit_blocksdb(sqlite3 *handle) {
+  execute_simple(handle, "COMMIT");
+}
 
 int main() {
   sqlite3 *handle;

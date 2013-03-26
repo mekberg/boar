@@ -24,4 +24,12 @@ sqlite3_stmt* get_rolling_init(sqlite3 *handle);
 int get_rolling_next(sqlite3_stmt* stmt, uint64_t* rolling);
 void get_rolling_finish(sqlite3_stmt* stmt);
 
+sqlite3_stmt* get_blocks_init(sqlite3 *handle, char* md5);
+int get_blocks_next(sqlite3_stmt* stmt, char* blob, uint32_t* offset, char* row_md5);
+void get_blocks_finish(sqlite3_stmt* stmt);
+
+
+void begin_blocksdb(sqlite3 *handle);
+void commit_blocksdb(sqlite3 *handle);
+
 #endif
