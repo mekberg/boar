@@ -3,8 +3,9 @@ from distutils.extension import Extension
 from Cython.Distutils import build_ext
 
 ext_modules = [Extension("rollingcs", 
-                         ["rollingcs.pyx", "rollsum.c", "intset.c", "bitfield.c", "circularbuffer.c"],
-                         extra_compile_args=["-O9", "-std=c99", "-Wall"],
+                         ["rollingcs.pyx", "rollsum.c", "intset.c", "bitfield.c", "circularbuffer.c", "blocksdb.c", "md5.c"],
+                         extra_compile_args=["-static", "-O9", "-std=c99", "-Wall"],
+                         extra_link_args=["sqlite3.o"],
                          )]
 
 setup(
