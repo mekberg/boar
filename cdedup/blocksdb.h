@@ -3,18 +3,6 @@
 
 #include "sqlite3.h"
 
-typedef struct _BlockRecord {
-  uint8_t  in_use; // Boolean 0 == false
-  char     blob[32];
-  uint32_t offset; // In blocksize
-  char     md5[32];
-  char     record_md5[32];
-} BlockRecord;
-
-
-int locate_record(const char* md5);
-BlockRecord* get_record(unsigned int pos);
-
 sqlite3* init_blocksdb(const char* dbfile);
 
 void add_block(sqlite3 *handle, const char* blob, uint32_t offset, const char* md5);
