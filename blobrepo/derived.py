@@ -18,7 +18,6 @@
 from __future__ import with_statement
 import hashlib
 import os
-import sqlite3
 from weakref import proxy
 from common import *
 from boar_common import safe_delete_file
