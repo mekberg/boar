@@ -15,8 +15,7 @@
 
 __version__ = "1.0" # Major, minor. Major == API changes
 
-cdef extern from "stdint.h":
-    ctypedef unsigned long long uint64_t
+from libc.stdint cimport uint32_t, uint64_t
 
 cdef extern from "rollsum.h":
     cdef struct _RollingState:
@@ -38,6 +37,21 @@ cdef extern from "intset.h":
     void add_intset(IntSet* intset, int int_to_add)
     int contains_intset(IntSet* intset, int int_to_find)
     void destroy_intset(IntSet* intset)
+
+cdef extern from "blocksdb.h":
+    void* init_blocksdb()
+    void add_block(void *handle, const char* blob, uint32_t offset, const char* md5)
+    void add_rolling(void* handle, uint64_t rolling)
+
+    void* get_rolling_init(void* handle)
+    int get_rolling_next(void* stmt, uint64_t* rolling)
+    void get_rolling_finish(void* stmt)
+
+    void* get_blocks_init(void *handle, char* md5)
+    int get_blocks_next(void* stmt, char* blob, uint32_t* offset, char* row_md5)
+    void get_blocks_finish(void* stmt)
+#class BlocksDB:
+    
 
 cdef class IntegerSet:
     cdef IntSet* intset
@@ -225,6 +239,69 @@ class StopWatch:
         print "MARK: %s %s (total %s)" % ( msg, now - self.t_last, now - self.t_init )
         self.t_last = time.time()
 
+cdef class BlocksDB:
+   cdef void* dbhandle
+ 
+   def __init__(self):
+        self.dbhandle = init_blocksdb()
+
+   def get_all_rolling(self):
+        result = set()
+        handle = get_rolling_init(self.dbhandle)
+        cdef uint64_t rolling
+        while get_rolling_next(handle, &rolling):
+            result.add(rolling)
+        get_rolling_finish(handle)
+        return result
+
+   def get_all_blocks(self, md5):
+        result = set()
+        handle = get_blocks_init(self.dbhandle, md5)
+        cdef char blob[33]
+        cdef uint32_t offset
+        cdef char row_md5[33]
+        while get_blocks_next(handle, blob, &offset, row_md5):
+            blob[32] = 0
+            row_md5[32] = 0
+            result.add((blob, offset, row_md5))
+        get_blocks_finish(handle)
+        return result
+        
+
+def test_blocksdb_class():
+    db = BlocksDB()
+    print db.get_all_rolling()
+    print db.get_all_blocks("d41d8cd98f00b204e9800998ecf8427e")
+
+def test_blocksdb():
+    print "Running"
+    blocksdb = init_blocksdb()
+    #add_block(blocksdb, "dummy1", 666, "d41d8cd98f00b204e9800998ecf8427e")
+    #add_block(blocksdb, "dummy2", 666, "d41d8cd98f00b204e9800998ecf8427e")
+    #add_rolling(blocksdb, 17)
+    #print "Done"
+    handle = get_rolling_init(blocksdb)
+    cdef uint64_t rolling
+    while get_rolling_next(handle, &rolling):
+        print rolling
+    get_rolling_finish(handle)
+
+    bhandle = get_blocks_init(blocksdb, "d41d8cd98f00b204e9800998ecf8427e")
+    cdef char blob[33]
+    cdef uint32_t offset
+    cdef char row_md5[33]
+    while get_blocks_next(handle, blob, &offset, row_md5):
+        blob[32] = 0
+        row_md5[32] = 0
+        print blob, offset, row_md5
+    get_rolling_finish(bhandle)
+    
+    
+    
+    
+    
 #self_test()
 #benchmark()
 
+
+test_blocksdb_class()
