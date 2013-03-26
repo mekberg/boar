@@ -31,7 +31,7 @@ from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 
 from deduplication import print_recipe
 from deduplication import RecipeFinder
-from blobrepo.derived import BlockLocationsDB
+from blobrepo.derived import BlockLocationsDB, BlockLocationsDB
 from rollingcs import IntegerSet, calc_rolling
 
 class FakePieceHandler:
@@ -299,6 +299,40 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         verify_repo(self.wd.get_front())
         for d in self.remove_at_teardown:
             shutil.rmtree(d, ignore_errors = True)
+
+class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
+    def setUp(self):
+        self.remove_at_teardown = []
+        self.workdir = self.createTmpName()
+        self.dbfile = os.path.join(self.workdir, "database.sqlite")
+        self.db = BlockLocationsDB(self.dbfile)
+
+    def testRollingEmpty(self):
+        self.assertEquals(self.db.get_all_rolling(), set())
+
+    def testRollingSimple(self):
+        self.db.add_rolling(17)
+        self.db.commit()
+        self.assertEquals(self.db.get_all_rolling(), set([17]))
+
+    def testRollingRange(self):
+        self.db.add_rolling(0)
+        self.db.add_rolling(2**64 - 1)
+        self.db.commit()
+        self.assertEquals(self.db.get_all_rolling(), set([0, 2**64 - 1]))        
+        self.assertRaises(OverflowError, self.db.add_rolling, -1)
+        self.assertRaises(OverflowError, self.db.add_rolling, 2**64)
+
+    def testBlockSimple(self):
+        # blob, offset, md5
+        self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 0, "00000000000000000000000000000000")
+        self.assertEquals(list(self.db.get_block_locations("00000000000000000000000000000000")),
+                          [("d41d8cd98f00b204e9800998ecf8427e", 0)])
+
+    def tearDown(self):
+        for d in self.remove_at_teardown:
+            shutil.rmtree(d, ignore_errors = True)
+
 
 if __name__ == '__main__':
     unittest.main()
