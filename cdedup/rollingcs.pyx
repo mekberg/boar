@@ -252,9 +252,9 @@ cdef class BlocksDB:
    cdef IntegerSet all_rolling
 
    def __init__(self, dbfile):
-       self.dbhandle = init_blocksdb(dbfile)
+       dbfile_utf8 = dbfile.encode("utf-8")
+       self.dbhandle = init_blocksdb(dbfile_utf8)
        self.in_transaction = False
-       self.begin()
        rolling = self.get_all_rolling()
        self.all_rolling = IntegerSet(min(len(rolling), 2**16))
        self.all_rolling.add_all(rolling)
@@ -303,7 +303,6 @@ cdef class BlocksDB:
        assert self.in_transaction, "Tried to a commit while no transaction was in progress"
        commit_blocksdb(self.dbhandle)
        self.in_transaction = False
-       self.begin()
 
 def test_blocksdb_class():
     db = BlocksDB("testdb.sqlite")

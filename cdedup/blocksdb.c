@@ -67,6 +67,9 @@ void add_rolling(sqlite3 *handle, uint64_t rolling){
 				    -1, &stmt, NULL));
   CHECKED_SQLITE(sqlite3_bind_int64(stmt, 1, (sqlite3_int64) rolling));
   retval = sqlite3_step(stmt);
+  if(retval != SQLITE_DONE){
+    printf( "SQLITE step failed: %s\n", sqlite3_errmsg(handle) );
+  }
   assert(retval == SQLITE_DONE, "Step didn't finish");
   sqlite3_finalize(stmt);
 }
@@ -134,10 +137,10 @@ void get_blocks_finish(sqlite3_stmt* stmt) {
 static void initialize_database(sqlite3 *handle) {
   //execute_simple(handle, "PRAGMA main.page_size = 4096;");
   //execute_simple(handle, "PRAGMA main.cache_size=10000;");
-  execute_simple(handle, "PRAGMA main.locking_mode=EXCLUSIVE;");
+  execute_simple(handle, "PRAGMA main.locking_mode=NORMAL;");
   execute_simple(handle, "PRAGMA main.synchronous=OFF;");
-  execute_simple(handle, "PRAGMA main.journal_mode=DELETE;");
-  //execute_simple(handle, "PRAGMA main.journal_mode=WAL;");
+  //execute_simple(handle, "PRAGMA main.journal_mode=DELETE;");
+  execute_simple(handle, "PRAGMA main.journal_mode=WAL;");
 
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, md5_short char(4) NOT NULL, md5 char(32) NOT NULL, row_md5 char(32))");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)");

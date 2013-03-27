@@ -48,6 +48,7 @@ class TestRecipeFinder(unittest.TestCase):
     def testSimpleUnaligned(self):
         self.integer_set.add(3298534883712) # "aaa"
         recipe_finder = RecipeFinder(self.blocksdb, 3, self.integer_set, None, original_piece_handler = self.piece_handler)
+        self.blocksdb.begin()
         self.blocksdb.add_block("47bce5c74f589f4867dbd57e9ca9f808", 0, "47bce5c74f589f4867dbd57e9ca9f808")
         self.blocksdb.commit() 
         recipe_finder.feed("XX")
@@ -311,20 +312,24 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
         self.assertEquals(self.db.get_all_rolling(), set())
 
     def testRollingSimple(self):
+        self.db.begin()
         self.db.add_rolling(17)
         self.db.commit()
         self.assertEquals(self.db.get_all_rolling(), set([17]))
 
     def testRollingRange(self):
+        self.db.begin()
         self.db.add_rolling(0)
         self.db.add_rolling(2**64 - 1)
         self.db.commit()
         self.assertEquals(self.db.get_all_rolling(), set([0, 2**64 - 1]))        
+        self.db.begin()
         self.assertRaises(OverflowError, self.db.add_rolling, -1)
         self.assertRaises(OverflowError, self.db.add_rolling, 2**64)
 
     def testBlockSimple(self):
         # blob, offset, md5
+        self.db.begin()
         self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 0, "00000000000000000000000000000000")
         self.assertEquals(list(self.db.get_block_locations("00000000000000000000000000000000")),
                           [("d41d8cd98f00b204e9800998ecf8427e", 0)])
