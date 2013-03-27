@@ -876,6 +876,7 @@ class Repo:
         #print "Inserting blocks..."
         blocks_fname = os.path.join(queued_item, "blocks.json")
         n = 0
+        self.blocksdb.begin()
         for block_spec in read_json(blocks_fname):
             #print n, block_spec
             n += 1
