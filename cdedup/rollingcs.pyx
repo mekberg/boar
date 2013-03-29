@@ -260,11 +260,11 @@ cdef class BlocksDB:
        self.all_rolling.add_all(rolling)
 
    def get_all_rolling(self):
-        result = set()
+        result = []
         handle = get_rolling_init(self.dbhandle)
         cdef uint64_t rolling
         while get_rolling_next(handle, &rolling):
-            result.add(rolling)
+            result.append(rolling)
         get_rolling_finish(handle)
         return result
 

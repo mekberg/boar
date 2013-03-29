@@ -309,20 +309,20 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
         self.db = BlockLocationsDB(self.dbfile)
 
     def testRollingEmpty(self):
-        self.assertEquals(self.db.get_all_rolling(), set())
+        self.assertEquals(self.db.get_all_rolling(), [])
 
     def testRollingSimple(self):
         self.db.begin()
         self.db.add_rolling(17)
         self.db.commit()
-        self.assertEquals(self.db.get_all_rolling(), set([17]))
+        self.assertEquals(self.db.get_all_rolling(), [17])
 
     def testRollingRange(self):
         self.db.begin()
         self.db.add_rolling(0)
         self.db.add_rolling(2**64 - 1)
         self.db.commit()
-        self.assertEquals(self.db.get_all_rolling(), set([0, 2**64 - 1]))        
+        self.assertEquals(set(self.db.get_all_rolling()), set([0, 2**64 - 1]))
         self.db.begin()
         self.assertRaises(OverflowError, self.db.add_rolling, -1)
         self.assertRaises(OverflowError, self.db.add_rolling, 2**64)
