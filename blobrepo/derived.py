@@ -88,7 +88,9 @@ def assert_block_row_integrity(blob, offset, block_md5, expected_row_checksum):
         raise repository.SoftCorruptionError("Corrupted row in deduplication block table for (%s %s %s)" % (blob, offset, block_md5))
 
 class BlockLocationsDB:
-    def __init__(self, block_size, dbfile = ":memory:"):
+    def __init__(self, block_size, dbfile):
+        assert type(block_size) == int
+
         self.conn = None
         self.db = rollingcs.BlocksDB(dbfile)
         self.block_size = block_size

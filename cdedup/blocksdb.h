@@ -16,8 +16,10 @@ sqlite3_stmt* get_blocks_init(sqlite3 *handle, char* md5, int limit);
 int get_blocks_next(sqlite3_stmt* stmt, char* blob, uint32_t* offset, char* row_md5);
 void get_blocks_finish(sqlite3_stmt* stmt);
 
+int get_modcount(sqlite3 *handle);
+void increment_modcount(sqlite3 *handle);
 
 void begin_blocksdb(sqlite3 *handle);
-void commit_blocksdb(sqlite3 *handle);
+int commit_blocksdb(sqlite3 *handle);
 
 #endif

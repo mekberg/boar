@@ -12,7 +12,7 @@
 
 #define CHECKED_SQLITE(C)   { int retval = C; \
   if(retval != SQLITE_OK){                           \
-    printf( "SQLITE call failed: %s\n", sqlite3_errmsg(handle) ); \
+    printf( "In %s: SQLITE call failed: %s\n", __func__, sqlite3_errmsg(handle) ); \
     assert(false, "Sqlite call failed"); \
   } \
   }
@@ -72,9 +72,8 @@ void add_rolling(sqlite3 *handle, uint64_t rolling){
   }
   assert(retval == SQLITE_DONE, "Step didn't finish");
   sqlite3_finalize(stmt);
+  
 }
-
-
 
 void add_block(sqlite3 *handle, const char* blob, uint32_t offset, const char* md5){
   //const char* md5_row = block_row_checksum(blob, offset, md5);
@@ -134,29 +133,54 @@ void get_blocks_finish(sqlite3_stmt* stmt) {
   sqlite3_finalize(stmt);
 }
 
+int get_modcount(sqlite3 *handle) {
+  sqlite3_stmt* stmt;
+  int retval;
+  CHECKED_SQLITE(sqlite3_prepare_v2(handle, "SELECT value FROM props WHERE name = 'modification_counter'",
+				    -1, &stmt, NULL));
+  const int s = sqlite3_step (stmt);
+  assert(s == SQLITE_ROW, "Unexpected result from select");
+  const int result = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return result;  
+}
+
+void increment_modcount(sqlite3 *handle) {
+  execute_simple(handle, "UPDATE props SET value = value + 1 where name = 'modification_counter'");
+}
+
 static void initialize_database(sqlite3 *handle) {
+  //execute_simple(handle, "PRAGMA main.journal_mode=WAL;");
   //execute_simple(handle, "PRAGMA main.page_size = 4096;");
   //execute_simple(handle, "PRAGMA main.cache_size=10000;");
   execute_simple(handle, "PRAGMA main.locking_mode=NORMAL;");
-  execute_simple(handle, "PRAGMA main.synchronous=OFF;");
+  //execute_simple(handle, "PRAGMA main.synchronous=OFF;");
   //execute_simple(handle, "PRAGMA main.journal_mode=DELETE;");
-  execute_simple(handle, "PRAGMA main.journal_mode=WAL;");
 
+  //begin_blocksdb(handle);
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, md5_short char(4) NOT NULL, md5 char(32) NOT NULL, row_md5 char(32))");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)");
   execute_simple(handle, "INSERT OR IGNORE INTO props VALUES ('block_size', 65536)");
+  execute_simple(handle, "INSERT OR IGNORE INTO props VALUES ('modification_counter', 0)");
   //execute_simple(handle, "CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)");
-  execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_md5 ON blocks (md5_short)");
+  execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_md5 ON blocks (md5_short)");    
+  //commit_blocksdb(handle);
 }
 
 sqlite3* init_blocksdb(const char* dbfile){
+  //printf("Opening %s\n", dbfile);
   sqlite3 *handle;
   int retval;
   retval = sqlite3_open(dbfile, &handle);
   assert(retval == SQLITE_OK, "Couldn't open db");
-
   initialize_database(handle);
+
+  /*
+  retval = sqlite3_close(handle);
+  assert(retval == SQLITE_OK, "Couldn't close db");
+  sqlite3_open(dbfile, &handle);
+  */
 
   return handle;
 }
@@ -166,7 +190,9 @@ void begin_blocksdb(sqlite3 *handle) {
   execute_simple(handle, "BEGIN");
 }
 
-void commit_blocksdb(sqlite3 *handle) {
+int commit_blocksdb(sqlite3 *handle) {
+  const int modcount = get_modcount(handle);
   execute_simple(handle, "COMMIT");
+  return modcount;
 }
 
