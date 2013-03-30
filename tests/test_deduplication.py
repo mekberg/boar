@@ -31,7 +31,7 @@ from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 
 from deduplication import print_recipe
 from deduplication import RecipeFinder
-from blobrepo.derived import BlockLocationsDB, BlockLocationsDB
+from blobrepo.derived import BlockLocationsDB
 from rollingcs import IntegerSet, calc_rolling
 
 class FakePieceHandler:
@@ -39,9 +39,11 @@ class FakePieceHandler:
     def add_piece_data(self, index, data): pass
     def end_piece(self, index): return ("FAKEBLOB", 0)
 
-class TestRecipeFinder(unittest.TestCase):
+class TestRecipeFinder(unittest.TestCase, WorkdirHelper):
     def setUp(self):
-        self.blocksdb = BlockLocationsDB(block_size = 3)
+        self.remove_at_teardown = []
+        self.dbname = self.createTmpName()
+        self.blocksdb = BlockLocationsDB(3, self.dbname)
         self.piece_handler = FakePieceHandler()
         self.integer_set = IntegerSet(1)
 
@@ -145,6 +147,23 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
 
         wd2_commit(u"TestSession2", None) # Resume the commit
         self.assertEquals(set(), self.wd1.front.repo.get_orphan_blobs())
+
+    def testIdenticalBlocksOnlyAddedOnce(self):
+        write_file(self.workdir1, "a.txt", "aaa")
+        write_file(self.workdir2, "b.txt", "aaa")
+
+        # Make the checkin() go just almost all the way...
+        wd2_commit = self.wd2.front.commit
+        self.wd2.front.commit = lambda session_name, log_message: None
+
+        self.wd2.checkin() # Will not complete
+        self.wd1.checkin()
+        wd2_commit(u"TestSession2", None) # Resume the commit
+        for blockdb in (self.wd1.front.repo.blocksdb, self.wd2.front.repo.blocksdb):
+            self.assertEquals(blockdb.get_all_rolling(), [3298534883712])
+            self.assertTrue(blockdb.has_block("47bce5c74f589f4867dbd57e9ca9f808"))
+            block_locations = blockdb.get_block_locations("47bce5c74f589f4867dbd57e9ca9f808")
+            self.assertEquals(list(block_locations), [('47bce5c74f589f4867dbd57e9ca9f808', 0)])
 
     def tearDown(self):
         verify_repo(self.wd1.get_front())
@@ -305,8 +324,9 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
     def setUp(self):
         self.remove_at_teardown = []
         self.workdir = self.createTmpName()
+        os.mkdir(self.workdir)
         self.dbfile = os.path.join(self.workdir, "database.sqlite")
-        self.db = BlockLocationsDB(self.dbfile)
+        self.db = BlockLocationsDB(2**16, self.dbfile)
 
     def testRollingEmpty(self):
         self.assertEquals(self.db.get_all_rolling(), [])

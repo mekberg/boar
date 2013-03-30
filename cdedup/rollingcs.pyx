@@ -50,9 +50,12 @@ cdef extern from "blocksdb.h":
     void* get_blocks_init(void *handle, char* md5, int limit)
     int get_blocks_next(void* stmt, char* blob, uint32_t* offset, char* row_md5)
     void get_blocks_finish(void* stmt)
-    
+
+    int get_modcount(void* handle)
+    void increment_modcount(void* handle)
+
     void begin_blocksdb(void* handle)
-    void commit_blocksdb(void* handle)
+    int commit_blocksdb(void* handle)
     
 #class BlocksDB:
     
@@ -250,14 +253,27 @@ cdef class BlocksDB:
    cdef void* dbhandle
    cdef int in_transaction
    cdef IntegerSet all_rolling
+   cdef int is_modified
+   cdef int last_seen_modcount
 
    def __init__(self, dbfile):
        dbfile_utf8 = dbfile.encode("utf-8")
        self.dbhandle = init_blocksdb(dbfile_utf8)
        self.in_transaction = False
+       self.is_modified = False
+       self.last_seen_modcount = -1
+       self.__reload_rolling()
+   
+   def __reload_rolling(self):
        rolling = self.get_all_rolling()
-       self.all_rolling = IntegerSet(min(len(rolling), 2**16))
+       self.all_rolling = IntegerSet(max(len(rolling), 2**16))
        self.all_rolling.add_all(rolling)
+
+       # This is not transaction safe unless we're in a transaction -
+       # it is possible some commit went through since we finished
+       # reading the values, but let's not push the issue, the
+       # consequences are slight.
+       self.last_seen_modcount = get_modcount(self.dbhandle)
 
    def get_all_rolling(self):
         result = []
@@ -266,6 +282,7 @@ cdef class BlocksDB:
         while get_rolling_next(handle, &rolling):
             result.append(rolling)
         get_rolling_finish(handle)
+
         return result
 
    def has_block(self, md5):
@@ -282,27 +299,36 @@ cdef class BlocksDB:
             row_md5[32] = 0
             result.add((blob, offset, row_md5))
         get_blocks_finish(handle)
+
         return result
 
    def add_rolling(self, rolling):
        assert self.in_transaction, "Tried to add a rolling cs outside of a transaction"
        if not self.all_rolling.contains(rolling):
            self.all_rolling.add(rolling)
+           self.is_modified = True
            add_rolling(self.dbhandle, rolling)
 
    def add_block(self, blob, offset, md5):
        assert self.in_transaction, "Tried to add a block outside of a transaction"
        add_block(self.dbhandle, blob, offset, md5)
-
+       self.is_modified = True
+       
    def begin(self):
        assert not self.in_transaction, "Tried to start a transaction while one was already in progress"
        begin_blocksdb(self.dbhandle)
+       if self.last_seen_modcount != get_modcount(self.dbhandle):
+           self.__reload_rolling()
        self.in_transaction = True
 
    def commit(self):
        assert self.in_transaction, "Tried to a commit while no transaction was in progress"
-       commit_blocksdb(self.dbhandle)
        self.in_transaction = False
+       if self.is_modified:
+           increment_modcount(self.dbhandle)
+           self.is_modified = False
+       self.last_seen_modcount = commit_blocksdb(self.dbhandle)
+       
 
 def test_blocksdb_class():
     db = BlocksDB("testdb.sqlite")
