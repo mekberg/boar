@@ -289,7 +289,7 @@ cdef class BlocksDB:
        return bool(self.get_blocks(md5, limit = 1))
 
    def get_blocks(self, md5, limit = -1):
-        result = set()
+        result = []
         handle = get_blocks_init(self.dbhandle, md5, limit)
         cdef char blob[33]
         cdef uint32_t offset
@@ -297,9 +297,8 @@ cdef class BlocksDB:
         while get_blocks_next(handle, blob, &offset, row_md5):
             blob[32] = 0
             row_md5[32] = 0
-            result.add((blob, offset, row_md5))
+            result.append((blob, offset, row_md5))
         get_blocks_finish(handle)
-
         return result
 
    def add_rolling(self, rolling):
