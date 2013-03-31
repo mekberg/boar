@@ -24,6 +24,69 @@ static inline void assert(int c, const char* msg){
   }
 }
 
+
+
+static int hexchar2bin(const char c) {
+  switch(c) {
+  case '0': return 0;
+  case '1': return 1;
+  case '2': return 2;
+  case '3': return 3;
+  case '4': return 4;
+  case '5': return 5;
+  case '6': return 6;
+  case '7': return 7;
+  case '8': return 8;
+  case '9': return 9;
+  case 'a':
+  case 'A': return 10;
+  case 'b': 
+  case 'B': return 11;
+  case 'c': 
+  case 'C': return 12;
+  case 'd': 
+  case 'D': return 13;
+  case 'e': 
+  case 'E': return 14;
+  case 'f': 
+  case 'F': return 15;
+  default:
+    return -1;
+  }
+}
+
+static int hex2bin(const char* hex_buf, int hex_buf_length, unsigned char* bin_buf){
+  for(int i = 0; i < hex_buf_length/2; i++) {
+    bin_buf[i] = hexchar2bin(hex_buf[i*2]) << 4;
+    bin_buf[i] |= hexchar2bin(hex_buf[i*2 + 1]);
+  }
+  return 1;
+}
+
+static int bin2hex(const unsigned char* bin_buf, int bin_buf_length, char* hex_buf) {
+  char byte_hex[3]; 
+  for(int i = 0; i < bin_buf_length; i++) {
+    snprintf(byte_hex, 3, "%02x", bin_buf[i]);
+    *hex_buf++ = byte_hex[0];
+    *hex_buf++ = byte_hex[1];
+  }
+  return 1;
+}
+
+/*
+int main() {
+  const char* md5_text = "d41d8cd98f00b204e9800998ecf8427e";
+  unsigned char md5_bin[16];
+  char md5_text_2[33];
+  md5_text_2[32] = 0;
+  
+  hex2bin(md5_text, 32, md5_bin);
+  bin2hex(md5_bin, 16, md5_text_2);
+  printf("%s\n", md5_text_2);
+}
+*/
+
+
 void execute_simple(sqlite3 *handle, char* sql) {
   char* errmsg;
   int retval =  sqlite3_exec(handle, sql, NULL, NULL, &errmsg);
@@ -78,6 +141,10 @@ void add_rolling(sqlite3 *handle, uint64_t rolling){
 void add_block(sqlite3 *handle, const char* blob, uint32_t offset, const char* md5){
   //const char* md5_row = block_row_checksum(blob, offset, md5);
   const char* md5_row = "00000000000000000000000000000000";
+  char packed_md5[16];
+  hex2bin(md5, 32, packed_md5);
+  //char packed_blob[16];
+  //hex2bin(blob, 32, packed_blob);
   sqlite3_stmt* stmt;
   int retval;
   retval = sqlite3_prepare_v2(handle, "INSERT INTO blocks (blob, offset, md5_short, md5, row_md5) VALUES (?, ?, ?, ?, ?)",
@@ -85,8 +152,8 @@ void add_block(sqlite3 *handle, const char* blob, uint32_t offset, const char* m
   assert(retval == SQLITE_OK, "Error while preparing");
   sqlite3_bind_blob(stmt, 1, blob, 32, SQLITE_STATIC);
   sqlite3_bind_int(stmt, 2, offset);
-  sqlite3_bind_blob(stmt, 3, md5, 8, SQLITE_STATIC);
-  sqlite3_bind_blob(stmt, 4, md5, 32, SQLITE_STATIC);
+  sqlite3_bind_blob(stmt, 3, packed_md5, 4, SQLITE_STATIC);
+  sqlite3_bind_blob(stmt, 4, packed_md5, 16, SQLITE_STATIC);
   sqlite3_bind_blob(stmt, 5, md5_row, 32, SQLITE_STATIC);
   retval = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
@@ -101,8 +168,10 @@ sqlite3_stmt* get_blocks_init(sqlite3 *handle, char* md5, int limit){
     printf( "could not prepare statemnt: %s\n", sqlite3_errmsg(handle) );
     assert(false, "fail prepare");
   }
-  sqlite3_bind_blob(stmt, 1, md5, 8, SQLITE_TRANSIENT);
-  sqlite3_bind_blob(stmt, 2, md5, 32, SQLITE_TRANSIENT);
+  char packed_md5[16];
+  hex2bin(md5, 32, packed_md5);
+  sqlite3_bind_blob(stmt, 1, packed_md5, 4, SQLITE_TRANSIENT);
+  sqlite3_bind_blob(stmt, 2, packed_md5, 16, SQLITE_TRANSIENT);
   sqlite3_bind_int(stmt, 3, limit);
   return stmt;
 }
