@@ -12,8 +12,15 @@
 
 #define CHECKED_SQLITE(C)   { int retval = C; \
   if(retval != SQLITE_OK){                           \
-    printf( "In %s: SQLITE call failed: %s\n", __func__, sqlite3_errmsg(handle) ); \
+    printf( "In %s line %u: SQLITE call failed: %s\n", __func__, __LINE__, sqlite3_errmsg(handle) ); \
     assert(false, "Sqlite call failed"); \
+  } \
+  }
+
+#define CHECKED_SQLITE_STEP(C)   { int retval = C; \
+  if(retval != SQLITE_DONE){                           \
+    printf( "In %s line %u: SQLITE STEP didn't complete: %s\n", __func__, __LINE__, sqlite3_errmsg(handle) ); \
+    assert(false, "Sqlite step failed"); \
   } \
   }
 
@@ -129,11 +136,7 @@ void add_rolling(sqlite3 *handle, uint64_t rolling){
   CHECKED_SQLITE(sqlite3_prepare_v2(handle, "INSERT INTO rolling (value) VALUES (?)",
 				    -1, &stmt, NULL));
   CHECKED_SQLITE(sqlite3_bind_int64(stmt, 1, (sqlite3_int64) rolling));
-  retval = sqlite3_step(stmt);
-  if(retval != SQLITE_DONE){
-    printf( "SQLITE step failed: %s\n", sqlite3_errmsg(handle) );
-  }
-  assert(retval == SQLITE_DONE, "Step didn't finish");
+  CHECKED_SQLITE_STEP(sqlite3_step(stmt));
   sqlite3_finalize(stmt);
   
 }
@@ -143,29 +146,35 @@ void add_block(sqlite3 *handle, const char* blob, uint32_t offset, const char* m
   const char* md5_row = "00000000000000000000000000000000";
   char packed_md5[16];
   hex2bin(md5, 32, packed_md5);
-  //char packed_blob[16];
-  //hex2bin(blob, 32, packed_blob);
+  char packed_blob[16];
+  hex2bin(blob, 32, packed_blob);
   sqlite3_stmt* stmt;
   int retval;
-  retval = sqlite3_prepare_v2(handle, "INSERT INTO blocks (blob, offset, md5_short, md5, row_md5) VALUES (?, ?, ?, ?, ?)",
+
+  retval = sqlite3_prepare_v2(handle, "INSERT OR IGNORE INTO blobs (blob_md5) VALUES (?)",
 			      -1, &stmt, NULL);
-  assert(retval == SQLITE_OK, "Error while preparing");
-  sqlite3_bind_blob(stmt, 1, blob, 32, SQLITE_STATIC);
+  CHECKED_SQLITE(sqlite3_bind_blob(stmt, 1, packed_blob, 16, SQLITE_STATIC));
+  CHECKED_SQLITE_STEP(sqlite3_step(stmt));
+  CHECKED_SQLITE(sqlite3_finalize(stmt));
+
+  CHECKED_SQLITE(sqlite3_prepare_v2(handle, "INSERT INTO blocks (blob_id, offset, md5_short, md5, row_md5) VALUES ((SELECT id FROM blobs WHERE blob_md5 = ?), ?, ?, ?, ?)",
+				    -1, &stmt, NULL));
+  sqlite3_bind_blob(stmt, 1, packed_blob, 16, SQLITE_STATIC);
   sqlite3_bind_int(stmt, 2, offset);
   sqlite3_bind_blob(stmt, 3, packed_md5, 4, SQLITE_STATIC);
   sqlite3_bind_blob(stmt, 4, packed_md5, 16, SQLITE_STATIC);
   sqlite3_bind_blob(stmt, 5, md5_row, 32, SQLITE_STATIC);
-  retval = sqlite3_step(stmt);
+  CHECKED_SQLITE_STEP(sqlite3_step(stmt));
   sqlite3_finalize(stmt);
 }
 
 sqlite3_stmt* get_blocks_init(sqlite3 *handle, char* md5, int limit){
   sqlite3_stmt* stmt;
   int retval;
-  retval = sqlite3_prepare_v2(handle, "SELECT blob, offset, row_md5 FROM blocks WHERE md5_short = ? and md5 = ? LIMIT ?",
+  retval = sqlite3_prepare_v2(handle, "SELECT blobs.blob_md5, blocks.offset, blocks.row_md5 FROM blocks, blobs WHERE blobs.id = blocks.blob_id AND md5_short = ? AND md5 = ? LIMIT ?",
                               -1, &stmt, NULL);
   if(retval != SQLITE_OK){
-    printf( "could not prepare statemnt: %s\n", sqlite3_errmsg(handle) );
+    printf( "could not prepare statement: %s\n", sqlite3_errmsg(handle) );
     assert(false, "fail prepare");
   }
   char packed_md5[16];
@@ -181,7 +190,7 @@ int get_blocks_next(sqlite3_stmt* stmt, char* blob, uint32_t* offset, char* row_
   if (s == SQLITE_ROW) {
     const char* blob_col = (const char*) sqlite3_column_text(stmt, 0);
     const int blob_col_length = sqlite3_column_bytes(stmt, 0);
-    strncpy(blob, blob_col, blob_col_length);
+    bin2hex(blob_col, 16, blob);
 
     *offset = sqlite3_column_int(stmt, 1);
 
@@ -227,13 +236,15 @@ static void initialize_database(sqlite3 *handle) {
   //execute_simple(handle, "PRAGMA main.journal_mode=DELETE;");
 
   //begin_blocksdb(handle);
-  execute_simple(handle, "CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, md5_short char(8) NOT NULL, md5 char(32) NOT NULL, row_md5 char(32))");
+  execute_simple(handle, "CREATE TABLE IF NOT EXISTS blocks (blob_id INTEGER NOT NULL, offset long NOT NULL, md5_short char(8) NOT NULL, md5 char(32) NOT NULL, row_md5 char(32))");
+  execute_simple(handle, "CREATE TABLE IF NOT EXISTS blobs (id INTEGER PRIMARY KEY, blob_md5 char(16) NOT NULL)");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)");
   execute_simple(handle, "INSERT OR IGNORE INTO props VALUES ('block_size', 65536)");
   execute_simple(handle, "INSERT OR IGNORE INTO props VALUES ('modification_counter', 0)");
   //execute_simple(handle, "CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)");
-  execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_md5 ON blocks (md5_short)");    
+  execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_block_md5 ON blocks (md5_short)");    
+  execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_blobs ON blobs (blob_md5)");    
   //execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_md5_long ON blocks (md5)");    
   //commit_blocksdb(handle);
 }
