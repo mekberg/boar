@@ -85,7 +85,7 @@ void add_block(sqlite3 *handle, const char* blob, uint32_t offset, const char* m
   assert(retval == SQLITE_OK, "Error while preparing");
   sqlite3_bind_blob(stmt, 1, blob, 32, SQLITE_STATIC);
   sqlite3_bind_int(stmt, 2, offset);
-  sqlite3_bind_blob(stmt, 3, md5, 4, SQLITE_STATIC);
+  sqlite3_bind_blob(stmt, 3, md5, 8, SQLITE_STATIC);
   sqlite3_bind_blob(stmt, 4, md5, 32, SQLITE_STATIC);
   sqlite3_bind_blob(stmt, 5, md5_row, 32, SQLITE_STATIC);
   retval = sqlite3_step(stmt);
@@ -101,7 +101,7 @@ sqlite3_stmt* get_blocks_init(sqlite3 *handle, char* md5, int limit){
     printf( "could not prepare statemnt: %s\n", sqlite3_errmsg(handle) );
     assert(false, "fail prepare");
   }
-  sqlite3_bind_blob(stmt, 1, md5, 4, SQLITE_TRANSIENT);
+  sqlite3_bind_blob(stmt, 1, md5, 8, SQLITE_TRANSIENT);
   sqlite3_bind_blob(stmt, 2, md5, 32, SQLITE_TRANSIENT);
   sqlite3_bind_int(stmt, 3, limit);
   return stmt;
@@ -158,13 +158,14 @@ static void initialize_database(sqlite3 *handle) {
   //execute_simple(handle, "PRAGMA main.journal_mode=DELETE;");
 
   //begin_blocksdb(handle);
-  execute_simple(handle, "CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, md5_short char(4) NOT NULL, md5 char(32) NOT NULL, row_md5 char(32))");
+  execute_simple(handle, "CREATE TABLE IF NOT EXISTS blocks (blob char(32) NOT NULL, offset long NOT NULL, md5_short char(8) NOT NULL, md5 char(32) NOT NULL, row_md5 char(32))");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)");
   execute_simple(handle, "INSERT OR IGNORE INTO props VALUES ('block_size', 65536)");
   execute_simple(handle, "INSERT OR IGNORE INTO props VALUES ('modification_counter', 0)");
   //execute_simple(handle, "CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)");
   execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_md5 ON blocks (md5_short)");    
+  //execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_md5_long ON blocks (md5)");    
   //commit_blocksdb(handle);
 }
 
