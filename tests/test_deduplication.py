@@ -351,6 +351,7 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
         # blob, offset, md5
         self.db.begin()
         self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 0, "00000000000000000000000000000000")
+        self.db.commit()
         self.assertEquals(list(self.db.get_block_locations("00000000000000000000000000000000")),
                           [("d41d8cd98f00b204e9800998ecf8427e", 0)])
 
