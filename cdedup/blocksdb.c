@@ -31,8 +31,6 @@ static inline void assert(int c, const char* msg){
   }
 }
 
-
-
 static int hexchar2bin(const char c) {
   switch(c) {
   case '0': return 0;
@@ -62,7 +60,16 @@ static int hexchar2bin(const char c) {
   }
 }
 
-static int hex2bin(const char* hex_buf, int hex_buf_length, unsigned char* bin_buf){
+static int is_md5sum(const char* buf){
+  for(int i = 0; i < 32; i++) {
+    if(hexchar2bin(buf[i]) == -1){
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static int hex2bin(const char* hex_buf, int hex_buf_length, char* bin_buf){
   for(int i = 0; i < hex_buf_length/2; i++) {
     bin_buf[i] = hexchar2bin(hex_buf[i*2]) << 4;
     bin_buf[i] |= hexchar2bin(hex_buf[i*2 + 1]);
@@ -70,14 +77,24 @@ static int hex2bin(const char* hex_buf, int hex_buf_length, unsigned char* bin_b
   return 1;
 }
 
-static int bin2hex(const unsigned char* bin_buf, int bin_buf_length, char* hex_buf) {
+static int bin2hex(const char* bin_buf, int bin_buf_length, char* hex_buf) {
   char byte_hex[3]; 
   for(int i = 0; i < bin_buf_length; i++) {
-    snprintf(byte_hex, 3, "%02x", bin_buf[i]);
+    assert(snprintf(byte_hex, 3, "%02x", (unsigned char) bin_buf[i]) == 2, "Unexpected bin2hex snprintf result");
     *hex_buf++ = byte_hex[0];
     *hex_buf++ = byte_hex[1];
   }
   return 1;
+}
+
+static void pack_md5(const char* md5_hex, char* md5_bin) {
+  assert(is_md5sum(md5_hex), "Argument to pack_md5() was not a legal md5 checksum");
+  hex2bin(md5_hex, 32, md5_bin);
+}
+
+static void unpack_md5(const char* md5_bin, char* md5_hex) {
+  bin2hex(md5_bin, 16, md5_hex);
+  assert(is_md5sum(md5_hex), "Result of unpack_md5() was not a legal md5 checksum");
 }
 
 /*
@@ -105,10 +122,6 @@ void execute_simple(sqlite3 *handle, char* sql) {
 
 sqlite3_stmt* get_rolling_init(sqlite3 *handle){
   sqlite3_stmt* stmt;
-  //int retval;
-  //retval = sqlite3_prepare_v2(handle, "SELECT value FROM rolling",
-  //                            -1, &stmt, NULL);  
-  //assert(retval == SQLITE_OK, "fail");
   CHECKED_SQLITE(sqlite3_prepare_v2(handle, "SELECT value FROM rolling", -1, &stmt, NULL));
   return stmt;
 }
@@ -132,7 +145,6 @@ void get_rolling_finish(sqlite3_stmt* stmt) {
 
 void add_rolling(sqlite3 *handle, uint64_t rolling){
   sqlite3_stmt* stmt;
-  int retval;
   CHECKED_SQLITE(sqlite3_prepare_v2(handle, "INSERT INTO rolling (value) VALUES (?)",
 				    -1, &stmt, NULL));
   CHECKED_SQLITE(sqlite3_bind_int64(stmt, 1, (sqlite3_int64) rolling));
@@ -145,11 +157,10 @@ void add_block(sqlite3 *handle, const char* blob, uint32_t offset, const char* m
   //const char* md5_row = block_row_checksum(blob, offset, md5);
   const char* md5_row = "0000";
   char packed_md5[16];
-  hex2bin(md5, 32, packed_md5);
+  pack_md5(md5, packed_md5);
   char packed_blob[16];
-  hex2bin(blob, 32, packed_blob);
+  pack_md5(blob, packed_blob);
   sqlite3_stmt* stmt;
-  int retval;
 
   CHECKED_SQLITE(sqlite3_prepare_v2(handle, "INSERT OR IGNORE INTO blocks (blob, offset, md5_short, md5, row_md5) VALUES (?, ?, ?, ?, ?)",
 				    -1, &stmt, NULL));
@@ -172,7 +183,7 @@ sqlite3_stmt* get_blocks_init(sqlite3 *handle, char* md5, int limit){
     assert(false, "fail prepare");
   }
   char packed_md5[16];
-  hex2bin(md5, 32, packed_md5);
+  pack_md5(md5, packed_md5);
   sqlite3_bind_blob(stmt, 1, packed_md5, 4, SQLITE_TRANSIENT);
   sqlite3_bind_blob(stmt, 2, packed_md5, 16, SQLITE_TRANSIENT);
   sqlite3_bind_int(stmt, 3, limit);
@@ -184,7 +195,8 @@ int get_blocks_next(sqlite3_stmt* stmt, char* blob, uint32_t* offset, char* row_
   if (s == SQLITE_ROW) {
     const char* blob_col = (const char*) sqlite3_column_text(stmt, 0);
     const int blob_col_length = sqlite3_column_bytes(stmt, 0);
-    bin2hex(blob_col, 16, blob);
+    assert(blob_col_length == 16, "Unexpected column length in get_blocks_next()");
+    unpack_md5(blob_col, blob);
 
     *offset = sqlite3_column_int(stmt, 1);
 
@@ -207,7 +219,6 @@ void get_blocks_finish(sqlite3_stmt* stmt) {
 
 int get_modcount(sqlite3 *handle) {
   sqlite3_stmt* stmt;
-  int retval;
   CHECKED_SQLITE(sqlite3_prepare_v2(handle, "SELECT value FROM props WHERE name = 'modification_counter'",
 				    -1, &stmt, NULL));
   const int s = sqlite3_step (stmt);
@@ -229,7 +240,7 @@ static void initialize_database(sqlite3 *handle) {
   //execute_simple(handle, "PRAGMA main.synchronous=OFF;");
   //execute_simple(handle, "PRAGMA main.journal_mode=DELETE;");
 
-  //begin_blocksdb(handle);
+  begin_blocksdb(handle);
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS blocks (blob BLOB(16) NOT NULL, offset LONG NOT NULL, md5_short BLOB(4) NOT NULL, md5 BLOB(16) NOT NULL, row_md5 char(32))");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)");
   execute_simple(handle, "CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)");
@@ -239,7 +250,7 @@ static void initialize_database(sqlite3 *handle) {
   execute_simple(handle, "CREATE UNIQUE INDEX IF NOT EXISTS index_offset ON blocks (blob, offset)");    
   execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_block_md5 ON blocks (md5_short)");    
   //execute_simple(handle, "CREATE INDEX IF NOT EXISTS index_md5_long ON blocks (md5)");    
-  //commit_blocksdb(handle);
+  commit_blocksdb(handle);
 }
 
 sqlite3* init_blocksdb(const char* dbfile){
