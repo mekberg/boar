@@ -103,7 +103,7 @@ class BlockLocationsDB:
 
     def get_block_locations(self, block_md5, limit = -1):
         for row in self.db.get_blocks(block_md5, limit):
-            blob, offset, row_md5 = row
+            blob, offset = row
             #assert_block_row_integrity(blob, offset, block_md5, row_md5)
             yield blob, offset
 
@@ -115,7 +115,8 @@ class BlockLocationsDB:
 
     def add_block(self, blob, offset, md5):
         self.db.add_block(blob, offset, md5)
-
+        #assert (blob, offset) in self.get_block_locations(md5)
+        
     def add_rolling(self, rolling):        
         self.db.add_rolling(rolling)
 

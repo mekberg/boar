@@ -297,7 +297,7 @@ cdef class BlocksDB:
         while get_blocks_next(handle, blob, &offset, row_md5):
             blob[32] = 0
             row_md5[32] = 0
-            result.append((blob, offset, row_md5))
+            result.append((blob, offset))
         get_blocks_finish(handle)
         return result
 
@@ -309,7 +309,7 @@ cdef class BlocksDB:
            add_rolling(self.dbhandle, rolling)
 
    def add_block(self, blob, offset, md5):
-       assert self.in_transaction, "Tried to add a block outside of a transaction"
+       assert self.in_transaction, "Tried to add a block outside of a transaction"       
        add_block(self.dbhandle, blob, offset, md5)
        self.is_modified = True
        
