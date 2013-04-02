@@ -277,12 +277,11 @@ cdef class BlocksDB:
 
    def get_all_rolling(self):
         result = []
-        handle = get_rolling_init(self.dbhandle)
+        get_rolling_init(self.dbhandle)
         cdef uint64_t rolling
-        while get_rolling_next(handle, &rolling):
+        while get_rolling_next(self.dbhandle, &rolling):
             result.append(rolling)
-        get_rolling_finish(handle)
-
+        get_rolling_finish(self.dbhandle)
         return result
 
    def has_block(self, md5):
