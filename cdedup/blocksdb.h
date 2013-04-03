@@ -20,7 +20,7 @@ BLOCKSDB_RESULT init_blocksdb(const char* dbfile, BlocksDbState** out_state);
 
 const char* get_error_message(BlocksDbState* dbstate);
 
-void add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const char* md5);
+BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const char* md5);
 
 void add_rolling(BlocksDbState* dbstate, uint64_t rolling);
 
@@ -28,9 +28,9 @@ BLOCKSDB_RESULT get_rolling_init(BlocksDbState* dbstate);
 BLOCKSDB_RESULT get_rolling_next(BlocksDbState* dbstate, uint64_t* rolling);
 BLOCKSDB_RESULT get_rolling_finish(BlocksDbState* dbstate);
 
-sqlite3_stmt* get_blocks_init(BlocksDbState* dbstate, char* md5, int limit);
-int get_blocks_next(sqlite3_stmt* stmt, char* blob, uint32_t* offset, char* row_md5);
-void get_blocks_finish(sqlite3_stmt* stmt);
+BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit);
+BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* offset, char* row_md5);
+BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate);
 
 int get_modcount(BlocksDbState* dbstate);
 void increment_modcount(BlocksDbState* dbstate);
