@@ -105,27 +105,37 @@ void execute_simple(BlocksDbState* dbstate, char* sql) {
   assert(retval == SQLITE_OK, errmsg);
 }
 
-int get_rolling_init(BlocksDbState* dbstate){
-  printf(dbstate->error_msg);
+BLOCKSDB_RESULT get_rolling_init(BlocksDbState* dbstate){
   // TODO: error if a stmt is already active
-  CHECKED_SQLITE(sqlite3_prepare_v2(dbstate->handle, "SELECT value FROM rolling", -1, &dbstate->stmt, NULL));
+  assert(dbstate->stmt == NULL, "get_rolling_init(): Tried to create a second cursor");
+  const int s = sqlite3_prepare_v2(dbstate->handle, "SELECT value FROM rolling", -1, &dbstate->stmt, NULL);
+  if (s == SQLITE_OK) {
+    return BLOCKSDB_DONE;
+  }
+  sprintf(dbstate->error_msg, 
+	  "Error while initializing fetching rolling checksums: %s", 
+	  sqlite3_errmsg(dbstate->handle));
+  return BLOCKSDB_ERR_OTHER; // Should never get here
 }
 
-int get_rolling_next(BlocksDbState* dbstate, uint64_t *rolling) {
+BLOCKSDB_RESULT get_rolling_next(BlocksDbState* dbstate, uint64_t *rolling) {
   int s = sqlite3_step (dbstate->stmt);
   if (s == SQLITE_ROW) {
     *rolling = (uint64_t) sqlite3_column_int64(dbstate->stmt, 0);
-    return 1;
+    return BLOCKSDB_ROW;
   }
   else if (s == SQLITE_DONE) {
-    return 0;
+    return BLOCKSDB_DONE;
   }
-  assert(false, "Unexpected result in get_all_rolling_next");
-  return 0; // Should never get here
+  sprintf(dbstate->error_msg, 
+	  "Error while fetching rolling checksums: %s", 
+	  sqlite3_errmsg(dbstate->handle));
+  return BLOCKSDB_ERR_OTHER; // Should never get here
 }
 
-int get_rolling_finish(BlocksDbState* dbstate) {
+BLOCKSDB_RESULT get_rolling_finish(BlocksDbState* dbstate) {
   sqlite3_finalize(dbstate->stmt);
+  return BLOCKSDB_DONE;
 }
 
 void add_rolling(BlocksDbState* dbstate, uint64_t rolling){
@@ -217,36 +227,51 @@ void increment_modcount(BlocksDbState* dbstate) {
   execute_simple(dbstate, "UPDATE props SET value = value + 1 where name = 'modification_counter'");
 }
 
-static void initialize_database(BlocksDbState* dbstate) {
-  //execute_simple(handle, "PRAGMA main.journal_mode=WAL;");
-  //execute_simple(handle, "PRAGMA main.page_size = 4096;");
-  //execute_simple(handle, "PRAGMA main.cache_size=10000;");
-  execute_simple(dbstate, "PRAGMA main.locking_mode=NORMAL;");
-  //execute_simple(dbstate->handle, "PRAGMA main.synchronous=OFF;");
-  //execute_simple(dbstate->handle, "PRAGMA main.journal_mode=DELETE;");
+static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate) {
+  char *sql[] = {
+    //PRAGMA main.journal_mode=WAL;");
+    //PRAGMA main.page_size = 4096;");
+    //PRAGMA main.cache_size=10000;");
+    "PRAGMA main.locking_mode=NORMAL",
+    //"PRAGMA main.synchronous=OFF;");
+    //main.journal_mode=DELETE;");
+    
+    "BEGIN",
+    "CREATE TABLE IF NOT EXISTS blocks (blob BLOB(16) NOT NULL, offset LONG NOT NULL, md5_short BLOB(4) NOT NULL, md5 BLOB(16) NOT NULL, row_md5 char(32))",
+    "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)",
+    "INSERT OR IGNORE INTO props VALUES ('block_size', 65536)",
+    "INSERT OR IGNORE INTO props VALUES ('modification_counter', 0)",
+    //"CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS index_offset ON blocks (blob, offset)",    
+    "CREATE INDEX IF NOT EXISTS index_block_md5 ON blocks (md5_short)",    
+    //"CREATE INDEX IF NOT EXISTS index_md5_long ON blocks (md5)",    
+    "COMMIT",
+    
+    "\0 SENTINEL"
+  };
 
-  begin_blocksdb(dbstate);
-  execute_simple(dbstate, "CREATE TABLE IF NOT EXISTS blocks (blob BLOB(16) NOT NULL, offset LONG NOT NULL, md5_short BLOB(4) NOT NULL, md5 BLOB(16) NOT NULL, row_md5 char(32))");
-  execute_simple(dbstate, "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)");
-  execute_simple(dbstate, "CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)");
-  execute_simple(dbstate, "INSERT OR IGNORE INTO props VALUES ('block_size', 65536)");
-  execute_simple(dbstate, "INSERT OR IGNORE INTO props VALUES ('modification_counter', 0)");
-  //execute_simple(dbstate, "CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)");
-  execute_simple(dbstate, "CREATE UNIQUE INDEX IF NOT EXISTS index_offset ON blocks (blob, offset)");    
-  execute_simple(dbstate, "CREATE INDEX IF NOT EXISTS index_block_md5 ON blocks (md5_short)");    
-  //execute_simple(dbstate, "CREATE INDEX IF NOT EXISTS index_md5_long ON blocks (md5)");    
-  commit_blocksdb(dbstate);
+  for(int i = 0; *sql[i] != '\0'; i++){
+    const int retval = sqlite3_exec(dbstate->handle, sql[i], NULL, NULL, NULL);
+    if(retval != SQLITE_OK){
+      sprintf(dbstate->error_msg, "Error while initializing database: %s", sqlite3_errmsg(dbstate->handle));
+      return BLOCKSDB_ERR_OTHER;
+    }
+  }
+  return BLOCKSDB_DONE;
 }
 
-BlocksDbState* init_blocksdb(const char* dbfile){
+BLOCKSDB_RESULT init_blocksdb(const char* dbfile, BlocksDbState** out_state){
   //printf("Opening %s\n", dbfile);
   BlocksDbState* state = (BlocksDbState*) calloc(1, sizeof(BlocksDbState));
+  *out_state = state;
+  const int retval = sqlite3_open(dbfile, &state->handle);
+  if(retval != SQLITE_OK){
+    sprintf(state->error_msg, "Error while opening database %s: %s", dbfile, sqlite3_errmsg(state->handle));
+    return BLOCKSDB_ERR_CORRUPT;
+  }
   state->magic = 0xabcdabcd;
-  int retval;
-  retval = sqlite3_open(dbfile, &state->handle);
-  assert(retval == SQLITE_OK, "Couldn't open db");
-  initialize_database(state);
-  return state;
+  return initialize_database(state);
 }
 
 
@@ -260,3 +285,7 @@ int commit_blocksdb(BlocksDbState* dbstate) {
   return modcount;
 }
 
+const char* get_error_message(BlocksDbState* dbstate) {
+  dbstate->error_msg[1023] = 0;
+  return dbstate->error_msg;
+}

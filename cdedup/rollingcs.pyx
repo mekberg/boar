@@ -39,13 +39,20 @@ cdef extern from "intset.h":
     void destroy_intset(IntSet* intset)
 
 cdef extern from "blocksdb.h":
-    void* init_blocksdb(const char* dbfile)
+
+    cdef enum BLOCKSDB_RESULT:
+        BLOCKSDB_DONE=1
+        BLOCKSDB_ROW
+        BLOCKSDB_ERR_CORRUPT
+        BLOCKSDB_ERR_OTHER
+
+    BLOCKSDB_RESULT init_blocksdb(const char* dbfile, void** out_handle)
     void add_block(void *handle, const char* blob, uint32_t offset, const char* md5)
     void add_rolling(void* handle, uint64_t rolling)
 
-    void* get_rolling_init(void* handle)
-    int get_rolling_next(void* stmt, uint64_t* rolling)
-    void get_rolling_finish(void* stmt)
+    BLOCKSDB_RESULT get_rolling_init(void* handle)
+    BLOCKSDB_RESULT get_rolling_next(void* handle, uint64_t* rolling)
+    BLOCKSDB_RESULT get_rolling_finish(void* handle)
 
     void* get_blocks_init(void *handle, char* md5, int limit)
     int get_blocks_next(void* stmt, char* blob, uint32_t* offset, char* row_md5)
@@ -56,6 +63,8 @@ cdef extern from "blocksdb.h":
 
     void begin_blocksdb(void* handle)
     int commit_blocksdb(void* handle)
+    
+    char* get_error_message(void* handle)
     
 #class BlocksDB:
     
@@ -258,7 +267,9 @@ cdef class BlocksDB:
 
    def __init__(self, dbfile):
        dbfile_utf8 = dbfile.encode("utf-8")
-       self.dbhandle = init_blocksdb(dbfile_utf8)
+       result = init_blocksdb(dbfile_utf8, &self.dbhandle)
+       if result != BLOCKSDB_DONE:
+           raise Exception(get_error_message(self.dbhandle))
        self.in_transaction = False
        self.is_modified = False
        self.last_seen_modcount = -1
@@ -277,11 +288,19 @@ cdef class BlocksDB:
 
    def get_all_rolling(self):
         result = []
-        get_rolling_init(self.dbhandle)
+        if get_rolling_init(self.dbhandle) != BLOCKSDB_DONE:
+            raise Exception(get_error_message(self.dbhandle))
         cdef uint64_t rolling
-        while get_rolling_next(self.dbhandle, &rolling):
-            result.append(rolling)
-        get_rolling_finish(self.dbhandle)
+        while True:
+            s = get_rolling_next(self.dbhandle, &rolling)
+            if s == BLOCKSDB_ROW:
+                result.append(rolling)
+            elif s == BLOCKSDB_DONE:
+                break
+            else:
+                raise Exception(get_error_message(self.dbhandle))
+        if get_rolling_finish(self.dbhandle) != BLOCKSDB_DONE:
+            raise Exception(get_error_message(self.dbhandle))
         return result
 
    def has_block(self, md5):
