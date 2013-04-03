@@ -135,6 +135,7 @@ BLOCKSDB_RESULT get_rolling_next(BlocksDbState* dbstate, uint64_t *rolling) {
 
 BLOCKSDB_RESULT get_rolling_finish(BlocksDbState* dbstate) {
   sqlite3_finalize(dbstate->stmt);
+  dbstate->stmt = NULL;
   return BLOCKSDB_DONE;
 }
 
@@ -148,8 +149,23 @@ void add_rolling(BlocksDbState* dbstate, uint64_t rolling){
   
 }
 
-void add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const char* md5){
+#define RET_ERROR_OTHER(msg) {						\
+    sprintf(dbstate->error_msg, msg "(%s:%u: %s)",			\
+	    __FILE__, __LINE__, sqlite3_errmsg(dbstate->handle));	\
+    return BLOCKSDB_ERR_OTHER;						\
+  }
+
+BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const char* md5){
   //const char* md5_row = block_row_checksum(blob, offset, md5);
+  if(! is_md5sum(blob)) {
+    sprintf(dbstate->error_msg, "add_block(): Not a valid blob name: %s", blob);    
+    return BLOCKSDB_ERR_OTHER;
+  }
+  if(! is_md5sum(md5)) {
+    sprintf(dbstate->error_msg, "add_block(): Not a valid md5 sum: %s", md5);    
+    return BLOCKSDB_ERR_OTHER;
+  }
+
   const char* md5_row = "0000";
   char packed_md5[16];
   pack_md5(md5, packed_md5);
@@ -157,59 +173,84 @@ void add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const 
   pack_md5(blob, packed_blob);
   sqlite3_stmt* stmt;
 
-  CHECKED_SQLITE(sqlite3_prepare_v2(dbstate->handle, "INSERT OR IGNORE INTO blocks (blob, offset, md5_short, md5, row_md5) VALUES (?, ?, ?, ?, ?)",
-				    -1, &stmt, NULL));
-  sqlite3_bind_blob(stmt, 1, packed_blob, 16, SQLITE_STATIC);
-  sqlite3_bind_int(stmt, 2, offset);
-  sqlite3_bind_blob(stmt, 3, packed_md5, 4, SQLITE_STATIC);
-  sqlite3_bind_blob(stmt, 4, packed_md5, 16, SQLITE_STATIC);
-  sqlite3_bind_blob(stmt, 5, md5_row, 32, SQLITE_STATIC);
-  CHECKED_SQLITE_STEP(sqlite3_step(stmt));
-  sqlite3_finalize(stmt);
+  if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "INSERT OR IGNORE INTO blocks (blob, offset, md5_short, md5, row_md5) VALUES (?, ?, ?, ?, ?)",
+				     -1, &stmt, NULL)) {
+    RET_ERROR_OTHER("Error while preparing add_block()");
+  }
+  
+  if(SQLITE_OK != sqlite3_bind_blob(stmt, 1, packed_blob, 16, SQLITE_STATIC)) 
+    RET_ERROR_OTHER();
+  if(SQLITE_OK != sqlite3_bind_int(stmt, 2, offset))
+    RET_ERROR_OTHER();
+  if(SQLITE_OK != sqlite3_bind_blob(stmt, 3, packed_md5, 4, SQLITE_STATIC))
+    RET_ERROR_OTHER();
+  if(SQLITE_OK != sqlite3_bind_blob(stmt, 4, packed_md5, 16, SQLITE_STATIC))
+    RET_ERROR_OTHER();
+  if(SQLITE_OK != sqlite3_bind_blob(stmt, 5, md5_row, 32, SQLITE_STATIC))
+    RET_ERROR_OTHER();
+
+  if(SQLITE_DONE != sqlite3_step(stmt))
+    RET_ERROR_OTHER("Error while inserting new block");
+
+  if(SQLITE_OK != sqlite3_finalize(stmt))
+    RET_ERROR_OTHER();
+  return BLOCKSDB_DONE;
 }
 
-sqlite3_stmt* get_blocks_init(BlocksDbState* dbstate, char* md5, int limit){
-  sqlite3_stmt* stmt;
+BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit){
+  if(! is_md5sum(md5)) {
+    sprintf(dbstate->error_msg, "get_blocks_init(): Not a valid md5 sum: %s", md5);    
+    return BLOCKSDB_ERR_OTHER;
+  }
   int retval;
   retval = sqlite3_prepare_v2(dbstate->handle, "SELECT blocks.blob, blocks.offset, blocks.row_md5 FROM blocks WHERE md5_short = ? AND md5 = ? LIMIT ?",
-                              -1, &stmt, NULL);
+                              -1, &dbstate->stmt, NULL);
   if(retval != SQLITE_OK){
-    printf( "could not prepare statement: %s\n", sqlite3_errmsg(dbstate->handle) );
-    assert(false, "fail prepare");
+    RET_ERROR_OTHER("get_blocks_init() prepare failed");
   }
+
   char packed_md5[16];
   pack_md5(md5, packed_md5);
-  sqlite3_bind_blob(stmt, 1, packed_md5, 4, SQLITE_TRANSIENT);
-  sqlite3_bind_blob(stmt, 2, packed_md5, 16, SQLITE_TRANSIENT);
-  sqlite3_bind_int(stmt, 3, limit);
-  return stmt;
+
+  if(SQLITE_OK != sqlite3_bind_blob(dbstate->stmt, 1, packed_md5, 4, SQLITE_TRANSIENT))
+    RET_ERROR_OTHER();
+  if(SQLITE_OK != sqlite3_bind_blob(dbstate->stmt, 2, packed_md5, 16, SQLITE_TRANSIENT))
+    RET_ERROR_OTHER();
+  if(SQLITE_OK != sqlite3_bind_int(dbstate->stmt, 3, limit))
+    RET_ERROR_OTHER();
+  return BLOCKSDB_DONE;
 }
 
-int get_blocks_next(sqlite3_stmt* stmt, char* blob, uint32_t* offset, char* row_md5) {
-  int s = sqlite3_step (stmt);
+BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* offset, char* row_md5) {
+  int s = sqlite3_step (dbstate->stmt);
   if (s == SQLITE_ROW) {
-    const char* blob_col = (const char*) sqlite3_column_text(stmt, 0);
-    const int blob_col_length = sqlite3_column_bytes(stmt, 0);
+    // TODO: verify integrity
+    const char* blob_col = (const char*) sqlite3_column_text(dbstate->stmt, 0);
+    const int blob_col_length = sqlite3_column_bytes(dbstate->stmt, 0);
     assert(blob_col_length == 16, "Unexpected column length in get_blocks_next()");
     unpack_md5(blob_col, blob);
 
-    *offset = sqlite3_column_int(stmt, 1);
+    *offset = sqlite3_column_int(dbstate->stmt, 1);
 
-    const char* row_md5_col = (const char*) sqlite3_column_text(stmt, 2);
-    const int row_md5_col_length = sqlite3_column_bytes(stmt, 2);
+    const char* row_md5_col = (const char*) sqlite3_column_text(dbstate->stmt, 2);
+    const int row_md5_col_length = sqlite3_column_bytes(dbstate->stmt, 2);
     strncpy(row_md5, row_md5_col, row_md5_col_length);
 
-    return 1;
+    return BLOCKSDB_ROW;
   }
   else if (s == SQLITE_DONE) {
-    return 0;
+    return BLOCKSDB_DONE;
   }
   assert(false, "Unexpected result in get_all_rolling_next");
-  return 0; // should never get here
+  return BLOCKSDB_ERR_OTHER; // should never get here
 }
 
-void get_blocks_finish(sqlite3_stmt* stmt) {
-  sqlite3_finalize(stmt);
+BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate) {
+  assert(dbstate->stmt != NULL, "Tried to call get_blocks_finish() with no active cursor");
+  if(SQLITE_OK != sqlite3_finalize(dbstate->stmt))
+    RET_ERROR_OTHER()
+  dbstate->stmt = NULL;
+  return BLOCKSDB_DONE;
 }
 
 int get_modcount(BlocksDbState* dbstate) {
@@ -271,6 +312,7 @@ BLOCKSDB_RESULT init_blocksdb(const char* dbfile, BlocksDbState** out_state){
     return BLOCKSDB_ERR_CORRUPT;
   }
   state->magic = 0xabcdabcd;
+  state->stmt = NULL;
   return initialize_database(state);
 }
 

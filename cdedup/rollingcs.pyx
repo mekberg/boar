@@ -47,16 +47,16 @@ cdef extern from "blocksdb.h":
         BLOCKSDB_ERR_OTHER
 
     BLOCKSDB_RESULT init_blocksdb(const char* dbfile, void** out_handle)
-    void add_block(void *handle, const char* blob, uint32_t offset, const char* md5)
+    BLOCKSDB_RESULT add_block(void *handle, const char* blob, uint32_t offset, const char* md5)
     void add_rolling(void* handle, uint64_t rolling)
 
     BLOCKSDB_RESULT get_rolling_init(void* handle)
     BLOCKSDB_RESULT get_rolling_next(void* handle, uint64_t* rolling)
     BLOCKSDB_RESULT get_rolling_finish(void* handle)
 
-    void* get_blocks_init(void *handle, char* md5, int limit)
-    int get_blocks_next(void* stmt, char* blob, uint32_t* offset, char* row_md5)
-    void get_blocks_finish(void* stmt)
+    BLOCKSDB_RESULT get_blocks_init(void *handle, char* md5, int limit)
+    BLOCKSDB_RESULT get_blocks_next(void *handle, char* blob, uint32_t* offset, char* row_md5)
+    BLOCKSDB_RESULT get_blocks_finish(void *handle)
 
     int get_modcount(void* handle)
     void increment_modcount(void* handle)
@@ -308,15 +308,23 @@ cdef class BlocksDB:
 
    def get_blocks(self, md5, limit = -1):
         result = []
-        handle = get_blocks_init(self.dbhandle, md5, limit)
+        if BLOCKSDB_DONE != get_blocks_init(self.dbhandle, md5, limit):
+            raise Exception(get_error_message(self.dbhandle))
         cdef char blob[33]
         cdef uint32_t offset
         cdef char row_md5[33]
-        while get_blocks_next(handle, blob, &offset, row_md5):
-            blob[32] = 0
-            row_md5[32] = 0
-            result.append((blob, offset))
-        get_blocks_finish(handle)
+        while True:
+            s = get_blocks_next(self.dbhandle, blob, &offset, row_md5)
+            if s == BLOCKSDB_ROW:
+                blob[32] = 0
+                row_md5[32] = 0
+                result.append((blob, offset))
+            elif s == BLOCKSDB_DONE:
+                break
+            else:
+                raise Exception(get_error_message(self.dbhandle))            
+        if BLOCKSDB_DONE != get_blocks_finish(self.dbhandle):
+            raise Exception(get_error_message(self.dbhandle))
         return result
 
    def add_rolling(self, rolling):
@@ -328,7 +336,9 @@ cdef class BlocksDB:
 
    def add_block(self, blob, offset, md5):
        assert self.in_transaction, "Tried to add a block outside of a transaction"       
-       add_block(self.dbhandle, blob, offset, md5)
+       result = add_block(self.dbhandle, blob, offset, md5)
+       if result != BLOCKSDB_DONE:
+           raise Exception(get_error_message(self.dbhandle))
        self.is_modified = True
        
    def begin(self):
