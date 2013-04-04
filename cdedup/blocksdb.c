@@ -23,6 +23,12 @@
   } \
   }
 
+#define RET_ERROR_OTHER(msg) {						\
+    sprintf(dbstate->error_msg, msg "(%s:%u: %s)",			\
+	    __FILE__, __LINE__, sqlite3_errmsg(dbstate->handle));	\
+    return BLOCKSDB_ERR_OTHER;						\
+  }
+
 static inline void assert(int c, const char* msg){
   if(c == 0){
     printf("ASSERT FAILED: %s\n", msg);
@@ -96,13 +102,14 @@ static void unpack_md5(const char* md5_bin, char* md5_hex) {
   assert(is_md5sum(md5_hex), "Result of unpack_md5() was not a legal md5 checksum");
 }
 
-void execute_simple(BlocksDbState* dbstate, char* sql) {
+static BLOCKSDB_RESULT execute_simple(BlocksDbState* dbstate, char* sql) {
   char* errmsg;
   int retval =  sqlite3_exec(dbstate->handle, sql, NULL, NULL, &errmsg);
   if(retval != SQLITE_OK){
-    assert(false, errmsg);
+    strcpy(dbstate->error_msg, errmsg);
   }
-  assert(retval == SQLITE_OK, errmsg);
+  sqlite3_free(errmsg);
+  return BLOCKSDB_DONE;
 }
 
 BLOCKSDB_RESULT get_rolling_init(BlocksDbState* dbstate){
@@ -139,21 +146,21 @@ BLOCKSDB_RESULT get_rolling_finish(BlocksDbState* dbstate) {
   return BLOCKSDB_DONE;
 }
 
-void add_rolling(BlocksDbState* dbstate, uint64_t rolling){
+BLOCKSDB_RESULT add_rolling(BlocksDbState* dbstate, uint64_t rolling){
   sqlite3_stmt* stmt;
-  CHECKED_SQLITE(sqlite3_prepare_v2(dbstate->handle, "INSERT INTO rolling (value) VALUES (?)",
-				    -1, &stmt, NULL));
-  CHECKED_SQLITE(sqlite3_bind_int64(stmt, 1, (sqlite3_int64) rolling));
-  CHECKED_SQLITE_STEP(sqlite3_step(stmt));
-  sqlite3_finalize(stmt);
-  
+  if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "INSERT INTO rolling (value) VALUES (?)",
+				     -1, &stmt, NULL))
+    RET_ERROR_OTHER("Couldn't prepare statement in add_rolling()");
+  if(SQLITE_OK != sqlite3_bind_int64(stmt, 1, (sqlite3_int64) rolling))
+    RET_ERROR_OTHER();
+  if(SQLITE_DONE != sqlite3_step(stmt)) {
+    RET_ERROR_OTHER("Unexpected step result in add_rolling()");
+  }
+  if(SQLITE_OK != sqlite3_finalize(stmt))
+    RET_ERROR_OTHER();  
+  return BLOCKSDB_DONE;
 }
 
-#define RET_ERROR_OTHER(msg) {						\
-    sprintf(dbstate->error_msg, msg "(%s:%u: %s)",			\
-	    __FILE__, __LINE__, sqlite3_errmsg(dbstate->handle));	\
-    return BLOCKSDB_ERR_OTHER;						\
-  }
 
 BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const char* md5){
   //const char* md5_row = block_row_checksum(blob, offset, md5);
@@ -248,24 +255,26 @@ BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* of
 BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate) {
   assert(dbstate->stmt != NULL, "Tried to call get_blocks_finish() with no active cursor");
   if(SQLITE_OK != sqlite3_finalize(dbstate->stmt))
-    RET_ERROR_OTHER()
+    RET_ERROR_OTHER();
   dbstate->stmt = NULL;
   return BLOCKSDB_DONE;
 }
 
-int get_modcount(BlocksDbState* dbstate) {
+BLOCKSDB_RESULT get_modcount(BlocksDbState* dbstate, int *out_modcount) {
   sqlite3_stmt* stmt;
-  CHECKED_SQLITE(sqlite3_prepare_v2(dbstate->handle, "SELECT value FROM props WHERE name = 'modification_counter'",
-				    -1, &stmt, NULL));
-  const int s = sqlite3_step (stmt);
-  assert(s == SQLITE_ROW, "Unexpected result from select");
-  const int result = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
-  return result;  
+  if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "SELECT value FROM props WHERE name = 'modification_counter'",
+				     -1, &stmt, NULL))
+    RET_ERROR_OTHER("Couldn't prepare query in get_modcount()");
+  if(SQLITE_ROW != sqlite3_step (stmt))
+    RET_ERROR_OTHER("Unexpected step result in get_modcount()");
+  *out_modcount = sqlite3_column_int(stmt, 0);
+  if(SQLITE_OK != sqlite3_finalize(stmt))
+    RET_ERROR_OTHER();
+  return BLOCKSDB_DONE;
 }
 
-void increment_modcount(BlocksDbState* dbstate) {
-  execute_simple(dbstate, "UPDATE props SET value = value + 1 where name = 'modification_counter'");
+BLOCKSDB_RESULT increment_modcount(BlocksDbState* dbstate) {
+  return execute_simple(dbstate, "UPDATE props SET value = value + 1 where name = 'modification_counter'");
 }
 
 static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate) {
@@ -317,14 +326,12 @@ BLOCKSDB_RESULT init_blocksdb(const char* dbfile, BlocksDbState** out_state){
 }
 
 
-void begin_blocksdb(BlocksDbState* dbstate) {
-  execute_simple(dbstate, "BEGIN");
+BLOCKSDB_RESULT begin_blocksdb(BlocksDbState* dbstate) {
+  return execute_simple(dbstate, "BEGIN");
 }
 
-int commit_blocksdb(BlocksDbState* dbstate) {
-  const int modcount = get_modcount(dbstate);
-  execute_simple(dbstate, "COMMIT");
-  return modcount;
+BLOCKSDB_RESULT commit_blocksdb(BlocksDbState* dbstate) {
+  return execute_simple(dbstate, "COMMIT");
 }
 
 const char* get_error_message(BlocksDbState* dbstate) {

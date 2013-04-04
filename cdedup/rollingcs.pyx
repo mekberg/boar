@@ -48,7 +48,7 @@ cdef extern from "blocksdb.h":
 
     BLOCKSDB_RESULT init_blocksdb(const char* dbfile, void** out_handle)
     BLOCKSDB_RESULT add_block(void *handle, const char* blob, uint32_t offset, const char* md5)
-    void add_rolling(void* handle, uint64_t rolling)
+    BLOCKSDB_RESULT add_rolling(void* handle, uint64_t rolling)
 
     BLOCKSDB_RESULT get_rolling_init(void* handle)
     BLOCKSDB_RESULT get_rolling_next(void* handle, uint64_t* rolling)
@@ -58,11 +58,11 @@ cdef extern from "blocksdb.h":
     BLOCKSDB_RESULT get_blocks_next(void *handle, char* blob, uint32_t* offset, char* row_md5)
     BLOCKSDB_RESULT get_blocks_finish(void *handle)
 
-    int get_modcount(void* handle)
-    void increment_modcount(void* handle)
+    BLOCKSDB_RESULT get_modcount(void* handle, int* out_modcount)
+    BLOCKSDB_RESULT increment_modcount(void* handle)
 
-    void begin_blocksdb(void* handle)
-    int commit_blocksdb(void* handle)
+    BLOCKSDB_RESULT begin_blocksdb(void* handle)
+    BLOCKSDB_RESULT commit_blocksdb(void* handle)
     
     char* get_error_message(void* handle)
     
@@ -284,7 +284,9 @@ cdef class BlocksDB:
        # it is possible some commit went through since we finished
        # reading the values, but let's not push the issue, the
        # consequences are slight.
-       self.last_seen_modcount = get_modcount(self.dbhandle)
+       result = get_modcount(self.dbhandle, &self.last_seen_modcount)
+       if result != BLOCKSDB_DONE:
+           raise Exception(get_error_message(self.dbhandle))
 
    def get_all_rolling(self):
         result = []
@@ -343,8 +345,12 @@ cdef class BlocksDB:
        
    def begin(self):
        assert not self.in_transaction, "Tried to start a transaction while one was already in progress"
-       begin_blocksdb(self.dbhandle)
-       if self.last_seen_modcount != get_modcount(self.dbhandle):
+       result = begin_blocksdb(self.dbhandle)
+       if result != BLOCKSDB_DONE:
+           raise Exception(get_error_message(self.dbhandle))
+       cdef int current_modcount
+       result = get_modcount(self.dbhandle, &current_modcount)
+       if self.last_seen_modcount != current_modcount:
            self.__reload_rolling()
        self.in_transaction = True
 
@@ -354,8 +360,13 @@ cdef class BlocksDB:
        if self.is_modified:
            increment_modcount(self.dbhandle)
            self.is_modified = False
-       self.last_seen_modcount = commit_blocksdb(self.dbhandle)
-       
+       result = get_modcount(self.dbhandle, &self.last_seen_modcount)
+       if result != BLOCKSDB_DONE:
+           raise Exception(get_error_message(self.dbhandle))
+
+       result = commit_blocksdb(self.dbhandle)
+       if result != BLOCKSDB_DONE:
+           raise Exception(get_error_message(self.dbhandle))
 
 def test_blocksdb_class():
     db = BlocksDB("testdb.sqlite")
