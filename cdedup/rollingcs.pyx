@@ -334,7 +334,9 @@ cdef class BlocksDB:
        if not self.all_rolling.contains(rolling):
            self.all_rolling.add(rolling)
            self.is_modified = True
-           add_rolling(self.dbhandle, rolling)
+           result = add_rolling(self.dbhandle, rolling)
+           if result != BLOCKSDB_DONE:
+               raise Exception(get_error_message(self.dbhandle))
 
    def add_block(self, blob, offset, md5):
        assert self.in_transaction, "Tried to add a block outside of a transaction"       
@@ -358,7 +360,9 @@ cdef class BlocksDB:
        assert self.in_transaction, "Tried to a commit while no transaction was in progress"
        self.in_transaction = False
        if self.is_modified:
-           increment_modcount(self.dbhandle)
+           result = increment_modcount(self.dbhandle)
+           if result != BLOCKSDB_DONE:
+               raise Exception(get_error_message(self.dbhandle))
            self.is_modified = False
        result = get_modcount(self.dbhandle, &self.last_seen_modcount)
        if result != BLOCKSDB_DONE:

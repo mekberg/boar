@@ -29,6 +29,12 @@
     return BLOCKSDB_ERR_OTHER;						\
   }
 
+#define RET_ERROR_CORRUPT(msg) {					\
+    sprintf(dbstate->error_msg, msg "(%s:%u: %s)",			\
+	    __FILE__, __LINE__, "blocks database is corrupt");		\
+    return BLOCKSDB_ERR_CORRUPT;					\
+  }
+
 static inline void assert(int c, const char* msg){
   if(c == 0){
     printf("ASSERT FAILED: %s\n", msg);
@@ -234,14 +240,15 @@ BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* of
     // TODO: verify integrity
     const char* blob_col = (const char*) sqlite3_column_text(dbstate->stmt, 0);
     const int blob_col_length = sqlite3_column_bytes(dbstate->stmt, 0);
-    assert(blob_col_length == 16, "Unexpected column length in get_blocks_next()");
+    if(blob_col_length != 16)
+      RET_ERROR_CORRUPT("Unexpected column length in get_blocks_next()");
     unpack_md5(blob_col, blob);
 
     *offset = sqlite3_column_int(dbstate->stmt, 1);
 
     const char* row_md5_col = (const char*) sqlite3_column_text(dbstate->stmt, 2);
     const int row_md5_col_length = sqlite3_column_bytes(dbstate->stmt, 2);
-    strncpy(row_md5, row_md5_col, row_md5_col_length);
+    memcpy(row_md5, row_md5_col, row_md5_col_length);
 
     return BLOCKSDB_ROW;
   }
