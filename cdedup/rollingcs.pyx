@@ -58,6 +58,10 @@ cdef extern from "blocksdb.h":
     BLOCKSDB_RESULT get_blocks_next(void *handle, char* blob, uint32_t* offset, char* row_md5)
     BLOCKSDB_RESULT get_blocks_finish(void *handle)
 
+    BLOCKSDB_RESULT delete_blocks_init(void* dbstate)
+    BLOCKSDB_RESULT delete_blocks_add(void* dbstate, char* blob)
+    BLOCKSDB_RESULT delete_blocks_finish(void* dbstate)
+
     BLOCKSDB_RESULT get_modcount(void* handle, int* out_modcount)
     BLOCKSDB_RESULT increment_modcount(void* handle)
 
@@ -337,6 +341,20 @@ cdef class BlocksDB:
            result = add_rolling(self.dbhandle, rolling)
            if result != BLOCKSDB_DONE:
                raise Exception(get_error_message(self.dbhandle))
+
+   def delete_blocks(self, blobs):
+       print "Deleting blocks belonging to blobs", blobs
+       assert self.in_transaction, "Tried to delete blocks outside of a transaction"
+       if BLOCKSDB_DONE != delete_blocks_init(self.dbhandle):
+           raise Exception(get_error_message(self.dbhandle))
+
+       for blob in blobs:
+           if BLOCKSDB_DONE != delete_blocks_add(self.dbhandle, blob):
+               raise Exception(get_error_message(self.dbhandle))
+
+       if BLOCKSDB_DONE != delete_blocks_finish(self.dbhandle):
+           raise Exception(get_error_message(self.dbhandle))
+           
 
    def add_block(self, blob, offset, md5):
        assert self.in_transaction, "Tried to add a block outside of a transaction"       

@@ -116,6 +116,9 @@ class BlockLocationsDB:
     def add_block(self, blob, offset, md5):
         self.db.add_block(blob, offset, md5)
         #assert (blob, offset) in self.get_block_locations(md5)
+
+    def delete_blocks(self, blobs):
+        self.db.delete_blocks(blobs)
         
     def add_rolling(self, rolling):        
         self.db.add_rolling(rolling)

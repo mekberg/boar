@@ -113,6 +113,7 @@ static BLOCKSDB_RESULT execute_simple(BlocksDbState* dbstate, char* sql) {
   int retval =  sqlite3_exec(dbstate->handle, sql, NULL, NULL, &errmsg);
   if(retval != SQLITE_OK){
     strcpy(dbstate->error_msg, errmsg);
+    return BLOCKSDB_ERR_OTHER;
   }
   sqlite3_free(errmsg);
   return BLOCKSDB_DONE;
@@ -265,6 +266,43 @@ BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate) {
     RET_ERROR_OTHER();
   dbstate->stmt = NULL;
   return BLOCKSDB_DONE;
+}
+
+BLOCKSDB_RESULT delete_blocks_init(BlocksDbState* dbstate){
+  return execute_simple(dbstate, "CREATE TEMPORARY TABLE blocks_to_delete (blob CHAR(16) PRIMARY KEY)");
+}
+
+BLOCKSDB_RESULT delete_blocks_add(BlocksDbState* dbstate, char* blob){
+  if(! is_md5sum(blob)) {
+    sprintf(dbstate->error_msg, "delete_blocks_add(): Not a valid blob name: %s", blob);
+    return BLOCKSDB_ERR_OTHER;
+  }  
+  char packed_blob[16];
+  pack_md5(blob, packed_blob);
+  sqlite3_stmt* stmt;
+
+  if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "INSERT OR IGNORE INTO blocks_to_delete (blob) VALUES (?)",
+				     -1, &stmt, NULL)) {
+    RET_ERROR_OTHER("Error while preparing delete_blocks_add()");
+  }
+  if(SQLITE_OK != sqlite3_bind_blob(stmt, 1, packed_blob, 16, SQLITE_STATIC))
+    RET_ERROR_OTHER();
+
+  if(SQLITE_DONE != sqlite3_step(stmt))
+    RET_ERROR_OTHER("Error while adding blob to list of blocks to delete");
+
+  if(SQLITE_OK != sqlite3_finalize(stmt))
+    RET_ERROR_OTHER();
+  
+  return BLOCKSDB_DONE;
+}
+
+BLOCKSDB_RESULT delete_blocks_finish(BlocksDbState* dbstate){
+  BLOCKSDB_RESULT result = execute_simple(dbstate, "DELETE FROM blocks WHERE blocks.blob IN blocks_to_delete");
+  if(result != BLOCKSDB_DONE) {
+    return result;
+  }
+  return execute_simple(dbstate, "DROP TABLE blocks_to_delete");
 }
 
 BLOCKSDB_RESULT get_modcount(BlocksDbState* dbstate, int *out_modcount) {
