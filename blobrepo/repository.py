@@ -808,6 +808,11 @@ class Repo:
         misuse_assert(not self.readonly, "Cannot erase blobs from a write protected repo")
         orphan_blobs = self.get_orphan_blobs()
         trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_blobs_", dir = self.get_path(TMP_DIR))
+
+        self.blocksdb.begin()
+        self.blocksdb.delete_blocks([blob for blob in orphan_blobs if self.has_raw_blob(blob)])
+        self.blocksdb.commit()            
+
         for blob in orphan_blobs:
             if self.has_recipe_blob(blob):
                 recipe_path = self.get_recipe_path(blob)

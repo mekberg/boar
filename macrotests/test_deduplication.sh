@@ -174,6 +174,25 @@ $BOAR --repo="$REPO" truncate Session || exit 1
 test ! -e $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe || { echo "Should have been removed by truncate"; exit 1; }
 test -e $REPO/recipes/7e/7efcbecf434ce1588570132fa61f53c6.recipe || { echo "Should remain after truncate"; exit 1; }
 $BOAR --repo="$REPO" verify || { echo "Verify failed"; exit 1; }
+rm -r "Session" "$REPO"
+
+#
+# Test truncation followed by commit of re-added truncated data
+#
+$BOAR mkrepo -d "$REPO" || exit 1
+$BOAR --repo="$REPO" mksession Session || exit 1
+$BOAR --repo="$REPO" co Session || exit 1
+cp $BIGFILE Session/a.bin || exit 1
+(cd Session && $BOAR ci -q ) || exit 1
+rm Session/a.bin || exit 1
+(cd Session && $BOAR ci -q ) || exit 1
+touch $REPO/ENABLE_PERMANENT_ERASE || exit 1
+$BOAR --repo="$REPO" truncate Session || exit 1
+(cd Session && $BOAR update -q ) || exit 1
+cp $BIGFILE Session/b.bin || exit 1
+(cd Session && $BOAR ci -q ) || exit 1
+# File is now 
+
 
 #exit 1
 
