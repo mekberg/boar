@@ -468,6 +468,24 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
 
         self.assertEquals(expected_filenames, full_tree_filenames)
 
+    def testThatInterruptedSimpleCommitCanBeResumed(self):
+        tree = {'file.txt': 'f1'}
+        wd = self.createWorkdir(self.repoUrl, tree)        
+        class CommitInterrupted(Exception):
+            pass
+        def interrupt_commit():
+            raise CommitInterrupted()
+        original_method = wd.front.repo._before_transaction_completion
+        wd.front.repo._before_transaction_completion = interrupt_commit
+        try:
+            wd.checkin()
+            self.fail()
+        except CommitInterrupted:
+            pass
+        wd = self.createWorkdir(self.repoUrl, tree)
+        wd.checkout()
+        self.assertTrue(os.path.exists(os.path.join(wd.root, "file.txt")))
+
     def testExistingFileTwice(self):
         """Test derived sha256 checksum. It is only returned from the
         derived storage at the third checkin (at the first, it is
