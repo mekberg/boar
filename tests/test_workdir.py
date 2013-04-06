@@ -39,7 +39,7 @@ from blobrepo import repository
 from common import get_tree, my_relpath, convert_win_path_to_unix, md5sum, DevNull
 from boar_exceptions import UserError
 from front import Front
-from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs
+from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 
 class TestFront(unittest.TestCase, WorkdirHelper):
     def setUp(self):
@@ -543,6 +543,39 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         tree = get_tree(wd.root, absolute_paths = False)
         #tree = wd.get_tree(absolute_paths = True)
         self.assertEquals(set(tree), set(["insubdir.txt", '.boar/info', '.boar/wd_version.txt']))
+
+class TestConcurrency(unittest.TestCase, WorkdirHelper):
+    def setUp(self):
+        self.remove_at_teardown = []
+        self.workdir1 = self.createTmpName()
+        self.workdir2 = self.createTmpName()
+        self.repopath = self.createTmpName()
+        repository.create_repository(self.repopath, enable_deduplication = True)
+
+        os.mkdir(self.workdir1)
+        self.wd1 = workdir.Workdir(self.repopath, u"TestSession1", u"", None, self.workdir1)
+        self.wd1.setLogOutput(DevNull())
+        self.wd1.use_progress_printer(False)
+        self.wd1.get_front().mksession(u"TestSession1")
+
+        os.mkdir(self.workdir2)
+        self.wd2 = workdir.Workdir(self.repopath, u"TestSession2", u"", None, self.workdir2)
+        self.wd2.setLogOutput(DevNull())
+        self.wd2.use_progress_printer(False)
+        self.wd2.get_front().mksession(u"TestSession2")
+
+    def testThatConcurrentlyAddedBlobsWork(self):
+        write_file(self.workdir2, "aaa1.txt", "aaa")
+
+        wd2_commit = self.wd2.front.commit
+        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.checkin() # Will not complete
+
+        write_file(self.workdir1, "aaa2.txt", "aaa")
+        self.wd1.checkin()
+        
+        wd2_commit(u"TestSession2", None) # Resume the commit
+
 
 if __name__ == '__main__':
     unittest.main()
