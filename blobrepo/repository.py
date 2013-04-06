@@ -852,11 +852,13 @@ class Repo:
         # Everything seems OK, move the blobs and consolidate the session
         for filename in os.listdir(queued_item):
             if is_md5sum(filename):
+                # Any redundant blobs should have been trimmed above
                 assert not self.has_blob(filename)
                 blob_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_blob_path(filename)
                 move_file(blob_to_move, destination_path, mkdirs = True)
             elif is_recipe_filename(filename):
+                # Any redundant recipes should have been trimmed above
                 assert not self.has_blob(get_recipe_md5(filename))
                 recipe_to_move = os.path.join(queued_item, filename)
                 destination_path = self.get_recipe_path(filename)
@@ -886,8 +888,14 @@ class Repo:
             #print n, block_spec
             n += 1
             blob_md5, offset, rolling, sha256 = block_spec
-            self.blocksdb.add_block(blob_md5, offset, sha256)
-            self.blocksdb.add_rolling(rolling)
+            # Possibly another commit sneaked in a recipe while we
+            # were looking the other way. Let's be lenient for now.
+
+            # assert self.has_raw_blob(blob_md5), "Tried to register a
+            # block for non-existing blob %s" % blob_md5
+            if self.has_raw_blob(blob_md5):
+                self.blocksdb.add_block(blob_md5, offset, sha256)
+                self.blocksdb.add_rolling(rolling)
 
         #print "done"
         # This is not entirely safe. If the commit fails, the block
@@ -1016,7 +1024,7 @@ class Transaction:
                 used_blobs.update(get_recipe_blobs(self.get_recipe_path(recipe_blob)))
         
         for blob in self.get_raw_blobs():
-            if self.repo.has_raw_blob(blob) or blob not in used_blobs:
+            if self.repo.has_blob(blob) or blob not in used_blobs:
                 safe_delete_blob(self.get_path(blob))
 
 def get_all_ids_in_directory(path):
