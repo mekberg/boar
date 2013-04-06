@@ -177,8 +177,11 @@ $BOAR --repo="$REPO" verify || { echo "Verify failed"; exit 1; }
 rm -r "Session" "$REPO"
 
 #
-# Test truncation followed by commit of re-added truncated data
+# Test truncation followed by commit of re-added truncated data. If
+# the blocksdb hasn't been purged correctly, the generated recipes
+# will be invalid.
 #
+
 $BOAR mkrepo -d "$REPO" || exit 1
 $BOAR --repo="$REPO" mksession Session || exit 1
 $BOAR --repo="$REPO" co Session || exit 1
@@ -191,8 +194,6 @@ $BOAR --repo="$REPO" truncate Session || exit 1
 (cd Session && $BOAR update -q ) || exit 1
 cp $BIGFILE Session/b.bin || exit 1
 (cd Session && $BOAR ci -q ) || exit 1
-# File is now 
-
 
 #exit 1
 
