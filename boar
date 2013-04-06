@@ -532,10 +532,12 @@ def cmd_repair(args):
                       help="Do not scan for errors before repairing")
     (options, args) = parser.parse_args(args)
     clean = False
-    repo_url = get_repo_from_env()
-    if repo_url.startswith("boar://"):
+    repo_url = get_repo_url()
+    if repo_url.startswith("boar://") or repo_url.startswith("boar+"):
         raise UserError("Repairing can only be executed with a local boar repository")
-    if not options.force:
+    if options.force:
+            front = connect_to_repo(get_repo_url())
+    else:
         try:
             front = connect_to_repo(get_repo_url())
             print "Verifying repo before repair..."
@@ -547,7 +549,25 @@ def cmd_repair(args):
     if clean:
         print "No errors found. Not repairing anything."
         return
-    print "Repairing..."
+    
+    repo = front.repo
+    if repo.deduplication_enabled():
+        print "Repairing blocks database"
+        blobs = repo.get_raw_blob_names()
+        repo.blocksdb.begin()
+        for blob in blobs:
+            print blob
+            reader = repo.get_blob_reader(blob)
+            bc = deduplication.BlockChecksum(repository.DEDUP_BLOCK_SIZE)
+            while reader.bytes_left():
+                bc.feed_string(reader.read(repository.DEDUP_BLOCK_SIZE))
+            for offset, rolling, md5 in bc.harvest():
+                repo.blocksdb.add_block(blob, offset, md5)
+                repo.blocksdb.add_rolling(rolling)
+        repo.blocksdb.commit()
+    else:
+        print "Nothing to do"
+
 
 def cmd_import(args):
     parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
