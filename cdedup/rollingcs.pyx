@@ -343,7 +343,7 @@ cdef class BlocksDB:
                raise Exception(get_error_message(self.dbhandle))
 
    def delete_blocks(self, blobs):
-       print "Deleting blocks belonging to blobs", blobs
+       #print "Deleting blocks belonging to blobs", blobs
        assert self.in_transaction, "Tried to delete blocks outside of a transaction"
        if BLOCKSDB_DONE != delete_blocks_init(self.dbhandle):
            raise Exception(get_error_message(self.dbhandle))

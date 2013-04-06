@@ -148,6 +148,38 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
         wd2_commit(u"TestSession2", None) # Resume the commit
         self.assertEquals(set(), self.wd1.front.repo.get_orphan_blobs())
 
+    def testThatTrimmedBlobsAreRemovedFromDb(self):
+        # aaa    47bce5c74f589f4867dbd57e9ca9f808
+        # bbb    08f8e0260c64418510cefb2b06eee5cd
+        # ccc    9df62e693988eb4e1e1444ece0578579
+        # bbbccc 71d27475242f6b50db02ddf1476107ee
+
+        write_file(self.workdir2, "bbbccc.txt", "bbbccc")
+
+        # Make the checkin() go just almost all the way...
+        wd2_commit = self.wd2.front.commit
+        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.checkin() # Will not complete
+
+        # Now, make sure bbbccc exists as a recipe
+        write_file(self.workdir1, "bbb.txt", "bbb")
+        write_file(self.workdir1, "ccc.txt", "ccc")
+        self.wd1.checkin()
+
+        write_file(self.workdir1, "bbbccc.txt", "bbbccc")
+        self.wd1.checkin()
+
+        wd2_commit(u"TestSession2", None) # Resume the commit
+
+        #####################
+
+        # Is deduplicated to bbbccc + X
+        # If bbbccc is stored in the blocksdb, the commit will fail
+        write_file(self.workdir1, "b.txt", "bbbcccX")
+        self.wd1.checkin() 
+
+        self.assertEquals(set(), self.wd1.front.repo.get_orphan_blobs())
+
     def testIdenticalBlocksOnlyAddedOnce(self):
         write_file(self.workdir1, "a.txt", "aaa")
         write_file(self.workdir2, "b.txt", "aaa")
@@ -337,6 +369,13 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
         self.db.commit()
         self.assertEquals(self.db.get_all_rolling(), [17])
 
+    def testRollingDuplicate(self):
+        self.db.begin()
+        self.db.add_rolling(17)
+        self.db.add_rolling(17)
+        self.db.commit()
+        self.assertEquals(self.db.get_all_rolling(), [17])
+
     def testRollingRange(self):
         self.db.begin()
         self.db.add_rolling(0)
@@ -350,6 +389,15 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
     def testBlockSimple(self):
         # blob, offset, md5
         self.db.begin()
+        self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 0, "00000000000000000000000000000000")
+        self.db.commit()
+        self.assertEquals(list(self.db.get_block_locations("00000000000000000000000000000000")),
+                          [("d41d8cd98f00b204e9800998ecf8427e", 0)])
+
+    def testBlockDuplicate(self):
+        # blob, offset, md5
+        self.db.begin()
+        self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 0, "00000000000000000000000000000000")
         self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 0, "00000000000000000000000000000000")
         self.db.commit()
         self.assertEquals(list(self.db.get_block_locations("00000000000000000000000000000000")),
