@@ -907,9 +907,17 @@ class Repo:
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
+        self._before_transaction_completion()
         shutil.move(queued_item, session_path)
         assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
         sw.mark("done")
+
+    def _before_transaction_completion(self):
+        """This method is called before the final transaction
+        completion stage. It is intended to be overridden for whitebox
+        testing."""
+        pass
+
 
 class Transaction:
     
