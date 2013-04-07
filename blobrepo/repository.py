@@ -418,16 +418,7 @@ class Repo:
             if not dir_exists(os.path.join(self.repopath, RECIPES_DIR)):
                 os.mkdir(os.path.join(self.repopath, RECIPES_DIR))
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
-            queued_session_id = self.get_queued_session_id()
-            if queued_session_id:
-                # There is a transaction in progress. In v5 and up a
-                # transaction must contain a "blocks.json" file. Add
-                # an empty one to make process_queue() happy.
-                blocks_file = os.path.join(self.get_queue_path(queued_session_id), "blocks.json")
-                if not os.path.exists(blocks_file):
-                    with open(blocks_file, "wb") as f:
-                        f.write("[]")
-                
+            queued_session_id = self.get_queued_session_id()                
             replace_file(os.path.join(self.repopath, VERSION_FILE), "5")
         except OSError, e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
@@ -882,28 +873,23 @@ class Repo:
 
         #print "Inserting blocks..."
         blocks_fname = os.path.join(queued_item, "blocks.json")
-        n = 0
-        self.blocksdb.begin()
-        for block_spec in read_json(blocks_fname):
-            #print n, block_spec
-            n += 1
-            blob_md5, offset, rolling, sha256 = block_spec
-            # Possibly another commit sneaked in a recipe while we
-            # were looking the other way. Let's be lenient for now.
+        if os.path.exists(blocks_fname):
+            blocks = read_json(blocks_fname)
 
-            # assert self.has_raw_blob(blob_md5), "Tried to register a
-            # block for non-existing blob %s" % blob_md5
-            if self.has_raw_blob(blob_md5):
-                self.blocksdb.add_block(blob_md5, offset, sha256)
-                self.blocksdb.add_rolling(rolling)
+            self.blocksdb.begin()
+            for block_spec in blocks:
+                blob_md5, offset, rolling, sha256 = block_spec
+                # Possibly another commit sneaked in a recipe while we
+                # were looking the other way. Let's be lenient for now.
 
-        #print "done"
-        # This is not entirely safe. If the commit fails, the block
-        # list will be lost. This is however acceptable, as it is
-        # unlikely and just results in degraded deduplication.
-        safe_delete_file(blocks_fname)
-        self.blocksdb.commit()
-        sw.mark("Block specifications inserted")
+                # assert self.has_raw_blob(blob_md5), "Tried to register a
+                # block for non-existing blob %s" % blob_md5
+                if self.has_raw_blob(blob_md5):
+                    self.blocksdb.add_block(blob_md5, offset, sha256)
+                    self.blocksdb.add_rolling(rolling)
+            self.blocksdb.commit()
+            safe_delete_file(blocks_fname)
+            sw.mark("Block specifications inserted")
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
@@ -1011,7 +997,7 @@ class Transaction:
         # Check that all necessary files are present in the snapshot
         assert set(contents) >= \
             set([meta_info['fingerprint']+".fingerprint",\
-                     "session.json", "bloblist.json", "session.md5", "blocks.json"]), \
+                     "session.json", "bloblist.json", "session.md5"]), \
                      "Missing files in queue dir: "+str(contents)
 
     def trim(self):

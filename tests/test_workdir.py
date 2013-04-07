@@ -470,7 +470,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
 
     def testThatInterruptedSimpleCommitCanBeResumed(self):
         tree = {'file.txt': 'f1'}
-        wd = self.createWorkdir(self.repoUrl, tree)        
+        wd = self.createWorkdir(self.repoUrl, tree)
         class CommitInterrupted(Exception):
             pass
         def interrupt_commit():
@@ -482,7 +482,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
             self.fail()
         except CommitInterrupted:
             pass
-        wd = self.createWorkdir(self.repoUrl, tree)
+        wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
         self.assertTrue(os.path.exists(os.path.join(wd.root, "file.txt")))
 
