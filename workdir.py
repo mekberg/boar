@@ -46,7 +46,7 @@ METADIR = ".boar"
 CCACHE_FILE = "ccache.db"
 
 class Workdir:
-    def __init__(self, repoUrl, sessionName, offset, revision, root):
+    def __init__(self, repoUrl, sessionName, offset, revision, root, front = None):
         assert repoUrl == None or isinstance(repoUrl, unicode)
         assert isinstance(sessionName, unicode)
         assert isinstance(offset, unicode)
@@ -61,9 +61,15 @@ class Workdir:
         self.revision = revision
         self.root = root
         self.metadir = os.path.join(self.root, METADIR)
-        self.front = None
+        self.front = front
         self.use_progress_printer(True)
         self.__upgrade()
+
+        if os.path.exists(self.metadir):
+            # The "front" argument is a kludge to avoid connecting to
+            # the repo twice for new workdirs. Don't use it for
+            # anything else.
+            assert not front, "A front object can only be passed to an empty workdir"
 
         if self.repoUrl:
             self.front = self.get_front()
@@ -352,6 +358,7 @@ class Workdir:
         new snapshot will be created as a modification of the snapshot
         given in the 'base_snapshot' argument."""
 
+        #print "All checksums:", front.get_all_rolling()
         # To increase the chance of detecting spurious reading errors,
         # all the files should at this point have been scanned and had
         # their checksums stored in the checksum cache. The
@@ -373,14 +380,14 @@ class Workdir:
                 raise UserError("File %s contents conflicts with manifest" % wd_path)
             try:
                 check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
-            except ConstraintViolation:
+            except ContentViolation:
                 raise UserError("File changed during commit: %s" % wd_path)
             except EnvironmentError, e:
                 if ignore_errors:
-                    warn("Ignoring unreadable file: %s" % abspath)
+                    warn("Ignoring unreadable (%s) file: %s" % (e, abspath))
                 else:
                     front.cancel_snapshot()
-                    raise UserError("Unreadable file: %s" % abspath)
+                    raise UserError("Unreadable (%s) file: %s" % (e, abspath))
 
         for f in deleted_files:
             print >>self.output, "Deleting", f
@@ -609,10 +616,15 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
         # File does not exist in repo or previously in this new snapshot. Upload it.
         _send_file_hook(abspath) # whitebox testing
         with open_raw(abspath) as f:
+            #t0 = time.time()
             front.init_new_blob(expected_md5sum, blobinfo["size"])
+            #print "check_in_file: front.init_new_blob()", expected_md5sum, time.time() - t0            
             datasource = FileDataSource(f, os.path.getsize(abspath))
             front.add_blob_data_streamed(expected_md5sum, datasource = datasource)
+            #print "check_in_file: front.add_blob_data_streamed()", expected_md5sum, time.time() - t0
             front.blob_finished(expected_md5sum)
+            #print "check_in_file: front.blob_finished()", expected_md5sum, time.time() - t0
+
     front.add(blobinfo)
 
 def init_workdir(path):
