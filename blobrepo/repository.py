@@ -740,7 +740,7 @@ class Repo:
                 result.append(rev)
         return result
 
-    def __erase_snapshots(self, snapshot_ids):
+    def _erase_snapshots(self, snapshot_ids):
         assert self.repo_mutex.is_locked()
         if not snapshot_ids:
             # Avoid check for erase permissions if not erasing anything
@@ -759,6 +759,7 @@ class Repo:
             except OSError, e:
                 if e.errno == 13:
                     raise UserError("Snapshot %s is write protected, cannot erase. Change your repository file permissions and try again." % rev)
+                raise
 
     def __erase_snapshot(self, rev, trashdir):
         # Carefully here... We must allow for a resumed operation 
@@ -841,55 +842,14 @@ class Repo:
         sw.mark("Meta check 2")
 
         # Everything seems OK, move the blobs and consolidate the session
-        for filename in os.listdir(queued_item):
-            if is_md5sum(filename):
-                # Any redundant blobs should have been trimmed above
-                assert not self.has_blob(filename)
-                blob_to_move = os.path.join(queued_item, filename)
-                destination_path = self.get_blob_path(filename)
-                move_file(blob_to_move, destination_path, mkdirs = True)
-            elif is_recipe_filename(filename):
-                # Any redundant recipes should have been trimmed above
-                assert not self.has_blob(get_recipe_md5(filename))
-                recipe_to_move = os.path.join(queued_item, filename)
-                destination_path = self.get_recipe_path(filename)
-                move_file(recipe_to_move, destination_path, mkdirs = True)
-            else:
-                pass # The rest becomes a snapshot definition directory
+        transaction.integrate_files()
         sw.mark("Files integrated")
         
-        snapshots_to_delete = []
-        snapshots_to_delete_file = os.path.join(queued_item, "delete.json")
-        if os.path.exists(snapshots_to_delete_file):
-            # Intentionally redundant check for erase enable flag
-            assert os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
-            snapshots_to_delete = read_json(snapshots_to_delete_file)
-            self.__erase_snapshots(snapshots_to_delete)
+        transaction.integrate_deletions()
+        sw.mark("Deletions integrated")
 
-        if os.path.exists(os.path.join(queued_item, "delete.json")):
-            self.erase_orphan_blobs()
-            safe_delete_file(os.path.join(queued_item, "delete.json"))
-            sw.mark("Snapshots deleted")
-
-        #print "Inserting blocks..."
-        blocks_fname = os.path.join(queued_item, "blocks.json")
-        if os.path.exists(blocks_fname):
-            blocks = read_json(blocks_fname)
-
-            self.blocksdb.begin()
-            for block_spec in blocks:
-                blob_md5, offset, rolling, sha256 = block_spec
-                # Possibly another commit sneaked in a recipe while we
-                # were looking the other way. Let's be lenient for now.
-
-                # assert self.has_raw_blob(blob_md5), "Tried to register a
-                # block for non-existing blob %s" % blob_md5
-                if self.has_raw_blob(blob_md5):
-                    self.blocksdb.add_block(blob_md5, offset, sha256)
-                    self.blocksdb.add_rolling(rolling)
-            self.blocksdb.commit()
-            safe_delete_file(blocks_fname)
-            sw.mark("Block specifications inserted")
+        transaction.integrate_blocks()
+        sw.mark("Block specifications inserted")
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
@@ -911,6 +871,58 @@ class Transaction:
         self.repo = repo
         self.path = transaction_dir
         self.session_reader = sessions.SessionReader(repo, self.path)
+
+    def integrate_deletions(self):
+        snapshots_to_delete = []
+        snapshots_to_delete_file = os.path.join(self.path, "delete.json")
+        if os.path.exists(snapshots_to_delete_file):
+            # Intentionally redundant check for erase enable flag
+            assert os.path.exists(os.path.join(self.repo.repopath, "ENABLE_PERMANENT_ERASE"))
+            snapshots_to_delete = read_json(snapshots_to_delete_file)
+            self.repo._erase_snapshots(snapshots_to_delete)
+
+        if os.path.exists(os.path.join(self.path, "delete.json")):
+            self.repo.erase_orphan_blobs()
+            safe_delete_file(os.path.join(self.path, "delete.json"))
+
+
+    def integrate_files(self):
+        for filename in os.listdir(self.path):
+            if is_md5sum(filename):
+                # Any redundant blobs should have been trimmed above
+                assert not self.repo.has_blob(filename)
+                blob_to_move = os.path.join(self.path, filename)
+                destination_path = self.repo.get_blob_path(filename)
+                move_file(blob_to_move, destination_path, mkdirs = True)
+            elif is_recipe_filename(filename):
+                # Any redundant recipes should have been trimmed above
+                assert not self.repo.has_blob(get_recipe_md5(filename))
+                recipe_to_move = os.path.join(self.path, filename)
+                destination_path = self.repo.get_recipe_path(filename)
+                move_file(recipe_to_move, destination_path, mkdirs = True)
+            else:
+                pass # The rest becomes a snapshot definition directory
+
+
+    def integrate_blocks(self):
+        blocksdb = self.repo.blocksdb
+        blocks_fname = os.path.join(self.path, "blocks.json")
+        if not os.path.exists(blocks_fname):
+            return
+        blocks = read_json(blocks_fname)
+        blocksdb.begin()
+        for block_spec in blocks:
+            blob_md5, offset, rolling, sha256 = block_spec
+            # Possibly another commit sneaked in a recipe while we
+            # were looking the other way. Let's be lenient for now.
+
+            # assert self.has_raw_blob(blob_md5), "Tried to register a
+            # block for non-existing blob %s" % blob_md5
+            if self.repo.has_raw_blob(blob_md5):
+                blocksdb.add_block(blob_md5, offset, sha256)
+                blocksdb.add_rolling(rolling)
+        blocksdb.commit()
+        safe_delete_file(blocks_fname)
         
 
     def get_raw_blobs(self):
