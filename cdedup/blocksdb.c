@@ -9,20 +9,6 @@
 
 #define false 0
 
-#define CHECKED_SQLITE(C)   { int retval = C; \
-  if(retval != SQLITE_OK){                           \
-    printf( "In %s line %u: SQLITE call failed: %s\n", __func__, __LINE__, sqlite3_errmsg(dbstate->handle) ); \
-    assert(false, "Sqlite call failed"); \
-  } \
-  }
-
-#define CHECKED_SQLITE_STEP(C)   { int retval = C; \
-  if(retval != SQLITE_DONE){                           \
-    printf( "In %s line %u: SQLITE STEP didn't complete: %s\n", __func__, __LINE__, sqlite3_errmsg(dbstate->handle) ); \
-    assert(false, "Sqlite step failed"); \
-  } \
-  }
-
 #define RET_ERROR_OTHER(msg) {						\
     sprintf(dbstate->error_msg, msg "(%s:%u: %s)",			\
 	    __FILE__, __LINE__, sqlite3_errmsg(dbstate->handle));	\
@@ -33,6 +19,12 @@
     sprintf(dbstate->error_msg, msg "(%s:%u: %s)",			\
 	    __FILE__, __LINE__, "blocks database is corrupt");		\
     return BLOCKSDB_ERR_CORRUPT;					\
+  }
+
+#define ASSERT_VALID_STATE(dbstate) 					\
+  if (dbstate->magic != 0xabcd1234) {					\
+      printf("Invalid magic number at %s:%u\n", __FILE__, __LINE__);	\
+      assert(false, "Invalid magic number");				\
   }
 
 static inline void assert(int c, const char* msg){
@@ -109,17 +101,17 @@ static void unpack_md5(const char* md5_bin, char* md5_hex) {
 }
 
 static BLOCKSDB_RESULT execute_simple(BlocksDbState* dbstate, char* sql) {
-  char* errmsg;
-  int retval =  sqlite3_exec(dbstate->handle, sql, NULL, NULL, &errmsg);
+  ASSERT_VALID_STATE(dbstate);
+  int retval =  sqlite3_exec(dbstate->handle, sql, NULL, NULL, NULL);
   if(retval != SQLITE_OK){
-    strcpy(dbstate->error_msg, errmsg);
+    strcpy(dbstate->error_msg, sqlite3_errmsg(dbstate->handle));
     return BLOCKSDB_ERR_OTHER;
   }
-  sqlite3_free(errmsg);
   return BLOCKSDB_DONE;
 }
 
 BLOCKSDB_RESULT get_rolling_init(BlocksDbState* dbstate){
+  ASSERT_VALID_STATE(dbstate);
   // TODO: error if a stmt is already active
   assert(dbstate->stmt == NULL, "get_rolling_init(): Tried to create a second cursor");
   const int s = sqlite3_prepare_v2(dbstate->handle, "SELECT value FROM rolling", -1, &dbstate->stmt, NULL);
@@ -133,6 +125,7 @@ BLOCKSDB_RESULT get_rolling_init(BlocksDbState* dbstate){
 }
 
 BLOCKSDB_RESULT get_rolling_next(BlocksDbState* dbstate, uint64_t *rolling) {
+  ASSERT_VALID_STATE(dbstate);
   int s = sqlite3_step (dbstate->stmt);
   if (s == SQLITE_ROW) {
     *rolling = (uint64_t) sqlite3_column_int64(dbstate->stmt, 0);
@@ -148,12 +141,14 @@ BLOCKSDB_RESULT get_rolling_next(BlocksDbState* dbstate, uint64_t *rolling) {
 }
 
 BLOCKSDB_RESULT get_rolling_finish(BlocksDbState* dbstate) {
+  ASSERT_VALID_STATE(dbstate);
   sqlite3_finalize(dbstate->stmt);
   dbstate->stmt = NULL;
   return BLOCKSDB_DONE;
 }
 
 BLOCKSDB_RESULT add_rolling(BlocksDbState* dbstate, uint64_t rolling){
+  ASSERT_VALID_STATE(dbstate);
   sqlite3_stmt* stmt;
   if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "INSERT INTO rolling (value) VALUES (?)",
 				     -1, &stmt, NULL))
@@ -170,6 +165,7 @@ BLOCKSDB_RESULT add_rolling(BlocksDbState* dbstate, uint64_t rolling){
 
 
 BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const char* md5){
+  ASSERT_VALID_STATE(dbstate);
   //const char* md5_row = block_row_checksum(blob, offset, md5);
   if(! is_md5sum(blob)) {
     sprintf(dbstate->error_msg, "add_block(): Not a valid blob name: %s", blob);    
@@ -212,6 +208,7 @@ BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t off
 }
 
 BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit){
+  ASSERT_VALID_STATE(dbstate);
   if(! is_md5sum(md5)) {
     sprintf(dbstate->error_msg, "get_blocks_init(): Not a valid md5 sum: %s", md5);    
     return BLOCKSDB_ERR_OTHER;
@@ -236,6 +233,7 @@ BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit){
 }
 
 BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* offset, char* row_md5) {
+  ASSERT_VALID_STATE(dbstate);
   int s = sqlite3_step (dbstate->stmt);
   if (s == SQLITE_ROW) {
     // TODO: verify integrity
@@ -261,6 +259,7 @@ BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* of
 }
 
 BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate) {
+  ASSERT_VALID_STATE(dbstate);
   assert(dbstate->stmt != NULL, "Tried to call get_blocks_finish() with no active cursor");
   if(SQLITE_OK != sqlite3_finalize(dbstate->stmt))
     RET_ERROR_OTHER();
@@ -269,14 +268,16 @@ BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate) {
 }
 
 BLOCKSDB_RESULT delete_blocks_init(BlocksDbState* dbstate){
+  ASSERT_VALID_STATE(dbstate);
   return execute_simple(dbstate, "CREATE TEMPORARY TABLE blocks_to_delete (blob CHAR(16) PRIMARY KEY)");
 }
 
 BLOCKSDB_RESULT delete_blocks_add(BlocksDbState* dbstate, char* blob){
+  ASSERT_VALID_STATE(dbstate);
   if(! is_md5sum(blob)) {
     sprintf(dbstate->error_msg, "delete_blocks_add(): Not a valid blob name: %s", blob);
     return BLOCKSDB_ERR_OTHER;
-  }  
+  }
   char packed_blob[16];
   pack_md5(blob, packed_blob);
   sqlite3_stmt* stmt;
@@ -298,6 +299,7 @@ BLOCKSDB_RESULT delete_blocks_add(BlocksDbState* dbstate, char* blob){
 }
 
 BLOCKSDB_RESULT delete_blocks_finish(BlocksDbState* dbstate){
+  ASSERT_VALID_STATE(dbstate);
   BLOCKSDB_RESULT result = execute_simple(dbstate, "DELETE FROM blocks WHERE blocks.blob IN blocks_to_delete");
   if(result != BLOCKSDB_DONE) {
     return result;
@@ -306,6 +308,7 @@ BLOCKSDB_RESULT delete_blocks_finish(BlocksDbState* dbstate){
 }
 
 BLOCKSDB_RESULT get_modcount(BlocksDbState* dbstate, int *out_modcount) {
+  ASSERT_VALID_STATE(dbstate);
   sqlite3_stmt* stmt;
   if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "SELECT value FROM props WHERE name = 'modification_counter'",
 				     -1, &stmt, NULL))
@@ -318,11 +321,27 @@ BLOCKSDB_RESULT get_modcount(BlocksDbState* dbstate, int *out_modcount) {
   return BLOCKSDB_DONE;
 }
 
+BLOCKSDB_RESULT get_block_size(BlocksDbState* dbstate, int *out_block_size) {
+  ASSERT_VALID_STATE(dbstate);
+  sqlite3_stmt* stmt;
+  if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "SELECT value FROM props WHERE name = 'block_size'",
+				     -1, &stmt, NULL))
+    RET_ERROR_OTHER("Couldn't prepare query in get_block_size()");
+  if(SQLITE_ROW != sqlite3_step (stmt))
+    RET_ERROR_OTHER("Unexpected step result in get_block_size()");
+  *out_block_size = sqlite3_column_int(stmt, 0);
+  if(SQLITE_OK != sqlite3_finalize(stmt))
+    RET_ERROR_OTHER();
+  return BLOCKSDB_DONE;
+}
+
 BLOCKSDB_RESULT increment_modcount(BlocksDbState* dbstate) {
+  ASSERT_VALID_STATE(dbstate);
   return execute_simple(dbstate, "UPDATE props SET value = value + 1 where name = 'modification_counter'");
 }
 
-static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate) {
+static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate, unsigned block_size) {
+  ASSERT_VALID_STATE(dbstate);
   char *sql[] = {
     //PRAGMA main.journal_mode=WAL;");
     //PRAGMA main.page_size = 4096;");
@@ -335,7 +354,6 @@ static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate) {
     "CREATE TABLE IF NOT EXISTS blocks (blob BLOB(16) NOT NULL, offset LONG NOT NULL, md5_short BLOB(4) NOT NULL, md5 BLOB(16) NOT NULL, row_md5 char(32))",
     "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)",
     "CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)",
-    "INSERT OR IGNORE INTO props VALUES ('block_size', 65536)",
     "INSERT OR IGNORE INTO props VALUES ('modification_counter', 0)",
     //"CREATE UNIQUE INDEX IF NOT EXISTS index_rolling ON rolling (value)",
     "CREATE UNIQUE INDEX IF NOT EXISTS index_offset ON blocks (blob, offset)",    
@@ -353,10 +371,28 @@ static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate) {
       return BLOCKSDB_ERR_OTHER;
     }
   }
+
+  char sql_insert_blocksize[1024];
+  sprintf(sql_insert_blocksize, "INSERT OR IGNORE INTO props VALUES ('block_size', %u)", block_size);
+  int result = -1;
+  result = execute_simple(dbstate, sql_insert_blocksize);
+  if(result != BLOCKSDB_DONE)
+    return result;
+
+  // At this point, any client caused block size error should have
+  // been handled in a nice way.
+  int fetched_block_size;
+  result = get_block_size(dbstate, &fetched_block_size);
+  if(result != BLOCKSDB_DONE)
+    return result;
+
+  assert(fetched_block_size == block_size, "Block size mismatch");
+  
   return BLOCKSDB_DONE;
 }
 
-BLOCKSDB_RESULT init_blocksdb(const char* dbfile, BlocksDbState** out_state){
+
+BLOCKSDB_RESULT init_blocksdb(const char* dbfile, int block_size, BlocksDbState** out_state){
   //printf("Opening %s\n", dbfile);
   BlocksDbState* state = (BlocksDbState*) calloc(1, sizeof(BlocksDbState));
   *out_state = state;
@@ -365,21 +401,44 @@ BLOCKSDB_RESULT init_blocksdb(const char* dbfile, BlocksDbState** out_state){
     sprintf(state->error_msg, "Error while opening database %s: %s", dbfile, sqlite3_errmsg(state->handle));
     return BLOCKSDB_ERR_CORRUPT;
   }
-  state->magic = 0xabcdabcd;
+  state->magic = 0xabcd1234;
   state->stmt = NULL;
-  return initialize_database(state);
+  return initialize_database(state, block_size);
+}
+
+BLOCKSDB_RESULT close_blocksdb(BlocksDbState* dbstate){
+  ASSERT_VALID_STATE(dbstate);
+  const int retval = sqlite3_close(dbstate->handle);
+  if(retval != SQLITE_OK){
+    RET_ERROR_OTHER();
+  }
+  free(dbstate);
+  return BLOCKSDB_DONE;
 }
 
 
 BLOCKSDB_RESULT begin_blocksdb(BlocksDbState* dbstate) {
+  ASSERT_VALID_STATE(dbstate);
   return execute_simple(dbstate, "BEGIN");
 }
 
 BLOCKSDB_RESULT commit_blocksdb(BlocksDbState* dbstate) {
+  ASSERT_VALID_STATE(dbstate);
   return execute_simple(dbstate, "COMMIT");
 }
 
 const char* get_error_message(BlocksDbState* dbstate) {
+  ASSERT_VALID_STATE(dbstate);
   dbstate->error_msg[1023] = 0;
   return dbstate->error_msg;
 }
+
+/*
+
+int main() {
+  BlocksDbState* state;
+  init_blocksdb("/tmp/blocksdb-test", 65536, &state);
+  close_blocksdb(state);
+}
+
+*/
