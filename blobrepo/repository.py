@@ -29,8 +29,6 @@ import sys
 import tempfile
 import random, time
 
-import derived
-
 from common import *
 from boar_common import *
 import blobreader
@@ -212,8 +210,7 @@ class Repo:
             try:
                 self.__upgrade_repo()
                 self.__quick_check()
-                self.blocksdb = derived.BlockLocationsDB(DEDUP_BLOCK_SIZE, 
-                                                         os.path.join(self.repopath, DERIVED_BLOCKS_DB))
+                self.blocksdb = deduplication.BlocksDB(os.path.join(self.repopath, DERIVED_BLOCKS_DB), DEDUP_BLOCK_SIZE)
                 self.process_queue()
             finally:
                 self.repo_mutex.release()
