@@ -29,7 +29,7 @@ try:
     import rollingcs
     assert rollingcs.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % rollingcs.__version__
     cdedup_version = rollingcs.__version__
-    from rollingcs import RollingChecksum, calc_rolling, IntegerSet
+    from rollingcs import RollingChecksum, calc_rolling, IntegerSet, BlocksDB
     dedup_available = True
 except ImportError:
     cdedup_version = None
@@ -366,13 +366,13 @@ class RecipeFinder(GenericStateMachine):
                 yield get_dict(s.blob, s.blob_offset, s.size, True)
             elif type(s) == list:
                 assert s
-                seqfinder = self.blocksdb.get_sequence_finder()
+                seqfinder = BlockSequenceFinder(self.blocksdb)
                 for md5 in s:
                     if not seqfinder.can_add(md5):
                         blob, offset, size = seqfinder.get_matches().next()
                         restored_size += size
                         yield get_dict(blob, offset, size, False)
-                        seqfinder = self.blocksdb.get_sequence_finder()
+                        seqfinder = BlockSequenceFinder(self.blocksdb)
                     seqfinder.add_block(md5)
                 matches = list(seqfinder.get_matches()) # We only need one
                 if matches:
@@ -391,6 +391,52 @@ class RecipeFinder(GenericStateMachine):
                                        ("method", "concat"),
                                        ("pieces", list(self.seq2rec()))])
         return self.recipe
+
+class BlockSequenceFinder:
+    def __init__(self, blocksdb):
+        self.blocksdb = blocksdb
+
+        # The candidates are tuples on the form (blob, offset), where
+        # offset is the end of the last matched block.
+        self.candidates = set()
+        self.feeded_blocks = 0
+
+        self.firstblock = True
+        self.block_size = blocksdb.get_block_size()
+
+    def get_matches(self):
+        length = self.block_size * self.feeded_blocks
+        for blob, end_pos in sorted(self.candidates):
+            # By sorting, we get a predictable order which makes
+            # testing easier. As a secondary effect, we also
+            # concentrate the hits to fewer blobs (the ones with lower
+            # blob-ids), which may have positive cache effects on
+            # access.
+            start_pos = end_pos - length
+            assert start_pos >= 0
+            yield blob, start_pos, length
+
+    def can_add(self, block_md5):
+        return self.firstblock or bool(self.__filter_and_extend_candidates(block_md5))
+
+    def __filter_and_extend_candidates(self, block_md5):
+        """ Returns the candidates that can be extended with the given block."""
+        surviving_candidates = set()
+        for block in self.candidates.intersection(set(self.blocksdb.get_block_locations(block_md5))):
+            blob, offset = block
+            surviving_candidates.add((blob, offset + self.block_size))
+        return surviving_candidates
+
+    def add_block(self, block_md5):
+        self.feeded_blocks += 1
+        if self.firstblock:
+            self.firstblock = False
+            for blob, offset in self.blocksdb.get_block_locations(block_md5):
+                self.candidates.add((blob, offset + self.block_size))
+        else:
+            self.candidates = self.__filter_and_extend_candidates(block_md5)
+        assert self.candidates, "No remaining candidates"
+        #print "Candidates are", list(self.get_matches())
 
 def print_recipe(recipe):
     print "Md5sum:", recipe["md5sum"]

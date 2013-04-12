@@ -31,7 +31,7 @@ from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 
 from deduplication import print_recipe
 from deduplication import RecipeFinder
-from blobrepo.derived import BlockLocationsDB
+from deduplication import BlocksDB
 from rollingcs import IntegerSet, calc_rolling
 
 class FakePieceHandler:
@@ -43,7 +43,7 @@ class TestRecipeFinder(unittest.TestCase, WorkdirHelper):
     def setUp(self):
         self.remove_at_teardown = []
         self.dbname = self.createTmpName()
-        self.blocksdb = BlockLocationsDB(3, self.dbname)
+        self.blocksdb = BlocksDB(self.dbname, 3)
         self.piece_handler = FakePieceHandler()
         self.integer_set = IntegerSet(1)
 
@@ -358,7 +358,7 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
         self.workdir = self.createTmpName()
         os.mkdir(self.workdir)
         self.dbfile = os.path.join(self.workdir, "database.sqlite")
-        self.db = BlockLocationsDB(2**16, self.dbfile)
+        self.db = BlocksDB(self.dbfile, 2**16)
 
     def testRollingEmpty(self):
         self.assertEquals(self.db.get_all_rolling(), [])
