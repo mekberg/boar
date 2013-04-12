@@ -46,16 +46,18 @@ cdef extern from "blocksdb.h":
         BLOCKSDB_ERR_CORRUPT
         BLOCKSDB_ERR_OTHER
 
-    BLOCKSDB_RESULT init_blocksdb(const char* dbfile, void** out_handle)
-    BLOCKSDB_RESULT add_block(void *handle, const char* blob, uint32_t offset, const char* md5)
+    BLOCKSDB_RESULT init_blocksdb(const char* dbfile, int block_size, void** out_handle)
+    BLOCKSDB_RESULT close_blocksdb(void* handle)
+
+    BLOCKSDB_RESULT add_block(void* handle, const char* blob, uint32_t offset, const char* md5)
     BLOCKSDB_RESULT add_rolling(void* handle, uint64_t rolling)
 
     BLOCKSDB_RESULT get_rolling_init(void* handle)
     BLOCKSDB_RESULT get_rolling_next(void* handle, uint64_t* rolling)
     BLOCKSDB_RESULT get_rolling_finish(void* handle)
 
-    BLOCKSDB_RESULT get_blocks_init(void *handle, char* md5, int limit)
-    BLOCKSDB_RESULT get_blocks_next(void *handle, char* blob, uint32_t* offset, char* row_md5)
+    BLOCKSDB_RESULT get_blocks_init(void* handle, char* md5, int limit)
+    BLOCKSDB_RESULT get_blocks_next(void* handle, char* blob, uint32_t* offset, char* row_md5)
     BLOCKSDB_RESULT get_blocks_finish(void *handle)
 
     BLOCKSDB_RESULT delete_blocks_init(void* dbstate)
@@ -64,6 +66,8 @@ cdef extern from "blocksdb.h":
 
     BLOCKSDB_RESULT get_modcount(void* handle, int* out_modcount)
     BLOCKSDB_RESULT increment_modcount(void* handle)
+
+    BLOCKSDB_RESULT get_block_size(void* dbstate, int* out_block_size)
 
     BLOCKSDB_RESULT begin_blocksdb(void* handle)
     BLOCKSDB_RESULT commit_blocksdb(void* handle)
@@ -269,15 +273,23 @@ cdef class BlocksDB:
    cdef int is_modified
    cdef int last_seen_modcount
 
-   def __init__(self, dbfile):
+   def __init__(self, dbfile, block_size):
+       assert type(block_size) == int, "illegal argument: block_size must be an integer"
        dbfile_utf8 = dbfile.encode("utf-8")
-       result = init_blocksdb(dbfile_utf8, &self.dbhandle)
+       result = init_blocksdb(dbfile_utf8, block_size, &self.dbhandle)
        if result != BLOCKSDB_DONE:
            raise Exception(get_error_message(self.dbhandle))
        self.in_transaction = False
        self.is_modified = False
        self.last_seen_modcount = -1
        self.__reload_rolling()
+       
+   def __cinit__(self):
+       self.dbhandle = NULL
+
+   def __dealloc__(self):
+       if self.dbhandle != NULL:
+           close_blocksdb(self.dbhandle)
    
    def __reload_rolling(self):
        rolling = self.get_all_rolling()
@@ -310,9 +322,9 @@ cdef class BlocksDB:
         return result
 
    def has_block(self, md5):
-       return bool(self.get_blocks(md5, limit = 1))
+       return bool(self.get_block_locations(md5, limit = 1))
 
-   def get_blocks(self, md5, limit = -1):
+   def get_block_locations(self, md5, limit = -1):
         result = []
         if BLOCKSDB_DONE != get_blocks_init(self.dbhandle, md5, limit):
             raise Exception(get_error_message(self.dbhandle))
@@ -389,6 +401,14 @@ cdef class BlocksDB:
        result = commit_blocksdb(self.dbhandle)
        if result != BLOCKSDB_DONE:
            raise Exception(get_error_message(self.dbhandle))
+
+   def get_block_size(self):
+       cdef int block_size
+       result = get_block_size(self.dbhandle, &block_size)
+       if result != BLOCKSDB_DONE:
+           raise Exception(get_error_message(self.dbhandle))
+       return block_size
+       
 
 def test_blocksdb_class():
     db = BlocksDB("testdb.sqlite")

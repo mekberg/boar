@@ -16,7 +16,8 @@ typedef struct _BlocksDbState {
   char error_msg[1024];
 } BlocksDbState;
 
-BLOCKSDB_RESULT init_blocksdb(const char* dbfile, BlocksDbState** out_state);
+BLOCKSDB_RESULT init_blocksdb(const char* dbfile, int block_size, BlocksDbState** out_state);
+BLOCKSDB_RESULT close_blocksdb(BlocksDbState* dbstate);
 
 const char* get_error_message(BlocksDbState* dbstate);
 
@@ -38,6 +39,8 @@ BLOCKSDB_RESULT delete_blocks_finish(BlocksDbState* dbstate);
 
 BLOCKSDB_RESULT get_modcount(BlocksDbState* dbstate, int* out_modcount);
 BLOCKSDB_RESULT increment_modcount(BlocksDbState* dbstate);
+
+BLOCKSDB_RESULT get_block_size(BlocksDbState* dbstate, int* out_block_size);
 
 BLOCKSDB_RESULT begin_blocksdb(BlocksDbState* dbstate);
 BLOCKSDB_RESULT commit_blocksdb(BlocksDbState* dbstate);
