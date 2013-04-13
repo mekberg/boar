@@ -199,7 +199,82 @@ $BOAR --repo="$REPO" truncate Session || exit 1
 (cd Session && $BOAR update -q ) || exit 1
 cp $BIGFILE Session/b.bin || exit 1
 (cd Session && $BOAR ci -q ) || exit 1
+$BOAR --repo="$REPO" verify || { echo "Verify failed"; exit 1; }
+rm -r "Session" "$REPO"
 
-#exit 1
+#
+# Test missing recipe
+#
+
+$BOAR mkrepo -d "$REPO" || exit 1
+fill_repo
+rm $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe
+$BOAR --repo="$REPO" verify | grep "REPO CORRUPTION: Snapshot 3 is missing blob 90d077e8f5d08222620ffc97bee8a19a" || 
+{ echo "Verify of missing recipe repo gave unexpected message"; exit 1; }
+rm -r "Session" "$REPO"
+
+#
+# Test corrupt recipe
+#
+
+$BOAR mkrepo -d "$REPO" || exit 1
+fill_repo
+cat $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe
+echo "Räksmörgås" >$REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe
+$BOAR --repo="$REPO" verify >output.txt 2>&1 && { echo "Verify for corrupt recipe should fail"; exit 1; }
+grep "REPO CORRUPTION: Recipe is malformed" output.txt || { 
+    cat output.txt; echo "Verify for corrupt recipe gave unexpected output"; exit 1; }
+rm -r "Session" "$REPO"
+
+#
+# Test well-formed recipe containing wrong md5sum attribute
+#
+
+$BOAR mkrepo -d "$REPO" || exit 1
+fill_repo
+sed -i 's/90d077e8f5d08222620ffc97bee8a19a/00000000000000000000000000000000/g' \
+    $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe
+$BOAR --repo="$REPO" verify >output.txt 2>&1 && { echo "Verify for corrupt recipe should fail"; exit 1; }
+grep "REPO CORRUPTION: Recipe name does not match recipe contents" output.txt || { 
+    cat output.txt; echo "Verify for wrong md5sum attribute recipe gave unexpected output"; exit 1; }
+rm -r "Session" "$REPO"
+
+#
+# Test recipe with wrong output size
+#
+
+$BOAR mkrepo -d "$REPO" || exit 1
+fill_repo
+sed -i 's/16967/16966/g' \
+    $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe
+$BOAR --repo="$REPO" verify >output.txt 2>&1 && { echo "Verify for wrong size recipe should fail"; exit 1; }
+grep "REPO CORRUPTION: Recipe is internally inconsistent" output.txt || { 
+    cat output.txt; echo "Verify for wrong size recipe gave unexpected output"; exit 1; }
+rm -r "Session" "$REPO"
+
+#
+# Test valid but sneaky recipe yielding wrong output stream
+#
+
+$BOAR mkrepo -d "$REPO" || exit 1
+fill_repo
+sed -i 's/1ac15243e714d0b5d32779f6c7f2d8fa/d978f6138c52b8be4f07bbbf571cd450/g' \
+    $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe
+$BOAR --repo="$REPO" verify >output.txt 2>&1 && { echo "Verify for sneaky recipe should fail"; exit 1; }
+grep "REPO CORRUPTION: Blob corrupted: 90d077e8f5d08222620ffc97bee8a19a" output.txt || { 
+    cat output.txt; echo "Verify for sneaky recipe gave unexpected output"; exit 1; }
+rm -r "Session" "$REPO"
+
+#
+# Test missing attributes
+#
+$BOAR mkrepo -d "$REPO" || exit 1
+fill_repo
+sed -i 's/md5sum/missing/g' \
+    $REPO/recipes/90/90d077e8f5d08222620ffc97bee8a19a.recipe
+$BOAR --repo="$REPO" verify >output.txt 2>&1 && { echo "Verify for corrupt recipe should fail"; exit 1; }
+grep "REPO CORRUPTION: Recipe is missing properties" output.txt || { 
+    cat output.txt; echo "Verify for missing attributes gave unexpected output"; exit 1; }
+rm -r "Session" "$REPO"
 
 exit 0
