@@ -4,7 +4,7 @@ export BOAR_CACHEDIR=`mktemp --tmpdir=/tmp/ -d "boar_tests_cache_XXXXX"`
 export BOAR_SERVER_CLI="`pwd`/boar"
 
 test -e run_tests.sh || { echo "This command must be executed in the boar installation top dir"; exit 1; }
-test -e rollingcs.so || { echo "ERROR: dedup module unavailable"; exit 1; }
+test -e cdedup.so || { echo "ERROR: dedup module unavailable"; exit 1; }
 
 #
 # Test with deduplication

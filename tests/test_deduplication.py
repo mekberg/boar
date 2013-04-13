@@ -36,7 +36,7 @@ from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 from deduplication import print_recipe
 from deduplication import RecipeFinder
 from deduplication import BlocksDB
-from rollingcs import IntegerSet, calc_rolling
+from cdedup import IntegerSet, calc_rolling
 
 class FakePieceHandler:
     def init_piece(self, index): pass

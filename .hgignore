@@ -9,3 +9,4 @@ sqlite3.h
 *,v
 a.out
 *.so
+cdedup/cdedup.c
