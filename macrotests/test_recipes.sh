@@ -1,3 +1,8 @@
+if [ "$BOAR_SKIP_DEDUP_TESTS" == "1" ]; then
+    echo "Skipping due to BOAR_SKIP_DEDUP_TESTS"
+    exit 0
+fi
+
 TESTDIR="`pwd`"
 REPO=$TESTDIR/reciperepo
 BIGFILE=$TESTDIR/bigfile.bin
