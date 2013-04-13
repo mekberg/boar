@@ -379,7 +379,7 @@ class RecipeFinder(GenericStateMachine):
         assert restored_size == self.feed_byte_count, "Restored is %s, feeded is %s" % (restored_size, self.feed_byte_count)
         del self.rs
 
-    def seq2rec(self):
+    def __seq2rec(self):
         restored_size = 0
 
         def get_dict(source, offset, size, original):
@@ -423,7 +423,7 @@ class RecipeFinder(GenericStateMachine):
             self.recipe = OrderedDict([("md5sum", self.md5summer.hexdigest()),
                                        ("size", len(self.tail_buffer)),
                                        ("method", "concat"),
-                                       ("pieces", list(self.seq2rec()))])
+                                       ("pieces", list(self.__seq2rec()))])
         return self.recipe
 
 class BlockSequenceFinder:
