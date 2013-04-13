@@ -26,10 +26,10 @@ import array
 
 try:
     if os.getenv("BOAR_DISABLE_DEDUP") == "1": raise ImportError()
-    import rollingcs
-    assert rollingcs.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % rollingcs.__version__
-    cdedup_version = rollingcs.__version__
-    from rollingcs import RollingChecksum, calc_rolling, IntegerSet, BlocksDB
+    import cdedup
+    assert cdedup.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % rollingcs.__version__
+    cdedup_version = cdedup.__version__
+    from cdedup import RollingChecksum, calc_rolling, IntegerSet, BlocksDB
     dedup_available = True
 except ImportError:
     cdedup_version = None
