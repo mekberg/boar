@@ -160,7 +160,7 @@ class UniformBlobGetter:
             local_path = os.path.join(self.local_blob_dir, blob_name)
             if os.path.exists(local_path):
                 return long(os.path.getsize(local_path))
-        return self.front.get_blob_size(blob_name)
+        return self.repo.get_blob_size(blob_name)
 
     def get_blob_reader(self, blob_name, offset, size):
         assert is_md5sum(blob_name)
@@ -196,9 +196,11 @@ DEDUP_BLOCK_FOUND_EVENT = "DEDUP_BLOCK_FOUND_EVENT"
 EOF_EVENT = "EOF_EVENT"
 
 class RecipeFinder(GenericStateMachine):
-    def __init__(self, blocksdb, block_size, intset, __unused_blobsource_, original_piece_handler, tmpdir = None,
+    def __init__(self, blocksdb, block_size, intset, blob_source, original_piece_handler, tmpdir = None,
                  RollingChecksumClass = None):
         GenericStateMachine.__init__(self)
+
+        self.blob_source = blob_source
 
         if not RollingChecksumClass:
             RollingChecksumClass = RollingChecksum
@@ -378,6 +380,7 @@ class RecipeFinder(GenericStateMachine):
             restored_size += piece['size']
         assert restored_size == self.feed_byte_count, "Restored is %s, feeded is %s" % (restored_size, self.feed_byte_count)
         del self.rs
+        
 
     def __seq2rec(self):
         restored_size = 0
@@ -417,6 +420,30 @@ class RecipeFinder(GenericStateMachine):
                 assert False, s
         assert restored_size == self.feed_byte_count
 
+    def __polish_recipe_tail(self):
+        assert self.recipe
+        pieces = self.recipe['pieces']
+        if len(pieces) < 2:
+            return
+        if not (pieces[-1]['original'] == True and pieces[-2]['original'] == False):
+            return
+        # The last piece is original, and the second to last piece is
+        # not. It could be possible to extend the last hit all the way.
+        blob = pieces[-2]['source']
+        required_blob_size = pieces[-2]['offset'] + pieces[-2]['size'] + pieces[-1]['size']
+        if self.blob_source.get_blob_size(blob) < required_blob_size:
+            # Cannot possibly be a full hit
+            return
+        blob_start = pieces[-2]['offset'] + pieces[-2]['size']
+        blob_read_size = pieces[-1]['size']
+        data1 = self.blob_source.get_blob_reader(blob, blob_start, blob_read_size).read()
+        data2 = self.blob_source.get_blob_reader(pieces[-1]['source'], 0, blob_read_size).read()
+        if data1 != data2:
+            return
+        # We can extend!
+        pieces[-2]['size'] += pieces[-1]['size']
+        del pieces[-1]  
+
     def get_recipe(self):
         assert self.closed
         if self.recipe == None:
@@ -424,6 +451,8 @@ class RecipeFinder(GenericStateMachine):
                                        ("size", len(self.tail_buffer)),
                                        ("method", "concat"),
                                        ("pieces", list(self.__seq2rec()))])
+            # We now have a complete and useful recipe. But can it be improved?
+            self.__polish_recipe_tail()
         return self.recipe
 
 class BlockSequenceFinder:

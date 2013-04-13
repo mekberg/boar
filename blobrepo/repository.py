@@ -1024,7 +1024,6 @@ class Transaction:
         """Some items in the transaction may have become redundant due
         to commits that have occured since we started this
         commit. Trim them away."""
-
         used_blobs = set() # All the blobs that this commit must have
         for blobinfo in self.session_reader.get_raw_bloblist():
             if 'action' not in blobinfo:
@@ -1039,6 +1038,7 @@ class Transaction:
         
         for blob in self.get_raw_blobs():
             if self.repo.has_blob(blob) or blob not in used_blobs:
+                print "Deleting blob", blob
                 safe_delete_blob(self.get_path(blob))
 
 def get_all_ids_in_directory(path):
