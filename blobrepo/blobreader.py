@@ -149,3 +149,44 @@ class RecipeReader(DataSource):
         self._bytes_left -= readsize
         assert self._bytes_left >= 0
         return result
+
+
+def benchmark():
+
+    import tempfile
+    blob_fo = tempfile.NamedTemporaryFile()
+    blob_path = blob_fo.name
+    class FakeRepo:
+        def get_blob_path(self, blob):
+            return blob_path
+    block_size = 65536
+    block_count = 10000
+    blob_fo.write("\0" * block_size)
+    recipe = {"md5sum": "00000000000000000000000000000000",
+              "method": "concat",
+              "size": block_size * block_count,
+              "pieces": [
+            {"source": "00000000000000000000000000000000",
+             "offset": 0,
+             "size": block_size,
+             "repeat": block_count
+             } ]
+              }
+    reader = RecipeReader(recipe, FakeRepo())
+    print block_size * block_count / (2**20), "Mbytes"
+    sw = StopWatch()
+    reader.read()
+    sw.mark("Read complete")
+    """
+    62 Mbytes
+    SW: Read complete 0.33 (total 0.33)
+    125 Mbytes
+    SW: Read complete 1.14 (total 1.14)
+    250 Mbytes
+    SW: Read complete 4.29 (total 4.29)
+    625 Mbytes
+    SW: Read complete 26.12 (total 26.12)
+    """
+
+if __name__ == "__main__":
+    benchmark()
