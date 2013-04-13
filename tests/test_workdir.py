@@ -568,7 +568,8 @@ class TestConcurrency(unittest.TestCase, WorkdirHelper):
         self.workdir1 = self.createTmpName()
         self.workdir2 = self.createTmpName()
         self.repopath = self.createTmpName()
-        repository.create_repository(self.repopath, enable_deduplication = True)
+        import deduplication
+        repository.create_repository(self.repopath, enable_deduplication = deduplication.dedup_available)
 
         os.mkdir(self.workdir1)
         self.wd1 = workdir.Workdir(self.repopath, u"TestSession1", u"", None, self.workdir1)

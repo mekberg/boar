@@ -16,6 +16,10 @@
 
 import sys, os, unittest, shutil
 
+if os.getenv("BOAR_SKIP_DEDUP_TESTS") == "1":
+    print "Skipping test_deduplication.py due to BOAR_SKIP_DEDUP_TESTS"
+    sys.exit(0)
+
 if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
