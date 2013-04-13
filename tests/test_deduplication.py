@@ -221,6 +221,16 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
 
+    def testThatRepeatedHitsAreFound(self):
+        self.addWorkdirFile("a.txt", "aaa")
+        self.wd.checkin()
+        blob = self.addWorkdirFile("b.txt", "aaaaaa")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(blob)
+        self.assertEquals(len(recipe['pieces']), 1)
+        rebuilt_content = self.wd.front.get_blob("0b4e7a0e5fe84ad35fb5f95b9ceeac79").read()
+        self.assertEquals(md5sum(rebuilt_content), "0b4e7a0e5fe84ad35fb5f95b9ceeac79")
+
     def testThatNonalignedEndingsAreDeduplicated(self):
         self.addWorkdirFile("a.txt", "aaab")
         self.wd.checkin()
@@ -245,7 +255,6 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         blob = self.addWorkdirFile("b.txt", "Xaaabb")
         self.wd.checkin()
         recipe = self.repo.get_recipe(blob)
-        print_recipe(recipe)
         rebuilt_content = self.wd.front.get_blob("acd3e6fdfcd9e03e3f941c0ed516be81").read()
         self.assertEquals(md5sum(rebuilt_content), "acd3e6fdfcd9e03e3f941c0ed516be81")
 

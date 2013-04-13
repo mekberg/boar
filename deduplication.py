@@ -377,7 +377,7 @@ class RecipeFinder(GenericStateMachine):
         #print_recipe(self.get_recipe())
         restored_size = 0
         for piece in self.get_recipe()['pieces']:
-            restored_size += piece['size']
+            restored_size += piece['size'] * piece['repeat']
         assert restored_size == self.feed_byte_count, "Restored is %s, feeded is %s" % (restored_size, self.feed_byte_count)
         del self.rs
         
@@ -444,6 +444,25 @@ class RecipeFinder(GenericStateMachine):
         pieces[-2]['size'] += pieces[-1]['size']
         del pieces[-1]  
 
+    def __polish_recipe_repeats(self):
+        assert self.recipe
+        pieces = self.recipe['pieces']
+        if len(pieces) == 0:
+            return
+        new_pieces = [pieces.pop(0)]
+        assert new_pieces[-1]['repeat'] == 1
+        for piece in pieces:
+            assert piece['repeat'] == 1
+            if new_pieces[-1]['source'] == piece['source'] and \
+                    new_pieces[-1]['size'] == piece['size'] and \
+                    new_pieces[-1]['offset'] == piece['offset'] and \
+                    new_pieces[-1]['original'] == piece['original'] and \
+                    new_pieces[-1]['original'] == False:
+                new_pieces[-1]['repeat'] += 1
+            else:
+                new_pieces.append(piece)
+        self.recipe['pieces'] = new_pieces            
+
     def get_recipe(self):
         assert self.closed
         if self.recipe == None:
@@ -453,6 +472,7 @@ class RecipeFinder(GenericStateMachine):
                                        ("pieces", list(self.__seq2rec()))])
             # We now have a complete and useful recipe. But can it be improved?
             self.__polish_recipe_tail()
+            self.__polish_recipe_repeats()
         return self.recipe
 
 class BlockSequenceFinder:
