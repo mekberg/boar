@@ -221,6 +221,34 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
 
+    def testThatNonalignedEndingsAreDeduplicated(self):
+        self.addWorkdirFile("a.txt", "aaab")
+        self.wd.checkin()
+        blob = self.addWorkdirFile("b.txt", "Xaaab")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(blob)
+        self.assertEquals(len(recipe['pieces']), 2)
+        rebuilt_content = self.wd.front.get_blob("1446f760b3a89d261a13d8b37c20ef11").read()
+        self.assertEquals(md5sum(rebuilt_content), "1446f760b3a89d261a13d8b37c20ef11")
+
+    def testTailMatchTooShort(self):
+        self.addWorkdirFile("a.txt", "aaab")
+        self.wd.checkin()
+        blob = self.addWorkdirFile("b.txt", "Xaaabb")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(blob)
+        self.assertEquals(len(recipe['pieces']), 3)
+
+    def testTailMatchFalsePositive(self):
+        self.addWorkdirFile("a.txt", "aaabc")
+        self.wd.checkin()
+        blob = self.addWorkdirFile("b.txt", "Xaaabb")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(blob)
+        print_recipe(recipe)
+        rebuilt_content = self.wd.front.get_blob("acd3e6fdfcd9e03e3f941c0ed516be81").read()
+        self.assertEquals(md5sum(rebuilt_content), "acd3e6fdfcd9e03e3f941c0ed516be81")
+
     def testMultiplePossibleHits1(self):
         self.addWorkdirFile("a.txt", "aaabbbcccaaabbbaaabbbaaabbb")
         self.wd.checkin()
@@ -260,6 +288,9 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         recipe = self.repo.get_recipe(c_blob)
         #print_recipe(recipe)
         self.assertEquals(len(recipe['pieces']), 2)
+        self.assertEquals(recipe['pieces'][0], {
+                'source': a_blob, 
+                'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         self.assertEquals(recipe['pieces'][1], {
                 'source': b_blob, 
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
@@ -353,6 +384,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
        
     def tearDown(self):
         verify_repo(self.wd.get_front())
+        self.assertFalse(self.wd.get_front().repo.get_orphan_blobs())
         for d in self.remove_at_teardown:
             shutil.rmtree(d, ignore_errors = True)
 
