@@ -41,10 +41,12 @@ class RecipeReader(DataSource):
         self.file_handles = {} # blob -> handle
 
         # Expand repeated pieces
+        piece_size_sum = 0
         for piece in recipe['pieces']:
             repeat = piece.get('repeat', 1)
             for n in xrange(0, repeat):
                 self.pieces.append(piece)
+                piece_size_sum += piece['size']
 
             blob = piece['source']
             blobpath = None
@@ -55,6 +57,9 @@ class RecipeReader(DataSource):
             if not os.path.exists(blobpath):
                 raise boar_exceptions.CorruptionError("A recipe (%s) refers to a missing blob (%s)" % (recipe['md5sum'], blob))
             self.blob_paths[piece['source']] = blobpath
+
+        if piece_size_sum != recipe['size']:
+            raise boar_exceptions.CorruptionError("Recipe is internally inconsistent: %s" % recipe['md5sum'])
 
         self.blob_size = recipe['size']
         if size == None:

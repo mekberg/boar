@@ -505,7 +505,14 @@ class Repo:
         recpath = self.get_recipe_path(sum)
         if not os.path.exists(recpath):
             return None
-        recipe = read_json(recpath)
+        try:
+            recipe = read_json(recpath)
+        except ValueError:
+            raise CorruptionError("Recipe is malformed: %s" % recpath)
+        if "md5sum" not in recipe:
+            raise CorruptionError("Recipe is missing properties: %s" % recpath)
+        if recipe['md5sum'] != sum:
+            raise CorruptionError("Recipe name does not match recipe contents: %s" % recpath)
         return recipe
 
     def get_blob_size(self, sum):
