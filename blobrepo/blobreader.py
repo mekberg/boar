@@ -63,7 +63,7 @@ class RecipeReader(DataSource):
 
         self.blob_size = recipe['size']
         if size == None:
-            size = recipe['size']
+            size = recipe['size'] - offset
         assert offset + size <= recipe['size']
         self._bytes_left = size        
 

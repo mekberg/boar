@@ -390,6 +390,29 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         self.wd.checkin()
         self.assertTrue("d41d8cd98f00b204e9800998ecf8427e" in self.wd.get_front().get_all_raw_blobs())
         #print_recipe(recipe)
+
+    def testPartialRecipeReads(self):
+        a_blob = self.addWorkdirFile("a.txt", "aaa")
+        self.wd.checkin()
+        #                                      000000000011
+        #                                      012345678901
+        b_blob = self.addWorkdirFile("b.txt", "XaaaYaaaZaaa")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(b_blob)
+        self.assertEquals(len(recipe['pieces']), 6)
+
+        self.assertEquals(self.wd.front.get_blob(b_blob, 0, 12).read(), "XaaaYaaaZaaa")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 0, 1).read(), "X")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 0, 3).read(), "Xaa")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 0, 5).read(), "XaaaY")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 8, 3).read(), "Zaa")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 0, 1).read(), "X")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 8, 1).read(), "Z")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 7, 2).read(), "aZ")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 0).read(), "XaaaYaaaZaaa")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 4).read(), "YaaaZaaa")
+        self.assertEquals(self.wd.front.get_blob(b_blob, 12).read(), "")
+        self.assertEquals(self.wd.front.get_blob(b_blob).read(), "XaaaYaaaZaaa")
        
     def tearDown(self):
         verify_repo(self.wd.get_front())
