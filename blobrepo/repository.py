@@ -175,6 +175,10 @@ def get_recipe_md5(recipe_filename):
     assert is_md5sum(md5)
     return md5
 
+BlocksDB = deduplication.FakeBlocksDB
+if deduplication.dedup_available:
+    BlocksDB = deduplication.BlocksDB
+
 class Repo:
     def __init__(self, repopath):
         # The path must be absolute to avoid problems with clients
@@ -210,7 +214,7 @@ class Repo:
             try:
                 self.__upgrade_repo()
                 self.__quick_check()
-                self.blocksdb = deduplication.BlocksDB(os.path.join(self.repopath, DERIVED_BLOCKS_DB), DEDUP_BLOCK_SIZE)
+                self.blocksdb = BlocksDB(os.path.join(self.repopath, DERIVED_BLOCKS_DB), DEDUP_BLOCK_SIZE)
                 self.process_queue()
             finally:
                 self.repo_mutex.release()

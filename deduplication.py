@@ -46,7 +46,7 @@ def CreateIntegerSet(ints):
     if dedup_available:
         intset = IntegerSet(len(ints))
     else:
-        intset = FakeIntegerSet(bucket_count)
+        intset = FakeIntegerSet(len(ints))
     intset.add_all(ints)
     return intset
 
@@ -89,6 +89,40 @@ class FakeBlockChecksum:
 
     def harvest(self):
         return []
+
+class FakeBlocksDB:
+    def __init__(self, dbfile, block_size):
+        self.block_size = block_size
+
+    def get_all_rolling(self):
+        return []
+
+    def has_block(self, md5):
+        return False
+
+    def get_block_locations(self, md5, limit = -1):
+        return []
+
+    def add_rolling(self, rolling):
+        pass
+
+    def delete_blocks(self, blobs):
+        pass
+
+    def add_block(self, blob, offset, md5):
+        pass
+
+    def begin(self):
+        pass
+
+    def commit(self):
+        pass
+
+    def get_block_size(self):
+        return self.block_size
+
+    
+    
 
 class BlockChecksum:
     def __init__(self, window_size):
