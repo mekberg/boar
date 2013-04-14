@@ -413,7 +413,34 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEquals(self.wd.front.get_blob(b_blob, 4).read(), "YaaaZaaa")
         self.assertEquals(self.wd.front.get_blob(b_blob, 12).read(), "")
         self.assertEquals(self.wd.front.get_blob(b_blob).read(), "XaaaYaaaZaaa")
-       
+
+        reader = self.wd.front.get_blob(b_blob, 0, 12)
+        for c in "XaaaYaaaZaaa":
+            self.assertEquals(c, reader.read(1))
+        self.assertEquals(reader.read(1), "");
+
+        reader = self.wd.front.get_blob(b_blob, 0, 12)
+        for cc in "Xa", "aa", "Ya", "aa", "Za", "aa":
+            self.assertEquals(cc, reader.read(2))
+        self.assertEquals(reader.read(2), "");
+
+        reader = self.wd.front.get_blob(b_blob, 0, 12)
+        for ccc in "Xaa", "aYa", "aaZ", "aaa":
+            self.assertEquals(ccc, reader.read(3))
+        self.assertEquals(reader.read(3), "");
+
+        reader = self.wd.front.get_blob(b_blob, 0, 12)
+        for ccccc in "XaaaY", "aaaZa", "aa":
+            self.assertEquals(ccccc, reader.read(5))
+        self.assertEquals(reader.read(5), "");
+
+        reader = self.wd.front.get_blob(b_blob, 4)
+        for cc in "Ya", "aa", "Za", "aa":
+            self.assertEquals(cc, reader.read(2))
+        self.assertEquals(reader.read(2), "");
+            
+
+
     def tearDown(self):
         verify_repo(self.wd.get_front())
         self.assertFalse(self.wd.get_front().repo.get_orphan_blobs())
