@@ -2,6 +2,7 @@ from common import *
 from jsonrpc import DataSource
 import deduplication
 import boar_exceptions
+from copy import copy
 
 """ A recipe has the following format:
 
@@ -45,9 +46,10 @@ class RecipeReader(DataSource):
         for piece in recipe['pieces']:
             repeat = piece.get('repeat', 1)
             for n in xrange(0, repeat):
-                self.pieces.append(piece)
+                piece_to_add = copy(piece)
+                piece_to_add['position_in_recipe'] = piece_size_sum
                 piece_size_sum += piece['size']
-
+                self.pieces.append(piece_to_add)
             blob = piece['source']
             blobpath = None
             if self.local_path:
@@ -61,98 +63,76 @@ class RecipeReader(DataSource):
         if piece_size_sum != recipe['size']:
             raise boar_exceptions.CorruptionError("Recipe is internally inconsistent: %s" % recipe['md5sum'])
 
-        self.blob_size = recipe['size']
+        self.recipe_size = recipe['size']
         if size == None:
-            size = recipe['size'] - offset
-        assert offset + size <= recipe['size']
-        self._bytes_left = size        
+            self.segment_size = recipe['size'] - offset
+        else:
+            self.segment_size = size
 
-        # Where it is safe to read without switching source (virtual position)
-        self.blob_source_range_start = 0
-        self.source = None
-        self.source_offset = 0
-        self.source_size = 0
-        self.pos = offset
-        self.__seek(self.pos)
-        #print "Reader opening recipe:"
-        #deduplication.print_recipe(recipe)
+        self.bytes_left_in_segment = self.segment_size
+        self.segment_start_in_recipe = offset
+        self.current_piece_index = 0
 
-    def remaining(self): # TODO: make less silly
-        return self.bytes_left(self)
+        assert self.segment_start_in_recipe + self.bytes_left_in_segment <= recipe['size']
+
 
     def bytes_left(self):
-        return self._bytes_left
-
-    def __seek(self, seek_pos):
-        offset = 0
-        if seek_pos > self.blob_size:
-            raise Exception("Illegal position %s" % (seek_pos))
-        if seek_pos == self.blob_size:
-            self.pos = seek_pos
-            self.source = None
-            return
-        for p in self.pieces:
-            # Ignore repeat here - already taken care of at init
-            self.source = p["source"]
-            self.blob_source_range_start = offset
-            self.source_offset = p["offset"]
-            self.source_size = p["size"]
-            if offset + p["size"] > seek_pos:
-                self.pos = seek_pos
-                break
-            offset += self.source_size
-        assert self.pos == seek_pos
-        assert self.source
-        assert is_md5sum(self.source)
-
-
-    def __readable_bytes_without_seek(self):
-        pos_from_source_start = self.pos - self.blob_source_range_start
-        readable = self.source_size - pos_from_source_start
-        return readable
-
-    def __get_handle(self, path):
-        if path not in self.file_handles:
-            self.file_handles[path] = open(path, "rb")
-        return self.file_handles[path]
+        return self.bytes_left_in_segment
 
     def __del__(self):
         for f in self.file_handles.values():
             f.close()
         del self.file_handles
 
+    def __read_from_blob(self, blob, position, size):
+        blobpath = self.blob_paths[blob]
+        if blobpath not in self.file_handles:
+            self.file_handles[blobpath] = open(blobpath, "rb")
+        f = self.file_handles[blobpath]
+        f.seek(position)
+        data = f.read(size)
+        #print "read_from_blob(blob=%s, position=%s, size=%s) => '%s'" % (blob, position, size, data)
+        return data
+
+    def __search_forward(self, pos, start_index = 0):
+        index = start_index
+        while True:
+            piece = self.pieces[index]
+            piece_start = piece['position_in_recipe']
+            piece_end = piece_start + piece['size']
+            if piece_start <= pos < piece_end:
+                break
+            index += 1
+        #print "search_forward(%s, %s) => %s" % (pos, start_index, index)
+        return index
+
+    def __read_piece_data(self, piece, recipe_pos, max_size):
+        piece_pos = recipe_pos - piece['position_in_recipe']
+        blob_pos = piece['offset'] + piece_pos
+        available_blob_data_size = piece['size'] - piece_pos
+        blob_read_size = min(available_blob_data_size, max_size)
+        return self.__read_from_blob(piece['source'], blob_pos, blob_read_size)
+
     def read(self, readsize = None):
+        assert self.bytes_left_in_segment >= 0
         if readsize == None:
-            readsize = self.bytes_left()
+            readsize = self.bytes_left_in_segment
+        readsize = min(self.bytes_left_in_segment, readsize)
         assert readsize >= 0
-        assert self._bytes_left >= 0
-        readsize = min(self._bytes_left, readsize)
+
         result = ""
         while len(result) < readsize:
-            bytes_left = readsize - len(result)
-            bytes_to_read = min(self.__readable_bytes_without_seek(), bytes_left)
-
-            #print self.pos, self.blob_source_range_start, self.source_offset
-            blobpath = self.blob_paths[self.source]
-            source_file_pos = self.pos - self.blob_source_range_start + self.source_offset
-            source_file_size = os.path.getsize(blobpath)
-            assert source_file_pos <= source_file_size, "Source file %s is of unexpected size (seek to %s, is only %s)" % (blobpath, source_file_pos, source_file_size)
-            f = self.__get_handle(blobpath)
-            f.seek(source_file_pos)
-            bytes = f.read(bytes_to_read)
-            #print "Reader is reading from %s %s+%s" % (self.source, source_file_pos, bytes_to_read)
-
-            assert len(bytes) == bytes_to_read
-            result += bytes
-            self.__seek(self.pos + len(bytes))
-        assert readsize == len(result), "%s != %s" % (readsize, len(result))
-        self._bytes_left -= readsize
-        assert self._bytes_left >= 0
+            #print self.segment_start_in_recipe, self.segment_size, self.bytes_left_in_segment
+            current_recipe_read_position = self.segment_start_in_recipe + (self.segment_size - self.bytes_left_in_segment)
+            self.current_piece_index = self.__search_forward(current_recipe_read_position, start_index = self.current_piece_index)
+            remaining = readsize - len(result)
+            data = self.__read_piece_data(self.pieces[self.current_piece_index], current_recipe_read_position, remaining)
+            result += data
+            self.bytes_left_in_segment -= len(data)
         return result
 
 
 def benchmark():
-
     import tempfile
     blob_fo = tempfile.NamedTemporaryFile()
     blob_path = blob_fo.name
@@ -188,5 +168,29 @@ def benchmark():
     SW: Read complete 26.12 (total 26.12)
     """
 
+def simple_test():
+    import tempfile
+    blob_path = "/tmp/blobreader-test.txt"
+    class FakeRepo:
+        def get_blob_path(self, blob):
+            return blob_path
+    with open(blob_path, "w") as f:
+        f.write("abcdefghijklmnopqrstuvwxyz")
+    recipe = {"md5sum": "00000000000000000000000000000000",
+              "method": "concat",
+              "size": 9,
+              "pieces": [
+            {"source": "00000000000000000000000000000000",
+             "offset": 3,
+             "size": 3,
+             "repeat": 3
+             } 
+            ]
+              }
+    reader = RecipeReader(recipe, FakeRepo())
+    print reader.read()
+
+
 if __name__ == "__main__":
     benchmark()
+    #simple_test()
