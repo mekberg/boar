@@ -255,6 +255,7 @@ class SessionWriter:
 
         self.dead = False
         self.repo = repo
+        self.tmpblocksdb = deduplication.TmpBlocksDB(self.repo.blocksdb)
         self.session_name = session_name
         self.max_blob_size = None
         self.base_session = base_session
@@ -323,7 +324,7 @@ class SessionWriter:
         fname = os.path.join(self.session_path, blob_md5)
         blobsource = deduplication.UniformBlobGetter(self.repo, self.session_path)
         self.blob_deduplicator[blob_md5] = \
-            deduplication.RecipeFinder(self.repo.blocksdb,
+            deduplication.RecipeFinder(self.tmpblocksdb,
                                        repository.DEDUP_BLOCK_SIZE,
                                        self.rolling_set,
                                        blobsource,
@@ -345,7 +346,12 @@ class SessionWriter:
         self.blob_deduplicator[blob_md5].close()
         for index, piece in self.blob_deduplicator[blob_md5].original_piece_handler.pieces.items():
             #self.blob_deduplicator[blob_md5].modify_piece(index, blob=piece.md5, offset=0)
+            for block in piece.blocks:
+                # Let the recipe finder know about these blocks
+                self.rolling_set.add(block[2])
+                self.tmpblocksdb.add_tmp_block(block[3], block[0], block[1])
             self.found_uncommitted_blocks += piece.blocks
+            
         sw.mark(1)
         recipe = self.blob_deduplicator[blob_md5].get_recipe()
         assert len(recipe['pieces']) > 0
