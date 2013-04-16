@@ -108,16 +108,14 @@ class BoarFS(Fuse):
         fn = path[1:]
         if fn not in self.files:
             return -errno.ENOENT
-        try:
-            repo = self.front.repo        
-            fileinfo=self.files[fn]
-            assert repo.has_blob(fileinfo['md5sum']), "Blob does not exist in the repository. Corrupt repo?"
-            realpath = repo.get_blob_path(fileinfo['md5sum'])
-            with open(realpath, "rb") as blob:
-                blob.seek(offset)
-                buf = blob.read(size)
-        except Exception as e:
-            return "error! " + repr(e)
+
+        repo = self.front.repo        
+        fileinfo=self.files[fn]
+        assert repo.has_blob(fileinfo['md5sum']), "Blob does not exist in the repository. Corrupt repo?"
+        blob_size = repo.get_blob_size(fileinfo['md5sum'])
+        read_size = min(size, blob_size - offset)
+        reader = repo.get_blob_reader(fileinfo['md5sum'], offset=offset, size=read_size)
+        buf = reader.read()
         return buf
 
 def main():
@@ -139,10 +137,10 @@ def main():
                     dash_s_do='setsingle')
 
     server.parse(errex=1)
-    #sys.stdout = StreamEncoder(open("boarmount.log", "w"))
     server.main()
 
 if __name__ == '__main__':
-    sys.stdout = StreamEncoder(sys.stdout)
-    sys.stderr = StreamEncoder(sys.stderr)
+    #log_stream = StreamEncoder(open("/tmp/boarmount.log", "w"))
+    #sys.stdout = log_stream
+    #sys.stderr = log_stream
     main()
