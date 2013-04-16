@@ -231,6 +231,13 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         rebuilt_content = self.wd.front.get_blob("0b4e7a0e5fe84ad35fb5f95b9ceeac79").read()
         self.assertEquals(md5sum(rebuilt_content), "0b4e7a0e5fe84ad35fb5f95b9ceeac79")
 
+    def testDeduplicationWithinCommit(self):
+        blob_a = self.addWorkdirFile("a.txt", "aaaX")
+        blob_b = self.addWorkdirFile("b.txt", "aaaY")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(blob_a)
+        self.assertTrue(self.repo.get_recipe(blob_a) or self.repo.get_recipe(blob_b))
+
     def testThatNonalignedEndingsAreDeduplicated(self):
         self.addWorkdirFile("a.txt", "aaab")
         self.wd.checkin()

@@ -44,7 +44,7 @@ def CreateIntegerSet(ints):
     instance will be returned instead."""
     # bucket count must be a power of two
     if dedup_available:
-        intset = IntegerSet(len(ints))
+        intset = IntegerSet(max(len(ints), 100000))
     else:
         intset = FakeIntegerSet(len(ints))
     intset.add_all(ints)
@@ -89,6 +89,27 @@ class FakeBlockChecksum:
 
     def harvest(self):
         return []
+
+class TmpBlocksDB:
+    def __init__(self, blocksdb):
+        self.blocksdb = blocksdb
+        self.blocks = {} # md5 -> [(blob, offset), ...]
+
+    def add_tmp_block(self, md5, blob, offset):
+        assert is_md5sum(md5)
+        assert is_md5sum(blob)
+        if md5 not in self.blocks:
+            self.blocks[md5] = []
+        self.blocks[md5].append((blob, offset))
+
+    def get_block_size(self):
+        return self.blocksdb.get_block_size()
+
+    def get_block_locations(self, md5, limit = -1):
+        return self.blocks.get(md5, []) + self.blocksdb.get_block_locations(md5, limit)
+
+    def has_block(self, md5):
+        return md5 in self.blocks or self.blocksdb.has_block(md5)
 
 class FakeBlocksDB:
     def __init__(self, dbfile, block_size):
