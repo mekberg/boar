@@ -419,7 +419,6 @@ class Repo:
             if not dir_exists(os.path.join(self.repopath, RECIPES_DIR)):
                 os.mkdir(os.path.join(self.repopath, RECIPES_DIR))
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
-            queued_session_id = self.get_queued_session_id()                
             replace_file(os.path.join(self.repopath, VERSION_FILE), "5")
         except OSError, e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
