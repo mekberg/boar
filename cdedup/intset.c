@@ -34,6 +34,25 @@ IntSet* create_intset(const uint32_t bucket_count) {
   return intset;
 }
 
+static void grow_intset(IntSet* intset) {
+  IntSet* const tmp_intset = create_intset(intset->bucket_count * 2);
+  for(int bucket_index = 0; bucket_index < intset->bucket_count; bucket_index++){
+    Bucket* const bucket = &intset->buckets[qmod(bucket_index, intset->bucket_count)];
+    for(int slot_index = 0; slot_index < bucket->used_slots; slot_index++){
+      add_intset(tmp_intset, bucket->slots[slot_index]);
+    }
+  }
+  for(int i=0; i < intset->bucket_count; i++){
+    free(intset->buckets[i].slots);
+  }
+  free(intset->buckets);
+
+  intset->buckets = tmp_intset->buckets;
+  intset->value_count = tmp_intset->value_count;
+  intset->bucket_count = tmp_intset->bucket_count;
+  free(tmp_intset);
+}
+
 void add_intset(IntSet* intset, uint64_t int_to_add) {
   Bucket* const bucket = &intset->buckets[qmod(int_to_add, intset->bucket_count)];
   //bf_set(intset->filter, int_to_add % intset->filter->size, 1);
@@ -44,9 +63,12 @@ void add_intset(IntSet* intset, uint64_t int_to_add) {
     // Bucket is full - expand it
     bucket->slot_count *= 2;
     //printf("Expanding bucket %d to size %d\n", int_to_add % intset->bucket_count, bucket->slot_count);
-    bucket->slots = (uint32_t*) realloc(bucket->slots, bucket->slot_count * sizeof(uint64_t));
+    bucket->slots = (uint64_t*) realloc(bucket->slots, bucket->slot_count * sizeof(uint64_t));
   }
   bucket->slots[bucket->used_slots++] = int_to_add;
+  if(intset->value_count++ > intset->bucket_count){
+    grow_intset(intset);
+  }
 }
 
 inline int contains_intset(IntSet* const intset, const uint64_t int_to_find) {
@@ -86,25 +108,29 @@ void destroy_intset(IntSet* intset) {
 }
 
 
-int main_unused() {
-  IntSet* const intset = create_intset(10000000);
+int main_intset() {
+  const int size = 16777216;
+  IntSet* const intset = create_intset(size);
   massert(intset != NULL, "Couldn't create intset");
-  for(int i=0; i<10000000; i++){
-    //const int n = rand();
-    const int n = 1;
+  for(int i=0; i<size; i++){
+    const int n = rand();
+    //const int n = 1;
     //if(! contains_intset(intset, n))
     add_intset(intset, n);
     //massert(contains_intset(intset, n), "Value not found after insertion");
   }
 
   printf("Letar\n");
-      
-  for(int i=0; i<100000000; i++){
+  
+  
+  int found = 0;
+  for(int i=0; i < size * 10; i++){
     const int n = rand();
     if(contains_intset(intset, n)){
+      found += 1;
     }
     //massert(contains_intset(intset, n), "Value not found after insertion");
   }
   destroy_intset(intset);
-  return 0;
+  return found;
 }
