@@ -5,10 +5,10 @@
 #include "bitfield.h"
 
 typedef struct _Bucket {
-  uint32_t slot_count;
+  uint64_t mask; // The OR of all values in this bucket
   uint32_t used_slots;
+  uint32_t slot_count;
   uint64_t* slots; // An array of size "slot_count" where the first "used_slots" contains valid data.
-  uint64_t mask;
 } Bucket;
 
 typedef struct _IntSet {
