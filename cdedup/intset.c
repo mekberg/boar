@@ -23,6 +23,26 @@ static int is_power_of_2(const uint32_t n){
   return 0;
 }
 
+static void print_stats_intset(IntSet* intset) {
+  const int histogram_slot_count = 10;
+  uint32_t bucket_size_histogram[histogram_slot_count];
+  for(int i=0; i < histogram_slot_count; i++) 
+    bucket_size_histogram[i] = 0;
+  uint32_t out_of_bounds = 0;
+  for(int i=0; i < intset->bucket_count; i++){
+    const uint32_t size = intset->buckets[i].used_slots;
+    if(size >= histogram_slot_count){
+      out_of_bounds += 1;
+    } else {
+      bucket_size_histogram[size] += 1;
+    }
+  }
+  for(int i=0; i < histogram_slot_count; i++){
+    printf("Bucket size %d: %d\n", i, bucket_size_histogram[i]);
+  }
+  printf("Bucket size >= %d: %d\n", histogram_slot_count, out_of_bounds);
+}
+
 #define qmod(a, b) ((a) & ((b)-1))
 
 IntSet* create_intset(const uint32_t bucket_count) {
@@ -84,38 +104,25 @@ void add_intset(IntSet* intset, uint64_t int_to_add) {
 
 }
 
-int skipped_searches = 0;
+//static int skipped_searches = 0;
 
 inline int contains_intset(IntSet* const intset, const uint64_t int_to_find) {
   Bucket* const bucket = &intset->buckets[qmod(int_to_find, intset->bucket_count)];
   
   if((bucket->mask & int_to_find) != int_to_find) {
-    skipped_searches++;
+    //skipped_searches++;
     return 0;
   }
-  switch(bucket->used_slots) {
-    // Lets optimize this sucker...
-  case 0:
-    return 0;
-  case 1:
-    return bucket->slots[0] == int_to_find;
-  case 2:
-    return bucket->slots[0] == int_to_find || bucket->slots[1] == int_to_find;
-  case 4:
-    return bucket->slots[0] == int_to_find || bucket->slots[1] == int_to_find ||
-      bucket->slots[2] == int_to_find || bucket->slots[3] == int_to_find;
-  default:
-    for(unsigned i=0; i < bucket->used_slots; i++){
-      if(bucket->slots[i] == int_to_find){
-	return 1;
-      }
+  for(unsigned i=0; i < bucket->used_slots; i++){
+    if(bucket->slots[i] == int_to_find){
+      return 1;
     }
   }
   return 0;
-  massert(0, "contains_intset(): Should not get here");
 }
 
 void destroy_intset(IntSet* intset) {
+  //print_stats_intset(intset);
   for(int i=0; i < intset->bucket_count; i++){
     free(intset->buckets[i].slots);
   }
@@ -164,7 +171,7 @@ int main_intset() {
   printf("RAND_MAX=%d\n", RAND_MAX);
   printf("Found %d hits of %d queries in %ld ms (%d entries)\n", found, queries, ms, intset->value_count);
   const int mb_per_second = queries / ms / 1024;
-  printf("Mask caused %d linear searches to be skipped\n", skipped_searches);
+  //printf("Mask caused %d linear searches to be skipped\n", skipped_searches);
   printf("Search speed %d Mb/s\n", mb_per_second);
   destroy_intset(intset);
   free(search_values);
