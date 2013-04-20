@@ -133,7 +133,7 @@ void destroy_intset(IntSet* intset) {
 int main_intset() {
   // gcc -g -O2 -Wall -std=c99 intset.c && time ./a.out
   const int size = 8388608;
-  IntSet* const intset = create_intset(size*2);
+  IntSet* const intset = create_intset(1);
   massert(intset != NULL, "Couldn't create intset");
   
   int* all_values = calloc(size, sizeof(int));    
