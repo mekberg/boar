@@ -102,10 +102,10 @@ static void unpack_md5(const char* md5_bin, char* md5_hex) {
   assert(is_md5sum(md5_hex), "Result of unpack_md5() was not a legal md5 checksum");
 }
 
-static uint16_t crc16_row(const char* const blob, const uint32_t offset, const char* const md5) {
+static uint16_t crc16_row(const char* const blob, const uint64_t offset, const char* const md5) {
   const int max_size = 200;
   char crc_data[max_size];
-  const int crc_data_len = snprintf(crc_data, max_size, "%s!%u!%s!", blob, offset, md5);
+  const int crc_data_len = snprintf(crc_data, max_size, "%s!%llu!%s!", blob, (long long unsigned) offset, md5);
   assert(crc_data_len > 0 && crc_data_len < max_size, "crc snprintf() failed");
   return crc16(crc_data, (unsigned short) crc_data_len);
 }
@@ -174,7 +174,7 @@ BLOCKSDB_RESULT add_rolling(BlocksDbState* dbstate, uint64_t rolling){
 }
 
 
-BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const char* md5){
+BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint64_t offset, const char* md5){
   ASSERT_VALID_STATE(dbstate);
   //const char* md5_row = block_row_checksum(blob, offset, md5);
   if(! is_md5sum(blob)) {
@@ -201,7 +201,7 @@ BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t off
   
   if(SQLITE_OK != sqlite3_bind_blob(stmt, 1, packed_blob, 16, SQLITE_STATIC)) 
     RET_ERROR_OTHER();
-  if(SQLITE_OK != sqlite3_bind_int(stmt, 2, offset))
+  if(SQLITE_OK != sqlite3_bind_int64(stmt, 2, (int64_t) offset))
     RET_ERROR_OTHER();
   if(SQLITE_OK != sqlite3_bind_blob(stmt, 3, packed_md5, 4, SQLITE_STATIC))
     RET_ERROR_OTHER();
@@ -243,7 +243,7 @@ BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit){
   return BLOCKSDB_DONE;
 }
 
-BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* offset) {
+BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint64_t* offset) {
   ASSERT_VALID_STATE(dbstate);
   int s = sqlite3_step (dbstate->stmt);
   if (s == SQLITE_ROW) {
@@ -255,7 +255,7 @@ BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* of
     unpack_md5(blob_col, blob);
     blob[32] = '\0';
 
-    *offset = sqlite3_column_int(dbstate->stmt, 1);
+    *offset = (uint64_t) sqlite3_column_int64(dbstate->stmt, 1);
     
     const int row_crc = sqlite3_column_int(dbstate->stmt, 2);
 
