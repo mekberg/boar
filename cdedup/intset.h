@@ -14,7 +14,6 @@ typedef struct _IntSet {
   uint32_t value_count;
   uint32_t bucket_count; // Must be a power of 2
   Bucket* buckets; // An array of bucket_count buckets
-  //BitField* filter;
 } IntSet;
 
 IntSet* create_intset(uint32_t bucket_count);
