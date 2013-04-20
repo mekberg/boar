@@ -30,7 +30,12 @@ BLOCKSDB_RESULT get_rolling_next(BlocksDbState* dbstate, uint64_t* rolling);
 BLOCKSDB_RESULT get_rolling_finish(BlocksDbState* dbstate);
 
 BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit);
-BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* offset, char* row_md5);
+
+/** Get the next row of the result. The blob name will be written to
+ *  the position pointed to by the 'blob' parameter. The blob name is
+ *  33 bytes long, including a terminating null char. 
+ */
+BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* out_blob, uint32_t* out_offset);
 BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate);
 
 BLOCKSDB_RESULT delete_blocks_init(BlocksDbState* dbstate);

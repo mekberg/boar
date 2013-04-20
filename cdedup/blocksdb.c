@@ -7,6 +7,8 @@
 #include "sqlite3.h"
 #include "blocksdb.h"
 
+#include "crc16.h"
+
 #define false 0
 
 #define RET_ERROR_OTHER(msg) {						\
@@ -100,6 +102,14 @@ static void unpack_md5(const char* md5_bin, char* md5_hex) {
   assert(is_md5sum(md5_hex), "Result of unpack_md5() was not a legal md5 checksum");
 }
 
+static uint16_t crc16_row(const char* const blob, const uint32_t offset, const char* const md5) {
+  const int max_size = 200;
+  char crc_data[max_size];
+  const int crc_data_len = snprintf(crc_data, max_size, "%s!%u!%s!", blob, offset, md5);
+  assert(crc_data_len > 0 && crc_data_len < max_size, "crc snprintf() failed");
+  return crc16(crc_data, (unsigned short) crc_data_len);
+}
+
 static BLOCKSDB_RESULT execute_simple(BlocksDbState* dbstate, char* sql) {
   ASSERT_VALID_STATE(dbstate);
   int retval =  sqlite3_exec(dbstate->handle, sql, NULL, NULL, NULL);
@@ -176,14 +186,15 @@ BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t off
     return BLOCKSDB_ERR_OTHER;
   }
 
-  const char* md5_row = "0000";
+  const uint16_t row_crc = crc16_row(blob, offset, md5);
+
   char packed_md5[16];
   pack_md5(md5, packed_md5);
   char packed_blob[16];
   pack_md5(blob, packed_blob);
   sqlite3_stmt* stmt;
 
-  if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "INSERT OR IGNORE INTO blocks (blob, offset, md5_short, md5, row_md5) VALUES (?, ?, ?, ?, ?)",
+  if(SQLITE_OK != sqlite3_prepare_v2(dbstate->handle, "INSERT OR IGNORE INTO blocks (blob, offset, md5_short, md5, row_crc) VALUES (?, ?, ?, ?, ?)",
 				     -1, &stmt, NULL)) {
     RET_ERROR_OTHER("Error while preparing add_block()");
   }
@@ -196,7 +207,7 @@ BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t off
     RET_ERROR_OTHER();
   if(SQLITE_OK != sqlite3_bind_blob(stmt, 4, packed_md5, 16, SQLITE_STATIC))
     RET_ERROR_OTHER();
-  if(SQLITE_OK != sqlite3_bind_blob(stmt, 5, md5_row, 32, SQLITE_STATIC))
+  if(SQLITE_OK != sqlite3_bind_int(stmt, 5, row_crc))
     RET_ERROR_OTHER();
 
   if(SQLITE_DONE != sqlite3_step(stmt))
@@ -214,7 +225,7 @@ BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit){
     return BLOCKSDB_ERR_OTHER;
   }
   int retval;
-  retval = sqlite3_prepare_v2(dbstate->handle, "SELECT blocks.blob, blocks.offset, blocks.row_md5 FROM blocks WHERE md5_short = ? AND md5 = ? LIMIT ?",
+  retval = sqlite3_prepare_v2(dbstate->handle, "SELECT blocks.blob, blocks.offset, blocks.row_crc, blocks.md5 FROM blocks WHERE md5_short = ? AND md5 = ? LIMIT ?",
                               -1, &dbstate->stmt, NULL);
   if(retval != SQLITE_OK){
     RET_ERROR_OTHER("get_blocks_init() prepare failed");
@@ -232,7 +243,7 @@ BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit){
   return BLOCKSDB_DONE;
 }
 
-BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* offset, char* row_md5) {
+BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* offset) {
   ASSERT_VALID_STATE(dbstate);
   int s = sqlite3_step (dbstate->stmt);
   if (s == SQLITE_ROW) {
@@ -240,14 +251,28 @@ BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint32_t* of
     const char* blob_col = (const char*) sqlite3_column_text(dbstate->stmt, 0);
     const int blob_col_length = sqlite3_column_bytes(dbstate->stmt, 0);
     if(blob_col_length != 16)
-      RET_ERROR_CORRUPT("Unexpected column length in get_blocks_next()");
+      RET_ERROR_CORRUPT("Unexpected blob column length in get_blocks_next()");
     unpack_md5(blob_col, blob);
+    blob[32] = '\0';
 
     *offset = sqlite3_column_int(dbstate->stmt, 1);
+    
+    const int row_crc = sqlite3_column_int(dbstate->stmt, 2);
 
-    const char* row_md5_col = (const char*) sqlite3_column_text(dbstate->stmt, 2);
-    const int row_md5_col_length = sqlite3_column_bytes(dbstate->stmt, 2);
-    memcpy(row_md5, row_md5_col, row_md5_col_length);
+    const char* md5_col = (const char*) sqlite3_column_text(dbstate->stmt, 3);
+    const int md5_col_length = sqlite3_column_bytes(dbstate->stmt, 3);
+    if(md5_col_length != 16)
+      RET_ERROR_CORRUPT("Unexpected md5 column length in get_blocks_next()");
+    char md5[33];
+    unpack_md5(md5_col, md5);
+    md5[32] = '\0';
+
+    const unsigned short expected_row_crc = crc16_row(blob, *offset, md5);
+
+    if(row_crc != expected_row_crc){
+      sprintf(dbstate->error_msg, "An entry in the blocks database is corrupt (block id %s)", md5);
+      return BLOCKSDB_ERR_CORRUPT;
+    }
 
     return BLOCKSDB_ROW;
   }
@@ -351,7 +376,7 @@ static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate, unsigned bloc
     //main.journal_mode=DELETE;");
     
     "BEGIN",
-    "CREATE TABLE IF NOT EXISTS blocks (blob BLOB(16) NOT NULL, offset LONG NOT NULL, md5_short BLOB(4) NOT NULL, md5 BLOB(16) NOT NULL, row_md5 char(32))",
+    "CREATE TABLE IF NOT EXISTS blocks (blob BLOB(16) NOT NULL, offset LONG NOT NULL, md5_short BLOB(4) NOT NULL, md5 BLOB(16) NOT NULL, row_crc INT NOT NULL)",
     "CREATE TABLE IF NOT EXISTS rolling (value LONG NOT NULL)",
     "CREATE TABLE IF NOT EXISTS props (name TEXT PRIMARY KEY, value TEXT)",
     "INSERT OR IGNORE INTO props VALUES ('modification_counter', 0)",
