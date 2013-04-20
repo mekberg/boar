@@ -272,6 +272,7 @@ cdef class BlocksDB:
    cdef IntegerSet all_rolling
    cdef int is_modified
    cdef int last_seen_modcount
+   cdef int __rolling_loaded
 
    def __init__(self, dbfile, block_size):
        assert type(block_size) == int, "illegal argument: block_size must be an integer"
@@ -282,8 +283,14 @@ cdef class BlocksDB:
        self.in_transaction = False
        self.is_modified = False
        self.last_seen_modcount = -1
+       self.__rolling_loaded = False # Lazy initialization
+
+   def __load_rolling_lazy(self):
+       if self.__rolling_loaded:
+           return
+       self.__rolling_loaded = True
        self.__reload_rolling()
-       
+
    def __cinit__(self):
        self.dbhandle = NULL
 
@@ -305,6 +312,7 @@ cdef class BlocksDB:
            raise Exception(get_error_message(self.dbhandle))
 
    def get_all_rolling(self):
+        self.__load_rolling_lazy()
         result = []
         if get_rolling_init(self.dbhandle) != BLOCKSDB_DONE:
             raise Exception(get_error_message(self.dbhandle))
@@ -346,6 +354,7 @@ cdef class BlocksDB:
         return result
 
    def add_rolling(self, rolling):
+       self.__load_rolling_lazy()
        assert self.in_transaction, "Tried to add a rolling cs outside of a transaction"
        if not self.all_rolling.contains(rolling):
            self.all_rolling.add(rolling)
@@ -376,6 +385,7 @@ cdef class BlocksDB:
        self.is_modified = True
        
    def begin(self):
+       self.__load_rolling_lazy()
        assert not self.in_transaction, "Tried to start a transaction while one was already in progress"
        result = begin_blocksdb(self.dbhandle)
        if result != BLOCKSDB_DONE:
