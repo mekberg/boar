@@ -9,7 +9,7 @@ sqlite3.c:
 	rm sqlite3.zip
 
 sqlite3.o: sqlite3.c sqlite3.h
-	gcc -c -fPIC -Wall -lpthread -ldl sqlite3.c 
+	gcc -O2 -c -fPIC -Wall -lpthread -ldl sqlite3.c 
 
 rollingcs.so: sqlite3.o cdedup.pyx blocksdb.c blocksdb.h rollsum.c rollsum.h intset.c intset.h bitfield.h bitfield.c circularbuffer.h circularbuffer.c setup-cython.py Makefile
 	python setup-cython.py build_ext --inplace
