@@ -69,7 +69,7 @@ class TestRecipeFinder(unittest.TestCase, WorkdirHelper):
                                               {'source': u'47bce5c74f589f4867dbd57e9ca9f808', 'size': 3,
                                                'original': False, 'repeat': 1, 'offset': 0}]
                                    })
-        #print recipe
+
 
 class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
     def setUp(self):
@@ -487,6 +487,24 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
         self.db.begin()
         self.assertRaises(OverflowError, self.db.add_rolling, -1)
         self.assertRaises(OverflowError, self.db.add_rolling, 2**64)
+
+    def testHighBlock(self):
+        self.db.begin()
+        self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 2**32 + 1, "00000000000000000000000000000000")
+        self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 2**64 - 1, "00000000000000000000000000000001")
+        self.db.commit()
+        self.assertEquals(list(self.db.get_block_locations("00000000000000000000000000000000")),
+                          [("d41d8cd98f00b204e9800998ecf8427e", 2**32 + 1)])
+        self.assertEquals(list(self.db.get_block_locations("00000000000000000000000000000001")),
+                          [("d41d8cd98f00b204e9800998ecf8427e", 2**64 - 1)])
+
+    def testOffsetLimits(self):
+        self.db.begin()
+        self.assertRaises(OverflowError, self.db.add_block, 
+                          "d41d8cd98f00b204e9800998ecf8427e", -1, "00000000000000000000000000000002")
+        self.assertRaises(OverflowError, self.db.add_block, 
+                          "d41d8cd98f00b204e9800998ecf8427e", 2**64, "00000000000000000000000000000002")
+        
 
     def testBlockSimple(self):
         # blob, offset, md5

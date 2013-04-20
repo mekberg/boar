@@ -49,7 +49,7 @@ cdef extern from "blocksdb.h":
     BLOCKSDB_RESULT init_blocksdb(const char* dbfile, int block_size, void** out_handle)
     BLOCKSDB_RESULT close_blocksdb(void* handle)
 
-    BLOCKSDB_RESULT add_block(void* handle, const char* blob, uint32_t offset, const char* md5)
+    BLOCKSDB_RESULT add_block(void* handle, const char* blob, uint64_t offset, const char* md5)
     BLOCKSDB_RESULT add_rolling(void* handle, uint64_t rolling)
 
     BLOCKSDB_RESULT get_rolling_init(void* handle)
@@ -57,7 +57,7 @@ cdef extern from "blocksdb.h":
     BLOCKSDB_RESULT get_rolling_finish(void* handle)
 
     BLOCKSDB_RESULT get_blocks_init(void* handle, char* md5, int limit)
-    BLOCKSDB_RESULT get_blocks_next(void* handle, char* blob, uint32_t* offset)
+    BLOCKSDB_RESULT get_blocks_next(void* handle, char* blob, uint64_t* offset)
     BLOCKSDB_RESULT get_blocks_finish(void *handle)
 
     BLOCKSDB_RESULT delete_blocks_init(void* dbstate)
@@ -275,7 +275,8 @@ cdef class BlocksDB:
    cdef int __rolling_loaded
 
    def __init__(self, dbfile, block_size):
-       assert type(block_size) == int, "illegal argument: block_size must be an integer"
+       assert isinstance(block_size, (int, long)), \
+           "illegal argument: block_size must be an integer. Was: %s" % block_size
        dbfile_utf8 = dbfile.encode("utf-8")
        result = init_blocksdb(dbfile_utf8, block_size, &self.dbhandle)
        if result != BLOCKSDB_DONE:
@@ -337,7 +338,7 @@ cdef class BlocksDB:
         if BLOCKSDB_DONE != get_blocks_init(self.dbhandle, md5, limit):
             raise Exception(get_error_message(self.dbhandle))
         cdef char blob[33]
-        cdef uint32_t offset
+        cdef uint64_t offset
         while True:
             s = get_blocks_next(self.dbhandle, blob, &offset)
             if s == BLOCKSDB_ROW:

@@ -21,7 +21,7 @@ BLOCKSDB_RESULT close_blocksdb(BlocksDbState* dbstate);
 
 const char* get_error_message(BlocksDbState* dbstate);
 
-BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint32_t offset, const char* md5);
+BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint64_t offset, const char* md5);
 
 BLOCKSDB_RESULT add_rolling(BlocksDbState* dbstate, uint64_t rolling);
 
@@ -35,7 +35,7 @@ BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit);
  *  the position pointed to by the 'blob' parameter. The blob name is
  *  33 bytes long, including a terminating null char. 
  */
-BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* out_blob, uint32_t* out_offset);
+BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* out_blob, uint64_t* out_offset);
 BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate);
 
 BLOCKSDB_RESULT delete_blocks_init(BlocksDbState* dbstate);
