@@ -31,7 +31,7 @@ IntSet* create_intset(const uint32_t bucket_count) {
   IntSet* intset = (IntSet*) calloc(1, sizeof(IntSet));
   massert(intset != NULL, "Couldn't allocate intset");
   intset->bucket_count = bucket_count;
-  printf("Allocating %d buckets...\n", intset->bucket_count);
+  //printf("Allocating %d buckets...\n", intset->bucket_count);
   intset->buckets = (Bucket*) calloc(intset->bucket_count, sizeof(Bucket));
   
   massert(intset->buckets != NULL, "Couldn't allocate buckets for intset");
@@ -40,7 +40,7 @@ IntSet* create_intset(const uint32_t bucket_count) {
 
 static void grow_intset(IntSet* intset) {
   IntSet* const tmp_intset = create_intset(intset->bucket_count * 2);
-  printf("Growing to size %d\n", tmp_intset->bucket_count);
+  //printf("Growing to size %d\n", tmp_intset->bucket_count);
   for(int bucket_index = 0; bucket_index < intset->bucket_count; bucket_index++){
     Bucket* const bucket = &intset->buckets[qmod(bucket_index, intset->bucket_count)];
     for(int slot_index = 0; slot_index < bucket->used_slots; slot_index++){
@@ -59,7 +59,7 @@ static void grow_intset(IntSet* intset) {
   intset->value_count = tmp_intset->value_count;
   intset->bucket_count = tmp_intset->bucket_count;
   free(tmp_intset);
-  printf("Growing complete\n");
+  //printf("Growing complete\n");
 }
 
 void add_intset(IntSet* intset, uint64_t int_to_add) {
@@ -76,6 +76,7 @@ void add_intset(IntSet* intset, uint64_t int_to_add) {
     massert(bucket->slots != NULL, "Couldn't reallocate slots for bucket");
   }
   bucket->slots[bucket->used_slots++] = int_to_add;
+  bucket->mask |= int_to_add;
   intset->value_count++;
   if(intset->value_count > intset->bucket_count){
     grow_intset(intset);
@@ -83,11 +84,31 @@ void add_intset(IntSet* intset, uint64_t int_to_add) {
 
 }
 
+int skipped_searches = 0;
+
 inline int contains_intset(IntSet* const intset, const uint64_t int_to_find) {
   Bucket* const bucket = &intset->buckets[qmod(int_to_find, intset->bucket_count)];
-  for(unsigned i=0; i < bucket->used_slots; i++){
-    if(bucket->slots[i] == int_to_find){
-      return 1;
+  
+  if((bucket->mask & int_to_find) != int_to_find) {
+    skipped_searches++;
+    return 0;
+  }
+  switch(bucket->used_slots) {
+    // Lets optimize this sucker...
+  case 0:
+    return 0;
+  case 1:
+    return bucket->slots[0] == int_to_find;
+  case 2:
+    return bucket->slots[0] == int_to_find || bucket->slots[1] == int_to_find;
+  case 4:
+    return bucket->slots[0] == int_to_find || bucket->slots[1] == int_to_find ||
+      bucket->slots[2] == int_to_find || bucket->slots[3] == int_to_find;
+  default:
+    for(unsigned i=0; i < bucket->used_slots; i++){
+      if(bucket->slots[i] == int_to_find){
+	return 1;
+      }
     }
   }
   return 0;
@@ -102,28 +123,50 @@ void destroy_intset(IntSet* intset) {
   free(intset);
 }
 
-
 int main_intset() {
+  // gcc -g -O2 -Wall -std=c99 intset.c && time ./a.out
   const int size = 8388608;
-  IntSet* const intset = create_intset(size);
+  IntSet* const intset = create_intset(size*2);
   massert(intset != NULL, "Couldn't create intset");
+  
+  int* all_values = calloc(size, sizeof(int));    
   for(int i=0; i<size; i++){
     const int n = rand();
+    all_values[i] = n;
     add_intset(intset, n);
   }
 
-  const clock_t t0 = clock();
+  int* search_values = calloc(size, sizeof(int));  
+  for(int i=0; i<size; i++){
+    search_values[i] = rand();
+    //search_values[i] = i;
+  }
+
+  for(int i=0; i<size; i++){
+    // Make sure all inserted values are actually there
+    massert(contains_intset(intset, all_values[i]), "An inserted value is missing");
+  }  
+
   printf("Searching\n");
+  const clock_t t0 = clock();
   int found = 0;
   int queries = 0;
-  for(int i=0; i < size * 10; i++){
-    queries += 1;
-    if(contains_intset(intset, i)){
-      found += 1;
+  for(int n=0; n<10; n++) {
+    for(int i=0; i < size; i++){
+      queries += 1;
+      if(contains_intset(intset, search_values[i])){
+	found += 1;
+      }
     }
   }
   const clock_t t1 = clock();
-  printf("Found %d hits of %d queries in %ld ms (%d entries)\n", found, queries, (t1 - t0) / (CLOCKS_PER_SEC/1000), intset->value_count);
+  const clock_t ms = (t1 - t0) / (CLOCKS_PER_SEC/1000);
+  printf("RAND_MAX=%d\n", RAND_MAX);
+  printf("Found %d hits of %d queries in %ld ms (%d entries)\n", found, queries, ms, intset->value_count);
+  const int mb_per_second = queries / ms / 1024;
+  printf("Mask caused %d linear searches to be skipped\n", skipped_searches);
+  printf("Search speed %d Mb/s\n", mb_per_second);
   destroy_intset(intset);
+  free(search_values);
   return 0;
 }
