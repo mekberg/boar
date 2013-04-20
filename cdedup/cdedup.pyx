@@ -57,7 +57,7 @@ cdef extern from "blocksdb.h":
     BLOCKSDB_RESULT get_rolling_finish(void* handle)
 
     BLOCKSDB_RESULT get_blocks_init(void* handle, char* md5, int limit)
-    BLOCKSDB_RESULT get_blocks_next(void* handle, char* blob, uint32_t* offset, char* row_md5)
+    BLOCKSDB_RESULT get_blocks_next(void* handle, char* blob, uint32_t* offset)
     BLOCKSDB_RESULT get_blocks_finish(void *handle)
 
     BLOCKSDB_RESULT delete_blocks_init(void* dbstate)
@@ -338,12 +338,10 @@ cdef class BlocksDB:
             raise Exception(get_error_message(self.dbhandle))
         cdef char blob[33]
         cdef uint32_t offset
-        cdef char row_md5[33]
         while True:
-            s = get_blocks_next(self.dbhandle, blob, &offset, row_md5)
+            s = get_blocks_next(self.dbhandle, blob, &offset)
             if s == BLOCKSDB_ROW:
                 blob[32] = 0
-                row_md5[32] = 0
                 result.append((blob, offset))
             elif s == BLOCKSDB_DONE:
                 break
