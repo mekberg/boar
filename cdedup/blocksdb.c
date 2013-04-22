@@ -145,8 +145,8 @@ BLOCKSDB_RESULT get_rolling_next(BlocksDbState* dbstate, uint64_t *rolling) {
     return BLOCKSDB_DONE;
   }
   sprintf(dbstate->error_msg, 
-	  "Error while fetching rolling checksums: %s", 
-	  sqlite3_errmsg(dbstate->handle));
+	  "Error while fetching rolling checksums (sqlite error %d): %s", 
+	  s, sqlite3_errmsg(dbstate->handle));
   return BLOCKSDB_ERR_OTHER; // Should never get here
 }
 
@@ -416,6 +416,19 @@ static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate, unsigned bloc
   return BLOCKSDB_DONE;
 }
 
+#include "unistd.h"
+#include "sys/time.h"
+void trace_callback( void* udp, const char* sql ) { 
+  static FILE* log = NULL;
+  if(log == NULL)
+    log = fopen("/tmp/log.txt", "a");
+  struct timeval  tv;
+  gettimeofday(&tv, NULL);
+  long long time_in_mill = 
+    (tv.tv_sec) * 1000000 + (tv.tv_usec)  - 1366644831735000ll;
+  
+  fprintf(log, "%lld {PID %d} [%s]\n", time_in_mill, getpid(), sql); 
+} 
 
 BLOCKSDB_RESULT init_blocksdb(const char* dbfile, int block_size, BlocksDbState** out_state){
   //printf("Opening %s\n", dbfile);
@@ -428,6 +441,8 @@ BLOCKSDB_RESULT init_blocksdb(const char* dbfile, int block_size, BlocksDbState*
   }
   state->magic = 0xabcd1234;
   state->stmt = NULL;
+
+  sqlite3_trace(state->handle, trace_callback, NULL);
   return initialize_database(state, block_size);
 }
 
