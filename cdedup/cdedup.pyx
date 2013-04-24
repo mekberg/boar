@@ -348,7 +348,7 @@ cdef class BlocksDB:
             elif s == BLOCKSDB_DONE:
                 break
             else:
-                raise Exception(get_error_message(self.dbhandle))            
+                raise SoftCorruptionError(get_error_message(self.dbhandle))            
         if BLOCKSDB_DONE != get_blocks_finish(self.dbhandle):
             raise Exception(get_error_message(self.dbhandle))
         return result
@@ -397,7 +397,7 @@ cdef class BlocksDB:
        self.in_transaction = True
 
    def commit(self):
-       assert self.in_transaction, "Tried to a commit while no transaction was in progress"
+       assert self.in_transaction, "Tried to do a commit while no transaction was in progress"
        self.in_transaction = False
        if self.is_modified:
            result = increment_modcount(self.dbhandle)
