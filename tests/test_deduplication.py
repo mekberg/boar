@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import sys, os, unittest, shutil
+import sqlite3
 
 if os.getenv("BOAR_SKIP_DEDUP_TESTS") == "1":
     print "Skipping test_deduplication.py due to BOAR_SKIP_DEDUP_TESTS"
@@ -467,6 +468,15 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
         with open(self.dbfile, "w") as f:
             f.write("X" * 100000)
         self.assertRaises(SoftCorruptionError, BlocksDB, self.dbfile, 2**16)
+
+    def testCrcCorruption(self):
+        self.db.begin()
+        self.db.add_block("d41d8cd98f00b204e9800998ecf8427e", 0, "00000000000000000000000000000000")
+        self.db.commit()
+        con = sqlite3.connect(self.dbfile)
+        con.execute("UPDATE blocks SET offset = 1")
+        con.commit()
+        self.assertRaises(SoftCorruptionError, self.db.get_block_locations, "00000000000000000000000000000000")
 
     def testRollingEmpty(self):
         self.assertEquals(self.db.get_all_rolling(), [])
