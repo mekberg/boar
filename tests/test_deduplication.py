@@ -29,7 +29,7 @@ from blobrepo import repository
 repository.DEDUP_BLOCK_SIZE = 3 # Make deduplication cases more manageble
 
 from common import get_tree, my_relpath, convert_win_path_to_unix, md5sum, DevNull
-from boar_exceptions import UserError
+from boar_exceptions import UserError, SoftCorruptionError
 from front import Front, verify_repo
 from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 
@@ -461,6 +461,12 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
         os.mkdir(self.workdir)
         self.dbfile = os.path.join(self.workdir, "database.sqlite")
         self.db = BlocksDB(self.dbfile, 2**16)
+
+    def testCompleteCorruption(self):
+        del self.db
+        with open(self.dbfile, "w") as f:
+            f.write("X" * 100000)
+        self.assertRaises(SoftCorruptionError, BlocksDB, self.dbfile, 2**16)
 
     def testRollingEmpty(self):
         self.assertEquals(self.db.get_all_rolling(), [])

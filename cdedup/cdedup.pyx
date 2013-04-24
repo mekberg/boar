@@ -16,6 +16,7 @@
 __version__ = "1.0" # Major, minor. Major == API changes
 
 from libc.stdint cimport uint32_t, uint64_t
+from boar_exceptions import SoftCorruptionError
 
 cdef extern from "rollsum.h":
     cdef struct _RollingState:
@@ -280,7 +281,7 @@ cdef class BlocksDB:
        dbfile_utf8 = dbfile.encode("utf-8")
        result = init_blocksdb(dbfile_utf8, block_size, &self.dbhandle)
        if result != BLOCKSDB_DONE:
-           raise Exception(get_error_message(self.dbhandle))
+           raise SoftCorruptionError(get_error_message(self.dbhandle))
        self.in_transaction = False
        self.is_modified = False
        self.last_seen_modcount = -1
