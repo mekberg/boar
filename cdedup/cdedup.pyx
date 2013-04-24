@@ -275,7 +275,8 @@ cdef class BlocksDB:
    cdef int __rolling_loaded
 
    def __init__(self, dbfile, block_size):
-       assert type(block_size) == int, "illegal argument: block_size must be an integer"
+       assert isinstance(block_size, (int, long)), \
+           "illegal argument: block_size must be an integer. Was: %s" % block_size
        dbfile_utf8 = dbfile.encode("utf-8")
        result = init_blocksdb(dbfile_utf8, block_size, &self.dbhandle)
        if result != BLOCKSDB_DONE:
