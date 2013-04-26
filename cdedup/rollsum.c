@@ -95,12 +95,20 @@ uint64_t value64_rolling(RollingState* const state) {
   return RollsumDigest64(&(state->sum));
 }
 
-/*
-int main() {
+
+int main_rollsum() {
+  // gcc -g -O2 -Wall -std=c99 rollsum.c circularbuffer.c && time ./a.out
+  /* Benchmark results at the time of writing for 100 MB
+     real    0m1.134s
+     user    0m1.098s
+     sys     0m0.035s
+  */
   char* buf = malloc(100000000);
   memset(buf, 'x', 100000000);
   printf("Running\n");
   RollingState* state = create_rolling(1024);
   push_buffer_rolling(state, buf, 100000000);
+  destroy_rolling(state);
+  free(buf);
 };
-*/
+
