@@ -53,13 +53,14 @@ IntSet* create_intset(const uint32_t bucket_count) {
   intset->bucket_count = bucket_count;
   //printf("Allocating %d buckets...\n", intset->bucket_count);
   intset->buckets = (Bucket*) calloc(intset->bucket_count, sizeof(Bucket));
-  
+  intset->magic = 0x876aa034; // Just an arbitrary number
   massert(intset->buckets != NULL, "Couldn't allocate buckets for intset");
   return intset;
 }
 
 static void grow_intset(IntSet* intset) {
   IntSet* const tmp_intset = create_intset(intset->bucket_count * 2);
+  massert(intset->magic == 0x876aa034, "Invalid intset magic number");
   //printf("Growing to size %d\n", tmp_intset->bucket_count);
   for(int bucket_index = 0; bucket_index < intset->bucket_count; bucket_index++){
     Bucket* const bucket = &intset->buckets[qmod(bucket_index, intset->bucket_count)];
@@ -83,6 +84,7 @@ static void grow_intset(IntSet* intset) {
 }
 
 void add_intset(IntSet* intset, uint64_t int_to_add) {
+  massert(intset->magic == 0x876aa034, "Invalid intset magic number");
   Bucket* const bucket = &intset->buckets[qmod(int_to_add, intset->bucket_count)];
   if(bucket->slot_count == 0) {
     bucket->slot_count = 1;
@@ -107,6 +109,9 @@ void add_intset(IntSet* intset, uint64_t int_to_add) {
 //static int skipped_searches = 0;
 
 inline int contains_intset(IntSet* const intset, const uint64_t int_to_find) {
+  // This function is a hot spot. It takes too long to check the magic
+  // number (about 10% slower)
+
   Bucket* const bucket = &intset->buckets[qmod(int_to_find, intset->bucket_count)];
   
   if((bucket->mask & int_to_find) != int_to_find) {
@@ -123,6 +128,8 @@ inline int contains_intset(IntSet* const intset, const uint64_t int_to_find) {
 
 void destroy_intset(IntSet* intset) {
   //print_stats_intset(intset);
+  massert(intset->magic == 0x876aa034, "Invalid intset magic number");
+  intset->magic = 0xFFFFFFFF;
   for(int i=0; i < intset->bucket_count; i++){
     free(intset->buckets[i].slots);
   }
@@ -132,6 +139,14 @@ void destroy_intset(IntSet* intset) {
 
 int main_intset() {
   // gcc -g -O2 -Wall -std=c99 intset.c && time ./a.out
+  /*
+   Result at the time of writing:
+   RAND_MAX=2147483647
+   Found 327920 hits of 83886080 queries in 2600 ms (8388608 entries)
+   Search speed 31 Mb/s
+  */
+   
+
   const int size = 8388608;
   IntSet* const intset = create_intset(1);
   massert(intset != NULL, "Couldn't create intset");
@@ -175,5 +190,7 @@ int main_intset() {
   printf("Search speed %d Mb/s\n", mb_per_second);
   destroy_intset(intset);
   free(search_values);
+  free(all_values);
   return 0;
 }
+
