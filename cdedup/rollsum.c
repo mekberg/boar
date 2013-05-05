@@ -124,5 +124,6 @@ int main_rollsum() {
   push_buffer_rolling(state, buf, 100000000);
   destroy_rolling(state);
   free(buf);
+  return 0;
 };
 
