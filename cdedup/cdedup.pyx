@@ -16,6 +16,7 @@
 __version__ = "1.0" # Major, minor. Major == API changes
 
 from libc.stdint cimport uint32_t, uint64_t
+from boar_exceptions import SoftCorruptionError
 
 cdef extern from "rollsum.h":
     cdef struct _RollingState:
@@ -280,7 +281,7 @@ cdef class BlocksDB:
        dbfile_utf8 = dbfile.encode("utf-8")
        result = init_blocksdb(dbfile_utf8, block_size, &self.dbhandle)
        if result != BLOCKSDB_DONE:
-           raise Exception(get_error_message(self.dbhandle))
+           raise SoftCorruptionError(get_error_message(self.dbhandle))
        self.in_transaction = False
        self.is_modified = False
        self.last_seen_modcount = -1
@@ -347,7 +348,7 @@ cdef class BlocksDB:
             elif s == BLOCKSDB_DONE:
                 break
             else:
-                raise Exception(get_error_message(self.dbhandle))            
+                raise SoftCorruptionError(get_error_message(self.dbhandle))            
         if BLOCKSDB_DONE != get_blocks_finish(self.dbhandle):
             raise Exception(get_error_message(self.dbhandle))
         return result
@@ -396,7 +397,7 @@ cdef class BlocksDB:
        self.in_transaction = True
 
    def commit(self):
-       assert self.in_transaction, "Tried to a commit while no transaction was in progress"
+       assert self.in_transaction, "Tried to do a commit while no transaction was in progress"
        self.in_transaction = False
        if self.is_modified:
            result = increment_modcount(self.dbhandle)
