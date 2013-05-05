@@ -385,6 +385,14 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         recipe = self.repo.get_recipe(b_blob)
         #print_recipe(recipe)
 
+    def testManyFragments(self):
+        # Make sure we don't get a "OSError: [Errno 24] Too many open files"
+        a_blob = self.addWorkdirFile("a.txt", "aaa")
+        self.wd.checkin()
+        b_data = "aaa".join(map(str, range(0,10000)))
+        b_blob = self.addWorkdirFile("b.txt", b_data)
+        self.wd.checkin()
+
     def testSameRecipeTwice(self):
         a_blob = self.addWorkdirFile("a.txt", "aaa")
         self.wd.checkin()

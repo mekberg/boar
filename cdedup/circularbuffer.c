@@ -1,3 +1,17 @@
+// Copyright 2013 Mats Ekberg
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "circularbuffer.h"
 
 #include "stdint.h"
@@ -35,6 +49,8 @@ void destroy_circular_buffer(CircularBuffer* state){
   assert(state != NULL, "CircularBuffer: Tried to destroy null state");
   assert(state->magic == MAGIC, "CircularBuffer: Magic number failed");
   assert(state->sentinel == SENTINEL, "CircularBuffer: Sentinel failed");
+  state->magic = 0xFFFFFFFF;
+  state->sentinel = 0xFFFFFFFF;
   free(state->buf);
   free(state);
 }
@@ -91,8 +107,19 @@ void print_circular_buffer(CircularBuffer* state){
   printf("'\n");
 }
 
-/*
-int main() {
+
+int main_circularbuffer() {
+  /*
+    Benchmark for 100 MB of data at the time of writing with gcc -O9
+    real    0m0.347s
+    user    0m0.345s
+    sys     0m0.001s
+
+    With gcc -O2
+    real    0m0.539s
+    user    0m0.535s
+    sys     0m0.000s
+   */
   CircularBuffer* state = create_circular_buffer(3);
   push_circular_buffer(state, 'x');
   push_circular_buffer(state, 'x');
@@ -100,5 +127,7 @@ int main() {
   for(int i=0;i<100000000; i++){
     rotate_circular_buffer(state, 'a');
   }
+  destroy_circular_buffer(state);
+  return 0;
 }
-*/
+

@@ -1,3 +1,17 @@
+// Copyright 2013 Mats Ekberg
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "rollsum.h"
 
 #include "stdlib.h"
@@ -95,12 +109,21 @@ uint64_t value64_rolling(RollingState* const state) {
   return RollsumDigest64(&(state->sum));
 }
 
-/*
-int main() {
+
+int main_rollsum() {
+  // gcc -g -O2 -Wall -std=c99 rollsum.c circularbuffer.c && time ./a.out
+  /* Benchmark results at the time of writing for 100 MB
+     real    0m1.134s
+     user    0m1.098s
+     sys     0m0.035s
+  */
   char* buf = malloc(100000000);
   memset(buf, 'x', 100000000);
   printf("Running\n");
   RollingState* state = create_rolling(1024);
   push_buffer_rolling(state, buf, 100000000);
+  destroy_rolling(state);
+  free(buf);
+  return 0;
 };
-*/
+

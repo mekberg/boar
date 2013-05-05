@@ -87,6 +87,9 @@ class RecipeReader(DataSource):
     def __read_from_blob(self, blob, position, size):
         blobpath = self.blob_paths[blob]
         if blobpath not in self.file_handles:
+            for f in self.file_handles.values():
+                f.close()
+            self.file_handles.clear()
             self.file_handles[blobpath] = open(blobpath, "rb")
         f = self.file_handles[blobpath]
         f.seek(position)
