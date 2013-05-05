@@ -331,12 +331,8 @@ class RecipeFinder(GenericStateMachine):
 
     def __on_dedup_block(self, **args):
         self.sequences[-1].append(args['md5'])
-        data = self.tail_buffer[args['offset']: args['offset'] + self.block_size] # TODO: use args['block_data'] in production
         self.end_of_last_hit = args['offset'] + self.block_size
-        self.restored_md5summer.update(data)
-        assert md5sum(data) == args['md5'] # TODO: remove in production
-        assert args['md5'] == md5sum(args['block_data'])
-        
+        self.restored_md5summer.update(args['block_data'])
 
     def __on_dedup_data_end(self, **args):
         pass
