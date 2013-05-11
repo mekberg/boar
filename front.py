@@ -383,6 +383,9 @@ class Front:
         session_reader = self.repo.get_session(id)
         return copy.copy(session_reader.get_raw_bloblist())
 
+    def get_stats(self):
+        return self.repo.get_stats()
+
     def create_session(self, session_name, base_session = None, force_base_snapshot = False):
         """Creates a new snapshot for the given session. Commit() must
         be called when the construction of the new snapshot is
@@ -556,6 +559,12 @@ class Front:
 
     def has_blob(self, sum):
         return self.repo.has_blob(sum)
+
+    def get_all_blobs(self):
+        """ Returns a list of all blobs (raw or recipes) in the
+        repository. This method is deprecated. Use get_all_raw_blobs()
+        and/or get_all_recipes() instead."""
+        return self.get_all_raw_blobs() + self.get_all_raw_blobs(self)
 
     def get_all_raw_blobs(self):
         return self.repo.get_raw_blob_names()
