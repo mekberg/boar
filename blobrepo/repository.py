@@ -642,9 +642,35 @@ class Repo:
                 matches.add(m.group(1))
         return list(matches)
 
-    def get_orphan_blobs(self):
-        """Returns a list of all blobs (recipes and raw blobs) that
-        exists in the repo but aren't referred to by any snapshot."""
+    def get_stats(self):
+        result = []
+        result.append(('number_of_snapshots', len(self.get_all_sessions())))
+        result.append(('number_of_user_files', len(self.get_all_level_1_blobs())))
+        result.append(('number_of_raw_blobs', len(self.get_raw_blob_names())))
+        result.append(('number_of_recipes', len(self.get_recipe_names())))
+        virtual_size = sum([self.get_blob_size(md5) for md5 in self.get_all_level_1_blobs()])
+        actual_size = sum([self.get_blob_size(md5) for md5 in self.get_raw_blob_names()])
+        result.append(('virtual_size', virtual_size))
+        result.append(('actual_size', actual_size))
+        try:
+            result.append(('dedup_removed_percentage', 
+                           round((1.0 - 1.0 * actual_size / virtual_size) * 100, 2)))
+        except ZeroDivisionError:
+            result.append(('dedup_removed_percentage', None))
+
+        try:
+            result.append(('dedup_blocksdb_size', os.path.getsize(os.path.join(self.repopath, DERIVED_BLOCKS_DB))))
+        except:
+            result.append(('dedup_blocksdb_size', None))
+
+        return result
+
+    def get_all_level_1_blobs(self):
+        """Return a set of all blobs and recipes that are directly
+        referred to by any snapshot. (This excludes blobs only used in
+        recipes) This method takes into account any pending new
+        snapshot as well."""
+
         used_blobs = set()
         for sid in self.get_all_sessions():
             snapshot = self.get_session(sid)
@@ -657,12 +683,26 @@ class Repo:
             queue_dir = self.get_path(QUEUE_DIR, str(self.get_queued_session_id()))
             queued_session = sessions.SessionReader(None, queue_dir)
             for blobinfo in queued_session.get_raw_bloblist():
-                if 'md5sum' in blobinfo:
+                if 'md5sum' in blobinfo and blobinfo.get("action", None) == None:
                     used_blobs.add(blobinfo['md5sum'])
-            for item in os.listdir(queue_dir):
-                # We don't need this case.
-                assert not (is_recipe_filename(item) or is_md5sum(item)), "get_orphan_blobs() must not be called while a non-truncate commit is in progress"
 
+        return used_blobs
+
+    def get_orphan_blobs(self):
+        """Returns a list of all blobs (recipes and raw blobs) that
+        exists in the repo but aren't referred to by any
+        snapshot. This method asserts that it must not be called
+        during the processing of a commit containing new blobs or
+        recipes."""
+
+        if self.get_queued_session_id():
+            # We simply has no need for this case right now. Just make
+            # sure it is clear that we don't support it.
+            for item in os.listdir(queue_dir):
+                assert not (is_recipe_filename(item) or is_md5sum(item)), \
+                    "get_orphan_blobs() must not be called while a non-truncate commit is in progress"
+
+        used_blobs = self.get_all_level_1_blobs()
         for blob in set(used_blobs):
             recipe = self.get_recipe(blob)
             if recipe:

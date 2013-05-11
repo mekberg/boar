@@ -500,6 +500,15 @@ def cmd_verify(args):
     front = connect_to_repo(get_repo_url())
     verify_repo(front, verify_blobs = not options.quick, verbose = True)
 
+def cmd_stats(args):
+    parser = OptionParser(usage="usage: boar stats")
+    (options, args) = parser.parse_args(args)
+    if args:
+        raise UserError("Too many arguments")
+    front = connect_to_repo(get_repo_url())
+    for name, value in front.get_stats():
+        print "%-30s %s" % (name, value)
+
 def cmd_manifests(args):
     parser = OptionParser(usage="usage: boar manifests [options] <session name>")
     parser.add_option("-e", "--require", dest = "required_manifests", action="append", default=[],
@@ -1317,6 +1326,8 @@ def main():
         return cmd_serve(args[1:])
     elif args[0] == "sessions":
         return cmd_sessions(args[1:])
+    elif args[0] == "stats":
+        return cmd_stats(args[1:])
     elif args[0] == "truncate":
         return cmd_truncate(args[1:])
     elif args[0] == "exportmd5":
