@@ -142,5 +142,18 @@ class TestBlobRepo(unittest.TestCase):
         open(os.path.join(self.repo.repopath, "blobs", "55", "551d8cd98f00b204e9800998ecf8427e"), "w")
         self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
 
+    def test_find_orphan_recipes(self):
+        committed_info = copy(self.fileinfo1)
+        writer = self.repo.create_snapshot(SESSION_NAME)
+        writer.init_new_blob(DATA1_MD5, len(DATA1))
+        writer.add_blob_data(DATA1_MD5, DATA1)
+        writer.blob_finished(DATA1_MD5)
+        writer.add(committed_info)
+        writer.commit()
+        self.assertEqual(self.repo.get_orphan_blobs(), set())
+        os.mkdir(os.path.join(self.repo.repopath, "recipes", "55"))
+        open(os.path.join(self.repo.repopath, "recipes", "55", "551d8cd98f00b204e9800998ecf8427e.recipe"), "w")
+        self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
+
 if __name__ == '__main__':
     unittest.main()
