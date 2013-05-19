@@ -201,8 +201,16 @@ class OriginalPieceHandler:
         pass
     
     def end_piece(self, index):
-        # This method must return a tuple of (blob, offset). Those
-        # values will be used for this piece in the recipe.
+        pass
+
+    def close(self):
+        pass
+
+    def get_piece_address(self, index):
+        """After the handler has been closed, this method must return
+        a tuple of (blob, offset) for every piece that has been
+        processed. Those values will be used for this piece in the
+        recipe."""
         pass
 
 from statemachine import GenericStateMachine
@@ -322,8 +330,10 @@ class RecipeFinder(GenericStateMachine):
         size = args['offset'] - self.original_start
         del self.original_start
         del self.last_flush_end
-        blob, blob_offset = self.original_piece_handler.end_piece(self.seq_number)
-        self.sequences.append(Struct(blob=blob, blob_offset=blob_offset, size=size))
+        self.original_piece_handler.end_piece(self.seq_number)
+        self.sequences.append(Struct(piece_handler = self.original_piece_handler,
+                                     piece_index = self.seq_number,
+                                     piece_size = size))
 
     def __on_dedup_data_start(self, **args):
         self.seq_number += 1
@@ -382,6 +392,8 @@ class RecipeFinder(GenericStateMachine):
 
     def close(self):
         #print "Closing"
+        
+        # TODO: This stuff should be moved to on_file_end()
         assert not self.closed
         self.closed = True
         if self.end_of_last_hit != self.feed_byte_count:
@@ -391,6 +403,8 @@ class RecipeFinder(GenericStateMachine):
         assert len(self.tail_buffer) == self.feed_byte_count
         assert self.get_state() == END_STATE
         assert self.restored_md5summer.hexdigest() == self.md5summer.hexdigest()
+        self.original_piece_handler.close()
+
         #print_recipe(self.get_recipe())
         restored_size = 0
         for piece in self.get_recipe()['pieces']:
@@ -416,9 +430,13 @@ class RecipeFinder(GenericStateMachine):
 
         for s in self.sequences:
             if isinstance(s, Struct):
-                restored_size += s.size
-                yield get_dict(s.blob, s.blob_offset, s.size, True)
+                # Original data
+                restored_size += s.piece_size
+                blob, offset = s.piece_handler.get_piece_address(s.piece_index)
+                yield get_dict(blob, offset, s.piece_size, True)
+
             elif type(s) == list:
+                # Duplicated data
                 assert s
                 seqfinder = BlockSequenceFinder(self.blocksdb)
                 for md5 in s:
@@ -453,8 +471,8 @@ class RecipeFinder(GenericStateMachine):
             return
         blob_start = pieces[-2]['offset'] + pieces[-2]['size']
         blob_read_size = pieces[-1]['size']
-        data1 = self.blob_source.get_blob_reader(blob, blob_start, blob_read_size).read()
-        data2 = self.blob_source.get_blob_reader(pieces[-1]['source'], 0, blob_read_size).read()
+        data1 = self.blob_source.get_blob_reader(pieces[-1]['source'], pieces[-1]['offset'], blob_read_size).read()
+        data2 = self.blob_source.get_blob_reader(blob, blob_start, blob_read_size).read()
         if data1 != data2:
             return
         # We can extend!

@@ -695,6 +695,7 @@ class Repo:
         during the processing of a commit containing new blobs or
         recipes."""
 
+        queue_dir = self.get_path(QUEUE_DIR, str(self.get_queued_session_id()))
         if self.get_queued_session_id():
             # We simply has no need for this case right now. Just make
             # sure it is clear that we don't support it.
