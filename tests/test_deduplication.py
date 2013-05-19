@@ -42,7 +42,10 @@ from cdedup import IntegerSet, calc_rolling
 class FakePieceHandler:
     def init_piece(self, index): pass
     def add_piece_data(self, index, data): pass
-    def end_piece(self, index): return ("FAKEBLOB", 0)
+    def end_piece(self, index): pass
+    def close(self): pass
+    def get_piece_address(self, index): return ("FAKEBLOB", 0)
+    
 
 class TestRecipeFinder(unittest.TestCase, WorkdirHelper):
     def setUp(self):
@@ -245,6 +248,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         blob = self.addWorkdirFile("b.txt", "Xaaab")
         self.wd.checkin()
         recipe = self.repo.get_recipe(blob)
+        print_recipe(recipe)
         self.assertEquals(len(recipe['pieces']), 2)
         rebuilt_content = self.wd.front.get_blob("1446f760b3a89d261a13d8b37c20ef11").read()
         self.assertEquals(md5sum(rebuilt_content), "1446f760b3a89d261a13d8b37c20ef11")
@@ -320,24 +324,25 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         b_blob = self.addWorkdirFile("b.txt", "XaaaXaaaX")
         self.wd.checkin()
         x_blob = md5sum("X")
+        xxx_blob = md5sum("XXX") # All the original pieces joined
         recipe = self.repo.get_recipe(b_blob)
         #print_recipe(recipe)
         self.assertEquals(len(recipe['pieces']), 5)
         self.assertEquals(recipe['pieces'][0], {
-                'source': x_blob, 
+                'source': xxx_blob, 
                 'repeat': 1, 'original': True, 'offset': 0, 'size': 1})
         self.assertEquals(recipe['pieces'][1], {
                 'source': a_blob, 
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         self.assertEquals(recipe['pieces'][2], {
-                'source': x_blob, 
-                'repeat': 1, 'original': True, 'offset': 0, 'size': 1})
+                'source': xxx_blob, 
+                'repeat': 1, 'original': True, 'offset': 1, 'size': 1})
         self.assertEquals(recipe['pieces'][3], {
                 'source': a_blob, 
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         self.assertEquals(recipe['pieces'][4], {
-                'source': x_blob, 
-                'repeat': 1, 'original': True, 'offset': 0, 'size': 1})
+                'source': xxx_blob, 
+                'repeat': 1, 'original': True, 'offset': 2, 'size': 1})
         rebuilt_content = self.wd.front.get_blob(b_blob).read()
         self.assertEquals(md5sum(rebuilt_content), "e18585992d1ea79a30a34e015c49719e")
 

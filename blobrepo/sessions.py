@@ -184,67 +184,77 @@ class _NaiveSessionWriter:
 
 
 class PieceHandler(deduplication.OriginalPieceHandler):
+    """ A PieceHandler handles all the original data for a single
+    uploaded blob. A continous length of original data is called a
+    'piece'."""
     def __init__(self, session_dir, block_size, tmpdir, BlockifierClass):
         assert os.path.isdir(session_dir)
         assert block_size > 0
         self.block_size = block_size
         self.session_dir = session_dir
-        self.pieces = {}
+        self.blockifiers = {}
+        self.blocks = None
+        self.piece_start_offsets = {}
         self.current_index = None
         self.tmpdir = tmpdir
         self.BlockifierClass = BlockifierClass
+        self.filename = os.path.join(self.session_dir, "amalgam")
+        assert not os.path.exists(self.filename)
+        self.fileobj = open(self.filename, "wb")
+        self.md5summer = hashlib.md5()
+        self.offset = 0
 
+    @overrides(deduplication.OriginalPieceHandler)
     def init_piece(self, index):
         assert index >= 0
         assert self.current_index == None
-        assert index not in self.pieces
-        filename=os.path.join(self.session_dir, "piece-%s" % index)
-        assert not os.path.exists(filename)
+        assert index not in self.blockifiers
         
-        self.pieces[index] = \
-            Struct(filename=filename,
-                   fileobj = open(filename, "wb"),
-                   md5summer = hashlib.md5(),
-                   blockifyer = self.BlockifierClass(self.block_size))
+        self.blockifiers[index] = self.BlockifierClass(self.block_size)
+        self.piece_start_offsets[index] = self.offset
         self.current_index = index
 
+    @overrides(deduplication.OriginalPieceHandler)
     def add_piece_data(self, index, data):
         assert self.current_index == index
-        self.pieces[index].fileobj.write(data)
-        self.pieces[index].md5summer.update(data)
-        self.pieces[index].blockifyer.feed_string(data)
+        self.fileobj.write(data)
+        self.md5summer.update(data)
+        self.blockifiers[index].feed_string(data)
+        self.offset += len(data)
         #print "Adding", len(data), "bytes"
 
+    @overrides(deduplication.OriginalPieceHandler)
     def end_piece(self, index):
         sw = StopWatch(enabled=False)
         assert self.current_index == index
         self.current_index = None
+        sw.mark("sessions.end_piece()")
 
-        piece = self.pieces[index]
-        piece.md5 = piece.md5summer.hexdigest()
-        piece.fileobj.close()
-        real_name = os.path.join(self.session_dir, piece.md5)
-
-        piece.blocks = []
-        for blockdata in self.pieces[index].blockifyer.harvest():
-            offset, rolling, sha256 = blockdata
-            piece.blocks.append((piece.md5, offset, rolling, sha256))
+    @overrides(deduplication.OriginalPieceHandler)
+    def close(self):
+        self.fileobj.close()
+        self.fileobj = None
+        self.final_md5 = self.md5summer.hexdigest()
+        real_name = os.path.join(self.session_dir, self.final_md5)
 
         # The piece may already have been added during this commit. If
         # so, just ignore it.
         if os.path.exists(real_name):
             # Necessary for windows. Posix silently replaces an existing file.
-            safe_delete_file(piece.filename)
+            safe_delete_file(self.filename)
         else:
-            os.rename(piece.filename, real_name)
-        
-        del piece.fileobj
-        del piece.filename
-        del piece.md5summer
-        del piece.blockifyer
-        sw.mark("sessions.end_piece()")
-        return piece.md5, 0
+            os.rename(self.filename, real_name)
 
+        self.blocks = []
+        for index, blockifier in self.blockifiers.items():
+            for offset, rolling, md5 in blockifier.harvest():
+                self.blocks.append((self.final_md5, self.piece_start_offsets[index] + offset, rolling, md5))
+
+
+    @overrides(deduplication.OriginalPieceHandler)
+    def get_piece_address(self, index):
+        assert self.fileobj == None
+        return self.final_md5, self.piece_start_offsets[index]
         
 class SessionWriter:
     def __init__(self, repo, session_name, base_session = None, session_id = None, force_base_snapshot = False):
@@ -344,13 +354,11 @@ class SessionWriter:
     def blob_finished(self, blob_md5):
         sw = StopWatch(enabled=False, name="session.blob_finished")
         self.blob_deduplicator[blob_md5].close()
-        for index, piece in self.blob_deduplicator[blob_md5].original_piece_handler.pieces.items():
-            #self.blob_deduplicator[blob_md5].modify_piece(index, blob=piece.md5, offset=0)
-            for block in piece.blocks:
-                # Let the recipe finder know about these blocks
-                self.rolling_set.add(block[2])
-                self.tmpblocksdb.add_tmp_block(block[3], block[0], block[1])
-            self.found_uncommitted_blocks += piece.blocks
+        for block in self.blob_deduplicator[blob_md5].original_piece_handler.blocks:
+            # Let the recipe finder know about these blocks
+            self.rolling_set.add(block[2])
+            self.tmpblocksdb.add_tmp_block(md5 = block[3], blob = block[0], offset = block[1])
+            self.found_uncommitted_blocks.append(block)
             
         sw.mark(1)
         recipe = self.blob_deduplicator[blob_md5].get_recipe()
