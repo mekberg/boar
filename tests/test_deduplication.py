@@ -318,6 +318,27 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         rebuilt_content = self.wd.front.get_blob(c_blob).read()
         self.assertEquals(md5sum(rebuilt_content), "6547436690a26a399603a7096e876a2d")
 
+    def testConcatenatedFragments(self):
+        self.addWorkdirFile("a.txt", "aaa")
+        self.wd.checkin()
+        self.addWorkdirFile("a.txt", "aaabbbaaaXaaaccc")
+        self.wd.checkin()
+
+        # Should now exist due to concatenation of original parts in previous commit
+        self.assertTrue(md5sum("bbbXccc") in self.wd.get_front().get_all_raw_blobs())        
+
+        self.addWorkdirFile("a.txt", "cccbbb")
+        self.wd.checkin()
+        recipe = self.repo.get_recipe(md5sum("cccbbb"))
+        self.assertEquals(len(recipe['pieces']), 2)
+        self.assertEquals(recipe['pieces'][0], {
+                'source': md5sum("bbbXccc"),
+                'repeat': 1, 'original': False, 'offset': 4, 'size': 3})
+        self.assertEquals(recipe['pieces'][1], {
+                'source': md5sum("bbbXccc"),
+                'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
+        self.assertEquals(self.wd.front.get_blob(md5sum("bbbXccc")).read(), "bbbXccc")
+
     def testInterleavedHit1(self):
         a_blob = self.addWorkdirFile("a.txt", "aaa")
         self.wd.checkin()
