@@ -26,7 +26,17 @@ how to list files in a session and how to access files in a repository
 by file name or by blob id. We can do these things by using the Boar
 commands "sessions", "contents", and "cat". These commands are
 guaranteed to give clean machine-readable output.
+
+Note that for simplicity and speed, this tool will only check if all
+the files are intact and accessible by their blob ids. It will not
+detect deviations from the file structure described in the
+manifest. As long as the files are intact, the file structure can
+always be reconstructed by using the manifest.
 """
+
+# It would easy to import a lot of boar modules here, but the whole
+# point of an _external_ verification tool is that it should not rely
+# on anything in the boar package.
 
 import json
 import re
@@ -34,7 +44,6 @@ import sys
 import hashlib
 import subprocess
 import os
-#import codecs
 import re
 
 boar_cmd = "boar"
@@ -83,15 +92,7 @@ def verify_blob(repourl, expected_md5):
 
 def verify_manifest_by_md5(repourl, manifest_md5):
     """This function will load the given manifest and then verify the
-    checksum of every file specified within. If the manifest file has
-    a md5 checksum in its filename, the manifest file itself will be
-    verified against that checksum.
-    
-    Note that for simplicity and speed, this function will only check
-    if all the files are intact and accessible by their blob ids. It
-    will not detect deviations from the file structure described in
-    the manifest. As long as the files are intact, the file structure
-    can always be reconstructed by using the manifest."""
+    checksum of every file specified within."""
 
     print "Verifying manifest with md5", manifest_md5
 
@@ -114,17 +115,11 @@ def verify_manifest_by_md5(repourl, manifest_md5):
         print filename, "OK"
     
 
-def verify_manifest(repourl, session_name, manifest_path):
+def verify_manifest_by_path(repourl, session_name, manifest_path):
     """This function will load the given manifest and then verify the
     checksum of every file specified within. If the manifest file has
     a md5 checksum in its filename, the manifest file itself will be
-    verified against that checksum.
-    
-    Note that for simplicity and speed, this function will only check
-    if all the files are intact and accessible by their blob ids. It
-    will not detect deviations from the file structure described in
-    the manifest. As long as the files are intact, the file structure
-    can always be reconstructed by using the manifest."""
+    verified against that checksum."""
 
     print "Verifying manifest", session_name + "/" + manifest_path
 
@@ -143,6 +138,7 @@ def verify_manifest(repourl, session_name, manifest_path):
         md5summer.update(manifest_contents)
         assert expected_manifest_md5 == md5summer.hexdigest(), \
             "Manifest %s checksum didn't match contents" % (session_name + "/" + manifest_path)
+        print "%s OK" % (session_name + "/" + manifest_path)
 
     manifest_contents = manifest_contents.decode("utf-8-sig")
 
@@ -160,16 +156,38 @@ def is_manifest(filename):
 
 def main():
     args = sys.argv[1:]
-    if len(args) == 0:
-        print """This is a demonstration program that searches the repository for manifest 
-files, and then verifies that the manifests are correct. Only the latest 
-revision of every session is verified. 
+    if len(args) < 2:
+        print """Usage: verify-manifests-simple.py <repository> [<id | <session>/<manifest>, ...]
 
-Usage: verify-manifests-simple.py <repository>"""
+This is a demonstration program that verifies manifests within a boar
+repository. The first argument must always be a valid boar repository
+path or url. If no other arguments are given, it searches the
+repository for manifest files, and then verifies that the manifests
+are correct. Only the latest revision of every session is scanned.
+
+If more arguments are given after the repository, they must indicate
+existing manifests. You can identify the manifests by either a valid
+boar blob id or by using the session path.
+
+Example: If you have a session named "MySession" with a manifest under
+the path "pictures/manifest.md5" with the blob id (md5sum)
+d41d8cd98f00b204e9800998ecf8427e, you could verify this manifest by
+using any one of the following commands:
+
+Using the blob id:
+  verify-manifests-simple.py /var/boarrepo d41d8cd98f00b204e9800998ecf8427e
+
+Using the session path:
+  verify-manifests-simple.py /var/boarrepo MySession/pictures/manifest.md5
+"""
         return
-    elif len(args) == 1:
-        repourl = args.pop(0)
+
+    repourl = args[0]
+
+    if "-A" in args:
+        assert len(args) == 2, "-A cannot be combined with an explicit manifest list"
         session_names = json.loads(run_command(boar_cmd, "--repo", repourl, "sessions", "--json"))
+        manifest_ids = []
         for session_name in session_names:
             # The "boar contents" command will dump a json-list containing
             # information about the session, including a list of all the
@@ -180,15 +198,18 @@ Usage: verify-manifests-simple.py <repository>"""
                                                     "contents", "--punycode", session_name.encode("punycode")))
             for fileinfo in session_contents['files']:
                 if is_manifest(fileinfo['filename']):
-                    verify_manifest(repourl, session_name, fileinfo['filename'])
-    elif len(args) >= 2:
-        repourl = args.pop(0)
-        for arg in args:
-            if is_md5sum(arg):
-                verify_manifest_by_md5(repourl, md5)
-            else:
-                session_name, path = arg.split("/", 1)
-                verify_manifest(repourl, session_name, path)
+                    print "Found manifest", "%s/%s" % (session_name, fileinfo['filename'])
+                    manifest_ids.append("%s/%s" % (session_name, fileinfo['filename']))
+    else:
+        manifest_ids = args[1:]
+    del args
+
+    for manifest_id in manifest_ids:
+        if is_md5sum(manifest_id):
+            verify_manifest_by_md5(repourl, manifest_id)
+        else:
+            session_name, path = manifest_id.split("/", 1)
+            verify_manifest_by_path(repourl, session_name, path)
 
 if __name__ == "__main__":
     main()
