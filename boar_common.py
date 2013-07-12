@@ -59,6 +59,7 @@ def treecompare_bloblists(from_bloblist, to_bloblist):
     return TreeComparer(from_dict, to_dict)
 
 def bloblist_delta(from_bloblist, to_bloblist):
+    """ Calculate a delta bloblist given two complete bloblists."""
     tc = treecompare_bloblists(from_bloblist, to_bloblist)
     to_dict = bloblist_to_dict(to_bloblist)
     delta = []
@@ -70,6 +71,8 @@ def bloblist_delta(from_bloblist, to_bloblist):
     return delta
 
 def apply_delta(bloblist, delta):
+    """ Apply a delta bloblist to a original bloblist, yielding a
+    resulting bloblist."""
     for b in bloblist:
         assert "action" not in b
     for d in delta:

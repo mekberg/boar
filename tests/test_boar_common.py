@@ -97,6 +97,57 @@ class Test(unittest.TestCase):
         # Make sure the original bloblist is unchanged
         self.assertEquals(original_bloblist_repr, repr(bloblist))
 
+    def testBloblistDelta(self):
+        bloblist1 = [
+            {'filename': 'unchanged.txt',
+             'md5sum': "00000000000000000000000000000000"},
+            {'filename': 'modified.txt',
+             'md5sum': "00000000000000000000000000000001"},
+            {'filename': 'deleted.txt',
+             'md5sum': "00000000000000000000000000000002"}]
+        bloblist2 = [
+            {'filename': 'unchanged.txt',
+             'md5sum': "00000000000000000000000000000000"},
+            {'filename': 'modified.txt',
+             'md5sum': "00000000000000000000000000000004"},
+            {'filename': 'new.txt',
+             'md5sum': "00000000000000000000000000000003"}
+            ]
+        expected_delta = boar_common.sorted_bloblist([ 
+                {'filename': 'new.txt',
+                 'md5sum': "00000000000000000000000000000003"},
+                {'filename': 'deleted.txt',
+                 'action': 'remove'},
+                {'filename': 'modified.txt',
+                 'md5sum': "00000000000000000000000000000004"}
+                ])
+        original_bloblist1_repr = repr(bloblist1)
+        original_bloblist2_repr = repr(bloblist2)
+        delta = boar_common.sorted_bloblist(boar_common.bloblist_delta(bloblist1, bloblist2))
+        
+        self.assertEquals(delta, expected_delta)
+
+        # Make sure the original bloblists are unchanged
+        self.assertEquals(original_bloblist1_repr, repr(bloblist1))
+        self.assertEquals(original_bloblist2_repr, repr(bloblist2))
+
+
+    def testSortedBloblist(self):
+        a, b, c = ({'filename': 'a.txt',
+                    'md5sum': "00000000000000000000000000000000"},
+                   {'filename': 'b.txt',
+                    'md5sum': "00000000000000000000000000000001"},
+                   {'filename': 'c.txt',
+                    'md5sum': "00000000000000000000000000000002"})
+        unsorted_bloblist = [c, a, b]
+        unsorted_bloblist_repr = repr(unsorted_bloblist)
+        expected_sorted_bloblist = [a, b, c]
+        sorted_bloblist = boar_common.sorted_bloblist(unsorted_bloblist)
+        self.assertEquals(sorted_bloblist, expected_sorted_bloblist)
+        # Make sure the original is untouched
+        self.assertEquals(repr(unsorted_bloblist), unsorted_bloblist_repr)
+        
+        
 if __name__ == '__main__':
     unittest.main()
 
