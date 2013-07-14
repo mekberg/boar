@@ -1,0 +1,51 @@
+#!/bin/env python
+
+from common import *
+from treecomp import TreeComparer
+import sys
+
+def mkmanifest(path):
+    tree = get_tree(path)
+    manifest = ""
+    for t in tree:
+        md5 = md5sum_file(t)
+        manifest += "%s *%s\n" % (md5, t)
+    return manifest
+
+def cmd_init():
+    mff = "manifest.md5"
+    assert not os.path.exists(mff)    
+    manifest = mkmanifest(unicode(os.getcwd()))    
+    create_file(mff, manifest)
+
+
+def cmd_accept():
+    mff = "manifest.md5"
+    manifest = mkmanifest(unicode(os.getcwd()))    
+    replace_file(mff, manifest)
+
+def cmd_diff():
+    old_dict = {}
+    for md5, fn in read_md5sum("manifest.md5"):
+        old_dict[fn] = md5
+    tree = get_tree(unicode(os.getcwd()))
+    new_dict = {}
+    for t in tree:
+        new_dict[t] = md5sum_file(t)
+    tc = TreeComparer(old_dict, new_dict)
+    for fn in sorted(tc.all_changed_filenames()):
+        if tc.is_deleted(fn):
+            print "D", fn
+        elif tc.is_new(fn):
+            print "N", fn
+        elif tc.is_modified(fn):
+            print "M", fn
+        else:
+            assert False
+
+def main():
+    cmd = sys.argv[1]
+    assert cmd in ("diff", "init", "accept")
+    eval("cmd_" + cmd + "()")
+
+main()
