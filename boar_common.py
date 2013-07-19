@@ -73,6 +73,43 @@ def treecompare_bloblists(from_bloblist, to_bloblist):
     to_dict = bloblist_to_dict(to_bloblist)
     return TreeComparer(from_dict, to_dict)
 
+def bloblist_delta(from_bloblist, to_bloblist):
+    """ Calculate a delta bloblist given two complete bloblists."""
+    tc = treecompare_bloblists(from_bloblist, to_bloblist)
+    to_dict = bloblist_to_dict(to_bloblist)
+    delta = []
+    for fn in tc.all_changed_filenames():
+        if tc.is_deleted(fn):
+            delta.append({"action": "remove", "filename": fn})
+        else:
+            delta.append(to_dict[fn])
+    return delta
+
+def apply_delta(bloblist, delta):
+    """ Apply a delta bloblist to a original bloblist, yielding a
+    resulting bloblist."""
+    for b in bloblist:
+        assert "action" not in b
+    for d in delta:
+        assert d.get("action", None) in (None, "remove")
+    fns_to_delete = set([b['filename'] 
+                         for b in delta
+                         if b.get("action", None) == "remove"])
+    new_and_modified_dict = bloblist_to_dict([b 
+                                              for b in delta
+                                              if "action" not in b])
+    result = []
+    for b in bloblist:
+        if b['filename'] in fns_to_delete:
+            continue
+        elif b['filename'] in new_and_modified_dict:
+            result.append(new_and_modified_dict[b['filename']])
+            del new_and_modified_dict[b['filename']]
+        else:
+            result.append(b)
+    result += new_and_modified_dict.values()
+    return result
+
 def invert_bloblist(bloblist):
     """ Returns a dictionary on the form md5sum -> [blobinfo,
     blobinfo, ...] """    
