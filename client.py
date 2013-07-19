@@ -130,9 +130,19 @@ def connect_ssh(url):
     boar_cmd = "boar"
     if os.getenv("BOAR_SERVER_CLI"):
         boar_cmd = os.getenv("BOAR_SERVER_CLI")
-    cmd = '%s "%s" "%s" serve -S "%s"' % (ssh_cmd, host, boar_cmd, path)
+
+    # Propagate any useful environment in this space-separated list
+    env = "BOAR_DUMMY=1"
+
+    # Propagate BOAR_DISABLE_DEDUP to enable remote testing
+    # with/without dedup module
+    if os.getenv("BOAR_DISABLE_DEDUP") == "1":
+        env += " " + "BOAR_DISABLE_DEDUP=1"
+
+    cmd = '%s "%s" %s "%s" serve -S "%s"' % (ssh_cmd, host, env, boar_cmd, path)
     if user:
-        cmd = '%s -l "%s" "%s" boar serve -S "%s"' % (ssh_cmd, user, host, path)
+        cmd = '%s -l "%s" "%s" %s "%s" serve -S "%s"' % (ssh_cmd, user, host, env, boar_cmd, path)
+
     return _connect_cmd(cmd)
 
 def connect_tcp(url):
