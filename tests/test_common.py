@@ -155,6 +155,20 @@ class TestStripPathOffset(unittest.TestCase):
         # The child path must start with the offset
         self.assertRaises(AssertionError, common.strip_path_offset, "/b", "/a")
 
+class TestMisc(unittest.TestCase):
+    def test_common_tail(self):
+        def test(s1, s2, expected):
+            result = common.common_tail(s1, s2)
+            self.assertEquals(expected, result)
+        test("abc", "abc", "abc")
+        test("c", "abc", "c")
+        test("abc", "c", "c")
+        test("bc", "abc", "bc")
+        test("abc", "bc", "bc")
+        test("abc", "a", "")
+        test("a", "abc", "")
+
+
 
 if __name__ == '__main__':
     unittest.main()

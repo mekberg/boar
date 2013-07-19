@@ -29,15 +29,18 @@ from boar_exceptions import *
 import client
 import front
 
-from front import Front, set_file_contents
+from front import Front, set_file_contents, verify_repo
 import workdir
 from common import *
+import deduplication
+
+from ordered_dict import OrderedDict
 from boar_common import *
 import boarserve
 
 json = get_json_module()
 
-BOAR_VERSION = "boar.16-Nov-2012"
+BOAR_VERSION = "boar-devel.16-Nov-2012"
 
 def print_help():
     print """Boar version %s
@@ -166,42 +169,6 @@ def verify_manifests(front, sid, verbose = False, required_manifests = []):
         print "Missing manifests:", remaining_required_manifests
     return result
 
-def verify_repo(front, verify_blobs = True):
-    """Returns True if the repo was clean. Otherwise throws an
-    exception."""
-    for rev in range(1, front.repo_get_highest_used_revision() + 1):
-        front.repo_verify_snapshot(rev)
-    session_ids = front.get_session_ids()
-    print "Verifying %s snapshots" % (len(session_ids))
-    existing_blobs = set(front.get_all_blobs())
-    for i in range(0, len(session_ids)):
-        id = session_ids[i]
-        bloblist = front.get_session_bloblist(id) # We must not use a
-                                                  # cached bloblist
-                                                  # here - we're
-                                                  # verifying the
-                                                  # repo!
-        calc_fingerprint = bloblist_fingerprint(bloblist)
-        if calc_fingerprint != front.get_session_fingerprint(id):
-            raise CorruptionError("Fingerprint didn't match for snapshot %s" % id)
-        for bi in bloblist:
-            if bi['md5sum'] not in existing_blobs:
-                raise CorruptionError("Snapshot %s is missing blob %s" % (session_ids[i], bi['md5sum']))
-        print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
-    if not verify_blobs:
-        print "Skipping blob verification"
-        return True
-    print "Collecting a list of all blobs..."
-    count = front.init_verify_blobs()
-    print "Verifying %s blobs..." % (count)
-    done = 0
-    while done < count:
-        done += len(front.verify_some_blobs())
-        print done, "of "+str(count)+" blobs verified, "+ \
-            str(round(1.0*done/count * 100,1)) + "% done."
-    return True
-
-
 def cmd_locate(args):
     if len(args) == 0:
         args = ["--help"]
@@ -240,6 +207,13 @@ def cmd_locate(args):
                 for bi in blobinfos:
                     print "   " + bi['filename']
     print "%s files exists in the given session, %s do not." % (found, len(missing))
+
+def cmd_scanblocks(args):
+    import hashlib
+    front = connect_to_repo(get_repo_url())
+    filename, = args
+    recipe = deduplication.recepify(front, filename)
+    print json.dumps(recipe, indent=2)
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
@@ -301,15 +275,16 @@ def cmd_info(args):
 def cmd_mkrepo(args):
     if len(args) == 0:
         args = ["--help"]
-    parser = OptionParser(usage="usage: boar mkrepo <new repo path>")
+    parser = OptionParser(usage="usage: boar mkrepo [-d|--enable-deduplication] <new repo path>")
+    parser.add_option("-d", "--enable-deduplication", dest = "dedup", action="store_true",
+                      help="Enable deduplication for this repository")
     (options, args) = parser.parse_args(args)
     if len(args) > 1:
         raise UserError("Too many arguments")
     repopath, = args
     if os.path.exists(repopath):
         raise UserError("File or directory already exists: %s" % repopath)
-    repository.create_repository(repopath)
-
+    repository.create_repository(repopath, enable_deduplication = options.dedup)
 
 def cmd_list(args):
     parser = OptionParser(usage="usage: boar list [session name [snapshot id]]")
@@ -372,16 +347,17 @@ class _ChangePrinter:
                     return True
         return affected
 
-def _parse_range(s):
+def _parse_range(s, default_lower, default_upper):
+    assert default_lower <= default_upper
     try:
         return int(s), int(s)
     except ValueError:
         pass
     m = re.match("^(\d*):(\d*)$", s)
     if not m:
-        raise UserError("Ranges must be given as N:M where N and M may be an empty string or an integer > 0")
-    lower = int(m.group(1)) if m.group(1) else 1
-    upper = int(m.group(2)) if m.group(2) else VERY_LARGE_NUMBER
+        raise UserError("Ranges must be given as N:M where N and M may be an empty string or an integer")
+    lower = int(m.group(1)) if m.group(1) else default_lower
+    upper = int(m.group(2)) if m.group(2) else default_upper
     return lower, upper
 
 def cmd_log(args):
@@ -421,7 +397,7 @@ def cmd_log(args):
         raise UserError("You must use this command in a workdir or specify a repository to operate on")
 
     if options.revision_range:
-        range_start, range_end = _parse_range(options.revision_range)
+        range_start, range_end = _parse_range(options.revision_range, 1, VERY_LARGE_NUMBER)
     else:
         range_start, range_end = 1, front.get_highest_used_revision()
 
@@ -522,7 +498,16 @@ def cmd_verify(args):
     if args:
         raise UserError("Too many arguments")
     front = connect_to_repo(get_repo_url())
-    verify_repo(front, verify_blobs = not options.quick)
+    verify_repo(front, verify_blobs = not options.quick, verbose = True)
+
+def cmd_stats(args):
+    parser = OptionParser(usage="usage: boar stats")
+    (options, args) = parser.parse_args(args)
+    if args:
+        raise UserError("Too many arguments")
+    front = connect_to_repo(get_repo_url())
+    for name, value in front.get_stats():
+        print "%-30s %s" % (name, value)
 
 def cmd_manifests(args):
     parser = OptionParser(usage="usage: boar manifests [options] <session name>")
@@ -556,10 +541,12 @@ def cmd_repair(args):
                       help="Do not scan for errors before repairing")
     (options, args) = parser.parse_args(args)
     clean = False
-    repo_url = get_repo_from_env()
-    if repo_url.startswith("boar://"):
+    repo_url = get_repo_url()
+    if repo_url.startswith("boar://") or repo_url.startswith("boar+"):
         raise UserError("Repairing can only be executed with a local boar repository")
-    if not options.force:
+    if options.force:
+            front = connect_to_repo(get_repo_url())
+    else:
         try:
             front = connect_to_repo(get_repo_url())
             print "Verifying repo before repair..."
@@ -571,7 +558,25 @@ def cmd_repair(args):
     if clean:
         print "No errors found. Not repairing anything."
         return
-    print "Repairing..."
+    
+    repo = front.repo
+    if repo.deduplication_enabled():
+        print "Repairing blocks database"
+        blobs = repo.get_raw_blob_names()
+        repo.blocksdb.begin()
+        for blob in blobs:
+            print blob
+            reader = repo.get_blob_reader(blob)
+            bc = deduplication.BlockChecksum(repository.DEDUP_BLOCK_SIZE)
+            while reader.bytes_left():
+                bc.feed_string(reader.read(repository.DEDUP_BLOCK_SIZE))
+            for offset, rolling, md5 in bc.harvest():
+                repo.blocksdb.add_block(blob, offset, md5)
+                repo.blocksdb.add_rolling(rolling)
+        repo.blocksdb.commit()
+    else:
+        print "Nothing to do"
+
 
 def cmd_import(args):
     parser = OptionParser(usage="usage: boar import [options] <folder to import> <session name>[/path/]")
@@ -783,20 +788,26 @@ def cmd_contents(args):
     stdout = dedicated_stdout()
     globals()["suppress_finishmessage"] = True
     front = connect_to_repo(get_repo_url())
-    sessionId = front.find_last_revision(session_name)
-    if not sessionId:
-        raise UserError("No such session found: %s" % (session_name))
+    if options.revision:
+        if options.revision in front.get_session_ids(session_name):
+            sessionId = options.revision
+        else:
+            raise UserError("There is no snapshot %s for session %s" % (options.revision, session_name))
+    else:
+        sessionId = front.find_last_revision(session_name)
+        if not sessionId:
+            raise UserError("No such session found: %s" % (session_name))
 
-    dump = {}
+    dump = OrderedDict()
     dump['session_name'] = session_name
     dump['revision'] = sessionId
     dump['fingerprint'] = front.get_session_fingerprint(sessionId)
     entries = []
     for bi in front.get_session_bloblist(sessionId):
-        entries.append({'filename': bi['filename'],
-                        'md5': bi['md5sum'],
-                        'size': bi['size']})
-    dump['files'] = entries
+        entries.append(OrderedDict([('filename', bi['filename']),
+                                    ('size', bi['size']),
+                                    ('md5', bi['md5sum'])]))
+        dump['files'] = entries
 
     if options.md5sum:
         for bi in dump['files']:
@@ -805,7 +816,8 @@ def cmd_contents(args):
             stdout.write(bi['filename'].encode("utf-8"))
             stdout.write("\n")
     else:
-        json.dump(dump, stdout, indent = 4, sort_keys=True)
+        json.dump(dump, stdout, indent = 4)
+        stdout.write("\n")
 
 
 def cmd_mksession(args):
@@ -910,8 +922,8 @@ def cmd_cat(args):
     globals()["suppress_finishmessage"] = True
     front = connect_to_repo(get_repo_url())
 
-    blobids = []
     if not options.blob:
+        blobids = []
         while args:
             path = args.pop(0)
             if options.punycode:
@@ -929,23 +941,38 @@ def cmd_cat(args):
             if not blobid:
                 raise UserError("No such file exists in the given session/revision: %s" % (session_path))
             blobids.append(blobid)
+        for blobid in blobids:
+            datasource = front.get_blob(blobid)
+            while datasource.bytes_left():
+                stdout.write(datasource.read(4096))
+
     else:
+        blob_parts = []
         if options.revision:
             raise UserError("--revision option can not be combined with --blob option")
         if options.punycode:
             raise UserError("--punycode option can not be combined with --blob option")
         while args:
-            blobid = args.pop(0)
+            blobspec = args.pop(0)
+            m = re.match(r"^(.{32})(\[(\d*:\d*)\])?$", blobspec)
+            if not m:
+                raise UserError("Illegal blob specification")
+            blobid = m.group(1)
+            range_spec = m.group(3)
             if not is_md5sum(blobid):
                 raise UserError("Not a valid blobid: %s" % blobid)
             if not front.has_blob(blobid):
                 raise UserError("Blob does not exist in repository: %s" % blobid)
-            blobids.append(blobid)
+            lower_bound, upper_bound = 0, front.get_blob_size(blobid)
+            if range_spec:
+                lower_bound, upper_bound = _parse_range(range_spec, lower_bound, upper_bound)
+            blob_parts.append((blobid, lower_bound, upper_bound - lower_bound))
+        for blob_part in blob_parts:
+            blobid, offset, size = blob_part
+            datasource = front.get_blob(blobid, offset, size)
+            while datasource.bytes_left():
+                stdout.write(datasource.read(4096))
 
-    for blobid in blobids:
-        datasource = front.get_blob(blobid)
-        while datasource.bytes_left():
-            stdout.write(datasource.read(4096))
 
 def _get_blobid(front, revision, session_path):
     """Convenience function to fetch the id of a blob given a revision
@@ -996,7 +1023,7 @@ def cmd_co(args):
     print "Checking out to workdir", workdir_path
 
     os.mkdir(workdir_path)
-    wd = workdir.Workdir(repourl, session_name, offset, sid, workdir_path)
+    wd = workdir.Workdir(repourl, session_name, offset, sid, workdir_path, front = front)
     wd.checkout()
 
 def cmd_setprop(args):
@@ -1131,7 +1158,7 @@ def cmd_clone(args):
     repopath1, repopath2 = args
     source_front = client.connect(repopath1)
     if not client.is_boar_url(repopath2) and not os.path.exists(repopath2):
-        repository.create_repository(repopath2)
+        repository.create_repository(repopath2, enable_deduplication = source_front.deduplication_enabled())
     target_front = client.connect(repopath2)
     if not front.is_continuation(base_front = target_front, cont_front = source_front):
         raise UserError("The source repo is not a continuation of the destination repo. Cannot clone.")
@@ -1219,6 +1246,10 @@ def main():
         if len(args) != 1:
             raise UserError("The --version option can not be combined with other options")
         print "Boar, version %s" % BOAR_VERSION
+        if not deduplication.cdedup_version:
+            print "Deduplication module not installed"
+        else:
+            print "Deduplication module v%s" % deduplication.cdedup_version
         print "Copyright (C) 2010-2012 Mats Ekberg."
         print "Licensed under the Apache License, Version 2.0"
         return 0
@@ -1295,6 +1326,8 @@ def main():
         return cmd_serve(args[1:])
     elif args[0] == "sessions":
         return cmd_sessions(args[1:])
+    elif args[0] == "stats":
+        return cmd_stats(args[1:])
     elif args[0] == "truncate":
         return cmd_truncate(args[1:])
     elif args[0] == "exportmd5":
@@ -1308,6 +1341,8 @@ def main():
         return cmd_setprop(args[1:])
     elif args[0] == "getprop":
         return cmd_getprop(args[1:])
+    elif args[0] == "scanblocks":
+        return cmd_scanblocks(args[1:])
     else:
         print_help()
         return 1

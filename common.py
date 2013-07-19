@@ -145,6 +145,8 @@ def read_md5sum(path, expected_md5 = None):
     or an UnicodeDecodeError will be raised. One notable source of such
     non-utf-8 files is md5sum.exe on Windows."""
     data = read_file(path, expected_md5)
+    if data.startswith('\xef\xbb\xbf'):
+        data = data[3:] # Remove unicode BOM
     return parse_md5sum(data)
 
 _file_reader_sum = 0
@@ -155,9 +157,11 @@ def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
     f.seek(0, os.SEEK_END)
     real_end = f.tell()
     assert end == None or end <= real_end, "Can't read past end of file"
-    f.seek(start)
     if end == None:
         end = real_end
+    assert 0 <= end <= real_end
+    assert 0 <= start <= end
+    f.seek(start)
     bytes_left = end - start
     while bytes_left > 0:
         data = f.read(min(bytes_left, blocksize))
@@ -175,6 +179,11 @@ def safe_open(path, flags = "rb"):
 
 def md5sum(data):
     m = hashlib.md5()
+    m.update(data)
+    return m.hexdigest()
+
+def sha256(data):
+    m = hashlib.sha256()
     m.update(data)
     return m.hexdigest()
 
@@ -704,6 +713,35 @@ def FakeFile():
     """ Behaves like a file object, but does not actually do anything."""
     return open(os.path.devnull, "w")
 
+class FileAsString:
+    def __init__(self, fo):
+        self.fo = fo
+        self.fo.seek(0, 2)
+        self.size = self.fo.tell()
+        
+    def __len__(self):
+        return self.size
+    
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            start, stop, step = index.start, index.stop, index.step
+            assert step == None
+            if stop == VERY_LARGE_NUMBER:
+                stop = self.size
+        else:
+            start = index
+            stop = start + 1
+        assert 0 <= start <= stop <= self.size, (start, stop, step, self.size)
+        self.fo.seek(start)
+        return self.fo.read(stop - start)
+    
+    def append(self, s):
+        self.fo.seek(0, 2)
+        self.fo.write(s)
+        self.fo.seek(0, 2)
+        self.size = self.fo.tell()
+        
+
 class RateLimiter:
     """This class makes it easy to perform some action only when a
     certain time has passed. The maxrate parameter is given in Hz and
@@ -756,10 +794,12 @@ class StrictFileWriter:
     exceed the given size. Also, the file must not exist before, and
     it must have the given md5 checksum when finished. If any of the
     contraints are violated, an ConstraintViolation exception is
-    thrown.
+    thrown will be thrown when the StrictFileWriter is closed, or when
+    too much data is written.
 
     A sparse file with the given size will be created, which will
-    reduce fragmentation on some platforms (NTFS). """
+    reduce fragmentation on some platforms (NTFS). 
+    """
     def __init__(self, filename, md5, size, overwrite = False):
         assert is_md5sum(md5)
         assert type(size) == int or type(size) == long
@@ -812,6 +852,92 @@ class StrictFileWriter:
         return self
     
     def __exit__(self, type, value, traceback):
-        self.close()
-
+        if type:
+            # An exception has occured within the "with" clause. Let's
+            # not hide it.
+            self.__close()
+        else:
+            self.close()
  
+def common_tail(s1, s2):
+    s1r = s1[::-1]
+    s2r = s2[::-1]
+    n = 0
+    try:
+        while s1r[n] == s2r[n]:
+            n+=1
+    except IndexError:
+        pass
+    if n == 0:
+        return ""
+    return s1[-n:]
+        
+class Struct:
+    def __init__(self, **entries): 
+        self.__dict__.update(entries)
+
+    def __repr__(self):
+        return "<Struct: %s>" % repr(self.__dict__) 
+
+
+import time
+class StopWatch:
+    def __init__(self, enabled = True, name = None):
+        self.t_init = time.clock()
+        self.t_last = time.clock()
+        self.enabled = enabled
+        self.name = name
+
+    def mark(self, msg = None):
+        now = time.clock()
+        if self.enabled:
+            prefix = ("SW (%s):" % self.name) if self.name else "SW:"
+            print "%s %s %s (total %s)" % (prefix, msg, now - self.t_last, now - self.t_init )
+        self.t_last = time.clock()
+
+
+class DevNull:
+    def write(self, *args):
+        pass
+
+
+def overrides(interface_class):
+    """ This is a method decorator that can be used to ensure/document
+    that a method overrides a method in a superclass."""
+    def overrider(method):
+        assert(method.__name__ in dir(interface_class))
+        return method
+    return overrider
+
+import array
+class TailBuffer:
+    """ A buffer that only physically keeps the last bytes of the data
+    that is appended to it, but can be accessed using the positions of
+    the original data. All data is kept until release() is called by
+    the user."""
+
+    def __init__(self):
+        self.buffer = array.array("c")
+        self.shifted = 0
+        
+    def append(self, s):
+        self.buffer.fromstring(s)
+
+    def release(self, offset):
+        assert offset >= self.shifted
+        shift = offset - self.shifted
+        self.shifted += shift
+        del self.buffer[:shift]
+        #print "Tail buffer is now virtually", (len(self)), "bytes, but only", len(self.buffer), "in reality"
+
+    def __len__(self):
+        return int(self.shifted + len(self.buffer))
+    
+    def __getitem__(self, index):
+        assert isinstance(index, slice)
+        assert index.step == None, index
+        assert index.start >= self.shifted and index.stop >= self.shifted, \
+            "Requested slice %s overlaps with the released part of the buffer (up to %s)" % (index, self.shifted) 
+        index2 = slice(index.start - self.shifted, index.stop - self.shifted)
+        #print index, "->", index2
+        return self.buffer.__getitem__(index2).tostring()

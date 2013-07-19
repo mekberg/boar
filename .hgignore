@@ -3,3 +3,10 @@ syntax: glob
 *.pyo
 *~
 *.orig
+sqlite3.c
+sqlite3.h
+*.o
+*,v
+a.out
+*.so
+cdedup/cdedup.c
