@@ -108,7 +108,7 @@ def is_manifest(filename):
 
 def main():
     parser = OptionParser(usage="""Usage: 
-  verify-manifests-simple.py <repository> <flags> [<manifest specifier>, ...]
+  verify-manifests.py <repository> <flags> [<manifest specifier>, ...]
 
   This tool verifies md5sum-style manifests against a boar
   repository. The manifest(s) can themselves be fetched from the
@@ -130,13 +130,13 @@ Examples:
   with the blob id (md5sum) d41d8cd98f00b204e9800998ecf8427e, we could
   verify this manifest by any of the following commands:
 
-    verify-manifests-simple.py /var/repo -B d41d8cd98f00b204e9800998ecf8427e
-    verify-manifests-simple.py /var/repo -S "MySession/pictures/manifest.md5" 
+    verify-manifests.py /var/repo -B d41d8cd98f00b204e9800998ecf8427e
+    verify-manifests.py /var/repo -S "MySession/pictures/manifest.md5" 
 
   If we have a manifest file stored in /home/me/pics-2012.md5, we can
   verify it with this line:
 
-    verify-manifests-simple.py /var/repo -F /home/me/pics-2012.md5""")
+    verify-manifests.py /var/repo -F /home/me/pics-2012.md5""")
 
     group = OptionGroup(parser, "Manifest source")
     group.add_option("-F", "--files", dest = "file_specs", action="store_true",
