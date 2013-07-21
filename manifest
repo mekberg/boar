@@ -4,23 +4,39 @@ from common import *
 from treecomp import TreeComparer
 import sys
 
-def mkmanifest(path):
+class ManifestTree:
+    def __init__(self, path):
+        self.old_dict = {}
+        for md5, fn in read_md5sum(os.path.join(path, mff)):
+            old_dict[fn] = md5
+        self.new_dict = {}
+        for t in load_tree(path):
+            self.new_dict[t] = md5sum_file(t)
+        if mff in new_dict:
+            del self.new_dict[mff]
+        self.tc = TreeComparer(self.old_dict, self.new_dict)
+
+def load_tree(path):
+    """Return the current tree as a dict on the form { fn -> md5 }"""
     tree = get_tree(path)
-    manifest = ""
+    new_dict = {}
     for t in tree:
-        md5 = md5sum_file(t)
-        manifest += "%s *%s\n" % (md5, t)
+        new_dict[t] = md5sum_file(t)
+    return new_dict
+
+def mkmanifest(path):
+    tree = load_tree(path)
+    manifest = ""
+    for fn, md5 in tree.items():
+        manifest += "%s *%s\n" % (md5, fn)
     return manifest
 
 def cmd_init():
-    mff = "manifest.md5"
     assert not os.path.exists(mff)    
     manifest = mkmanifest(unicode(os.getcwd()))    
     create_file(mff, manifest)
 
-
 def cmd_accept():
-    mff = "manifest.md5"
     manifest = mkmanifest(unicode(os.getcwd()))    
     replace_file(mff, manifest)
 
@@ -28,20 +44,42 @@ def cmd_diff():
     old_dict = {}
     for md5, fn in read_md5sum("manifest.md5"):
         old_dict[fn] = md5
-    tree = get_tree(unicode(os.getcwd()))
-    new_dict = {}
-    for t in tree:
-        new_dict[t] = md5sum_file(t)
+    new_dict = load_tree(unicode(os.getcwd()))
+    old_set = set(old_dict.values())
+    new_set = set(new_dict.values())
     tc = TreeComparer(old_dict, new_dict)
     for fn in sorted(tc.all_changed_filenames()):
+        old_md5 = old_dict.get(fn, None)
+        new_md5 = new_dict.get(fn, None)
+        set_change = " " 
         if tc.is_deleted(fn):
-            print "D", fn
+            assert old_md5 and not new_md5
+            if old_md5 not in new_set:
+                set_change = " -"
+            print "D %s %s" % (set_change, fn)
         elif tc.is_new(fn):
-            print "N", fn
+            assert new_md5 and not old_md5
+            if new_md5 not in old_set:
+                set_change = "+ "
+            print "N %s %s" % (set_change, fn)
         elif tc.is_modified(fn):
-            print "M", fn
+            assert old_md5 and new_md5
+            a = " "
+            r = " "
+            if old_md5 not in new_set:
+                # Old file overwritten and lost in new set
+                r = "-"
+            if new_md5 not in old_set:
+                # A new file is introduced in the set
+                a = "+"
+            print "M %s %s" % (a+r, fn)
         else:
             assert False
+    number_of_new_files = len(new_set - old_set)
+    number_of_deleted_files = len(old_set - new_set)
+    number_of_unchanged_files = len(old_set & new_set)
+    #print number_of_unchanged_files, "unchanged files"
+    print "Unique files:", number_of_new_files, "new files,", number_of_deleted_files, "deleted files,", len(new_set), "files in total"
 
 def main():
     cmd = sys.argv[1]
