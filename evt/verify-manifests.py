@@ -40,13 +40,21 @@ always be reconstructed by using the manifest.
 
 import json
 import re
+
 import sys
+import codecs
+
+# Avoid problems with unicode chars when piping the output of this program
+sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+
 import hashlib
 import os
 import re
 
 from extboar import *
 from optparse import OptionParser, OptionGroup
+
+
 
 boar_cmd = "boar"
 if os.name == 'nt':
@@ -64,8 +72,8 @@ def verify_manifest(extrepo, manifest_contents, manifest_md5):
     if manifest_md5:
         md5summer = hashlib.md5()
         md5summer.update(manifest_contents)
-        assert manifest_md5 == md5summer.hexdigest(), \
-            "Manifest checksum didn't match contents"
+        if manifest_md5 != md5summer.hexdigest():
+            raise IntegrityError("Manifest checksum didn't match contents")
         print "Manifest integrity OK"
     manifest_contents = manifest_contents.decode("utf-8-sig")
 
@@ -78,7 +86,14 @@ def verify_manifest_by_md5(extrepo, manifest_md5):
     """This function will load the given manifest and then verify the
     checksum of every file specified within."""
     print "Verifying manifest with md5", manifest_md5
-    manifest_contents = load_blob(extrepo.get_blob(manifest_md5))
+    try:
+        manifest_contents = load_blob(extrepo.get_blob(manifest_md5))
+    except IntegrityError:
+        # Corruption discovered by boarext module
+        raise
+    except:
+        # Could be any reason, but in any case the blob is effectively unreadable
+        raise IntegrityError("Couldn't load manifest with blobid %s from repository" % manifest_md5)
     verify_manifest(extrepo, manifest_contents, manifest_md5)
 
 def verify_manifest_by_spath(extrepo, session_path):
@@ -89,8 +104,10 @@ def verify_manifest_by_spath(extrepo, session_path):
 
     print "Verifying manifest", session_path
     session_name, manifest_path = session_path.split("/", 1)
-
-    manifest_contents = load_blob(extrepo.get_blob_by_path(session_name, manifest_path))
+    try:
+        manifest_contents = load_blob(extrepo.get_blob_by_path(session_name, manifest_path))
+    except:
+        raise IntegrityError("Couldn't load manifest with session path %s from repository" % session_path)
     expected_manifest_md5 = find_checksum(manifest_path)
     verify_manifest(extrepo, manifest_contents, expected_manifest_md5)
 
@@ -161,14 +178,14 @@ Examples:
 
     repourl = args[0]
 
-    if "--stdin" in args:
-        assert len(args) == 2, "--stdin cannot be combined with any other manifest specifiers"
+    if options.stdin:
+        assert len(args) == 1, "--stdin cannot be combined with any other manifest specifiers"
         manifest_ids = [line.rstrip('\r\n') for line in sys.stdin.readlines()]        
     else:
         manifest_ids = args[1:]
 
     if not manifest_ids:
-        parser.error("You must always specify at least one manifest specifier")
+        parser.error("You must always give at least one manifest specifier")
 
     extrepo = ExtRepo(repourl)
 
@@ -179,8 +196,13 @@ Examples:
     elif options.spath_specs:
         verifier = verify_manifest_by_spath
         
-    for manifest_id in manifest_ids:
-        verifier(extrepo, manifest_id)
+    try:
+        for manifest_id in manifest_ids:
+            verifier(extrepo, manifest_id)
+    except IntegrityError, e:
+        print e
+        print "ERROR WHILE VERIFYING MANIFEST %s" % manifest_id
+        sys.exit(1)
 
 
 if __name__ == "__main__":

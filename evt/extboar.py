@@ -36,6 +36,12 @@ boar_cmd = "boar"
 if os.name == 'nt':
     boar_cmd = "boar.bat"
 
+class RunCommandException(Exception):
+    pass
+
+class IntegrityError(Exception):
+    pass
+
 def is_md5sum(s):
     try:
         return re.match("^[a-f0-9]{32}$", s) != None    
@@ -60,9 +66,8 @@ def run_command_streamed(*cmdlist):
         yield data
     status = process.wait()
     if status != 0:
-        print data
-        raise Exception("Command '%s' failed with error %s" % 
-                        (cmdlist, status))
+        raise RunCommandException("Command '%s' failed with error %s" % 
+                                  (cmdlist, status))
 
 def load_blob(reader):
     """Given a reader object, such as returned by ExtBoar.get_blob(),
@@ -79,14 +84,14 @@ class ExtRepo:
             run_command(boar_cmd, "--version")
         except OSError, e:
             if e.errno == 2:
-                raise Exception("ERROR: Couldn't execute boar. Did you forget to add it to your path?")
+                raise Exception("Couldn't execute boar. Did you forget to add it to your path?")
             raise
 
         try:
             # Dummy command just to see if we can access the repo
             run_command(boar_cmd, "--repo", repourl, "log", "-r0:0")
         except:
-            raise Exception("ERROR: Failed opening repository %s" % repourl)
+            raise Exception("Failed opening repository %s" % repourl)
 
     def get_blob_by_path(self, session_name, path):
         """This function will stream the given blob from the
@@ -108,12 +113,16 @@ class ExtRepo:
         for block in reader:
             summer.update(block)
             yield block
-        assert summer.hexdigest() == md5, "Expected: %s Got: %s" % (md5, summer.hexdigest())
+        if summer.hexdigest() != md5:
+            raise IntegrityError("Invalid checksum for blob: %s Got: %s" % (md5, summer.hexdigest()))
 
     def verify_blob(self, md5):
         # Trust get_blob() to verify the data for us
-        for block in self.get_blob(md5):
-            pass
+        try:
+            for block in self.get_blob(md5):
+                pass
+        except RunCommandException:
+            raise IntegrityError("Blob %s is missing: There was an error while reading the blob from the repository" % md5)
 
     def get_all_session_names(self):
         session_names = json.loads(run_command(boar_cmd, "--repo", self.repourl, "sessions", "--json"))
