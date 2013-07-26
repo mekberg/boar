@@ -4,47 +4,102 @@ from common import *
 from treecomp import TreeComparer
 import sys
 
+import codecs
+
+# Avoid problems with unicode chars when piping the output of this program
+sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+
 class ManifestTree:
     def __init__(self, path):
         self.old_dict = {}
         for md5, fn in read_md5sum(os.path.join(path, mff)):
             old_dict[fn] = md5
-        self.new_dict = {}
-        for t in load_tree(path):
-            self.new_dict[t] = md5sum_file(t)
-        if mff in new_dict:
-            del self.new_dict[mff]
+        self.new_dict = load_tree(path)
+        for fn in self.new_dict:
+            if is_manifest_fn(fn):
+                del self.new_dict[fn]
         self.tc = TreeComparer(self.old_dict, self.new_dict)
+
+def is_manifest_fn(fn):
+    return fn.startswith("manifest-") and fn.endswith("md5")
+            
+def list_manifests(d):
+    return [fn for fn in os.listdir(d)
+            if is_manifest_fn(fn)]
+
+def get_manifest_fn(root):
+    manifests = list_manifests(root)
+    if not manifests:
+        return None
+    assert len(manifests) == 1
+    return manifests[0]
+
+def write_manifest(manifest_contents, root):
+    assert type(manifest_contents) == unicode
+    assert not list_manifests(root)
+    manifest_contents = manifest_contents.encode("utf8")
+    manifest_fn = "manifest-%s.md5" % md5sum(manifest_contents)
+    create_file(os.path.join(root, manifest_fn), manifest_contents)
+
+def replace_manifest(manifest_contents, root):
+    old_manifests = list_manifests(root)
+    assert len(old_manifests) == 1
+    new_manifest_tmp = os.path.join(root, "manifest-%s.new" % md5sum(manifest_contents))
+    new_manifest = os.path.join(root, "manifest-%s.md5" % md5sum(manifest_contents))
+    create_file(new_manifest_tmp, manifest_contents)    
+    old_manifest = os.path.join(root, old_manifests[0])
+    old_manifest_bak = os.path.join(root, old_manifests[0].replace("manifest-", "oldmanifest-"))
+    os.rename(old_manifest, old_manifest_bak)
+    os.rename(new_manifest_tmp, new_manifest)
+    os.unlink(old_manifest_bak)
 
 def load_tree(path):
     """Return the current tree as a dict on the form { fn -> md5 }"""
     tree = get_tree(path)
     new_dict = {}
     for t in tree:
+        if is_manifest_fn(t):
+            continue
         new_dict[t] = md5sum_file(t)
     return new_dict
 
-def mkmanifest(path):
-    tree = load_tree(path)
-    manifest = ""
-    for fn, md5 in tree.items():
-        manifest += "%s *%s\n" % (md5, fn)
+def mkmanifest(tree):
+    """Returns the manifest as a utf-8 encoded string"""
+    manifest = u""
+    for fn, md5 in sorted(tree.items()):
+        manifest += u"%s *%s\n" % (md5, fn)
+    assert type(manifest) == unicode
     return manifest
 
+def ugetcwd():
+    return os.getcwd().decode(locale.getpreferredencoding())
+
 def cmd_init():
-    assert not os.path.exists(mff)    
-    manifest = mkmanifest(unicode(os.getcwd()))    
-    create_file(mff, manifest)
+    import locale
+    cwd = ugetcwd()
+    tree = load_tree(cwd)
+    manifest = mkmanifest(tree)
+    write_manifest(manifest, cwd)
 
 def cmd_accept():
-    manifest = mkmanifest(unicode(os.getcwd()))    
-    replace_file(mff, manifest)
+    expected_md5 = None
+    if len(sys.argv) > 2:
+        assert len(sys.argv) == 3
+        expected_md5 = sys.argv[2]
+
+    tree = load_tree(ugetcwd())
+    manifest = mkmanifest(tree)
+    if expected_md5 and expected_md5 != md5sum(manifest):
+        print "Current tree status does not match given checksum", expected_md5, md5sum(manifest)
+        sys.exit(1)
+    replace_manifest(manifest, ugetcwd())
 
 def cmd_diff():
     old_dict = {}
-    for md5, fn in read_md5sum("manifest.md5"):
+    manifest_fn = get_manifest_fn(".")
+    for md5, fn in read_md5sum(manifest_fn):
         old_dict[fn] = md5
-    new_dict = load_tree(unicode(os.getcwd()))
+    new_dict = load_tree(ugetcwd())
     old_set = set(old_dict.values())
     new_set = set(new_dict.values())
     tc = TreeComparer(old_dict, new_dict)
@@ -79,7 +134,9 @@ def cmd_diff():
     number_of_deleted_files = len(old_set - new_set)
     number_of_unchanged_files = len(old_set & new_set)
     #print number_of_unchanged_files, "unchanged files"
-    print "Unique files:", number_of_new_files, "new files,", number_of_deleted_files, "deleted files,", len(new_set), "files in total"
+    print "# Comparing with manifest", manifest_fn
+    print "# Unique files:", number_of_new_files, "new files,", number_of_deleted_files, "deleted files,", len(new_set), "files in total"
+    print "# Current tree manifest md5:", md5sum(mkmanifest(new_dict))
 
 def main():
     cmd = sys.argv[1]
