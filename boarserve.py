@@ -22,6 +22,7 @@ import sys
 import socket
 
 from boar_exceptions import *
+from common import warn
 
 import jsonrpc
 
@@ -59,16 +60,19 @@ class ForkingTCPServer(SocketServer.ForkingMixIn, SocketServer.TCPServer):
     pass
 
 def run_socketserver(repopath, address, port):
-    # This will unfortunately not work on windows
-    if "fork" not in dir(os):
-        raise UserError("Sorry, your operating system does not support the 'fork()' system call. Please check the Boar documentation for details on how to run a Boar server on your OS.")
     repository.Repo(repopath) # Just check if the repo path is valid
     class BoarTCPHandler(SocketServer.BaseRequestHandler):
         def handle(self):
             to_client = self.request.makefile(mode="wb")
             from_client = self.request.makefile(mode="rb")
             PipedBoarServer(repopath, from_client, to_client).serve()
-    server = ForkingTCPServer((address, port), BoarTCPHandler)
+
+    if "fork" not in dir(os):
+        warn("Your operating system does not support the 'fork()' system call. This server will only be able to handle one client at a time. Please see the manual on how to set up a server on your operating system to handle multiple clients.")
+        server = SocketServer.TCPServer((address, port), BoarTCPHandler)
+    else:
+        server = ForkingTCPServer((address, port), BoarTCPHandler)
+
     ip = server.socket.getsockname()[0]
     if ip == "0.0.0.0":
         ip = socket.gethostname()
