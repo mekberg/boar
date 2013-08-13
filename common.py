@@ -427,6 +427,17 @@ class __DummyProgressPrinter:
     def update(self): pass
     def finished(self): pass
 
+class UndecodableFilenameException(Exception):
+    def __init__(self, path, filename):
+        assert type(filename) == str, "Tried to raise UndecodableFilenameException with decoded filename"
+        assert type(path) == unicode, "Tried to raise UndecodableFilenameException with non-unicode path"
+        self.human_readable_name = "%s%s%s" % (
+            path.encode(sys.getfilesystemencoding()).encode("string_escape"), os.sep, filename.encode("string_escape"))
+        Exception.__init__(self, "Path '%s' can not be decoded with the default system encoding (%s)" % 
+                           (self.human_readable_name, sys.getfilesystemencoding()))
+        self.path = path
+        self.filename = filename
+
 def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     """ Returns a simple list of all the files under the given root
     directory. Any files or directories given in the skip argument
@@ -453,7 +464,8 @@ def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
             if file_to_skip in names:
                 names.remove(file_to_skip)
         for name in names:
-            assert type(name) == unicode, "All filenames should be unicode"
+            if type(name) != unicode:
+                raise UndecodableFilenameException(dirname, name)
             try:
                 fullpath = os.path.join(dirname, name)
                 unc_path = unc_abspath(fullpath)
