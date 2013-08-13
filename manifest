@@ -44,9 +44,9 @@ def write_manifest(manifest_contents, root):
 def replace_manifest(manifest_contents, root):
     old_manifests = list_manifests(root)
     assert len(old_manifests) == 1
-    new_manifest_tmp = os.path.join(root, "manifest-%s.new" % md5sum(manifest_contents))
-    new_manifest = os.path.join(root, "manifest-%s.md5" % md5sum(manifest_contents))
-    create_file(new_manifest_tmp, manifest_contents)    
+    new_manifest_tmp = os.path.join(root, "manifest-%s.new" % md5sum(manifest_contents.encode("utf8")))
+    new_manifest = os.path.join(root, "manifest-%s.md5" % md5sum(manifest_contents.encode("utf8")))
+    create_file(new_manifest_tmp, manifest_contents.encode("utf8"))    
     old_manifest = os.path.join(root, old_manifests[0])
     old_manifest_bak = os.path.join(root, old_manifests[0].replace("manifest-", "oldmanifest-"))
     os.rename(old_manifest, old_manifest_bak)
@@ -89,7 +89,7 @@ def cmd_accept():
 
     tree = load_tree(ugetcwd())
     manifest = mkmanifest(tree)
-    if expected_md5 and expected_md5 != md5sum(manifest):
+    if expected_md5 and expected_md5 != md5sum(manifest.encode("utf8")):
         print "Current tree status does not match given checksum", expected_md5, md5sum(manifest)
         sys.exit(1)
     replace_manifest(manifest, ugetcwd())
@@ -136,7 +136,7 @@ def cmd_diff():
     #print number_of_unchanged_files, "unchanged files"
     print "# Comparing with manifest", manifest_fn
     print "# Unique files:", number_of_new_files, "new files,", number_of_deleted_files, "deleted files,", len(new_set), "files in total"
-    print "# Current tree manifest md5:", md5sum(mkmanifest(new_dict))
+    print "# Current tree manifest md5:", md5sum(mkmanifest(new_dict).encode("utf8"))
 
 def main():
     cmd = sys.argv[1]
