@@ -114,8 +114,12 @@ class Workdir:
 
     def __reload_tree(self):
         progress = self.ScanProgressPrinter()
-        self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False, \
-                                 progress_printer = progress)
+        try:
+            self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False, \
+                                     progress_printer = progress)
+        except UndecodableFilenameException, e:
+            raise UserError("Found a filename that is illegal under the current file system encoding (%s): '%s'" % 
+                            (sys.getfilesystemencoding(), e.human_readable_name))
         self.tree_csums == None
         self.__reload_manifests()
         
@@ -672,20 +676,6 @@ def load_meta_info(metapath):
 
 def create_front(repoUrl):
     return client.connect(repoUrl)
-
-def init_repo_from_meta(path):
-    front = None
-    msg = None
-    meta = find_meta(path)
-    if not meta:
-        raise UserError("No workdir found at %s" % path)
-
-    info = load_meta_info(meta)
-    repo_path = info['repo_path']
-    session_name = info['session_name']
-    session_id = info['session_id']
-    front = create_front(repo_path)
-    return front
 
 def create_blobinfo(abspath, sessionpath, md5sum):
     assert is_md5sum(md5sum)
