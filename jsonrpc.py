@@ -404,15 +404,18 @@ def log_filedate( filename ):
 
 #----------------------
 
-HEADER_SIZE=21
+HEADER_SIZE=22
 HEADER_MAGIC=0x626f6172 # "boar"
-HEADER_VERSION=5
+HEADER_VERSION=6
 
-def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L):
+def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L, progress_packet = False):
     assert binary_payload_size >= 0
     assert type(has_binary_payload) == bool
-    header_str = struct.pack("!III?Q", HEADER_MAGIC, HEADER_VERSION, payload_size,\
-                                 has_binary_payload, long(binary_payload_size))
+    assert type(progress_packet) == bool
+    if progress_packet:
+        assert binary_payload_size == 0 and not has_binary_payload        
+    header_str = struct.pack("!III?Q?", HEADER_MAGIC, HEADER_VERSION, payload_size,\
+                                 has_binary_payload, long(binary_payload_size), progress_packet)
     assert len(header_str) == HEADER_SIZE
     return header_str
 
@@ -428,28 +431,33 @@ def read_header(stream):
     if version_number != HEADER_VERSION:
         raise WrongProtocolVersion("Wrong message protocol version: Expected %s, got %s" % (HEADER_VERSION, version_number))
 
-    header_data = stream.read(13)
+    header_data = stream.read(HEADER_SIZE - 8)
 
-    if len(header_data) != 13:
+    if len(header_data) != HEADER_SIZE - 8:
         raise ConnectionLost("Transport stream closed by other side after greeting.")
 
-    payload_size, has_binary_payload, binary_payload_size = \
-        struct.unpack("!I?Q", header_data)
-
+    payload_size, has_binary_payload, binary_payload_size, is_progress_packet = \
+        struct.unpack("!I?Q?", header_data)
+    if is_progress_packet:
+        if binary_payload_size != 0 or not has_binary_payload:
+            raise ConnectionLost("Connection closed due to malformed progress packet")
+    
     if not has_binary_payload:
         assert binary_payload_size == 0
         binary_payload_size = None
-    return payload_size, binary_payload_size
+
+    return payload_size, binary_payload_size, is_progress_packet
 
 class BoarMessageClient:
     """This class is the client end of a connection capable of passing
     opaque message strings and streamed data. 
     """
-    def __init__( self, s_in, s_out, logfunc=log_dummy ):
+    def __init__( self, s_in, s_out, logfunc=log_dummy, progress_callback=lambda x: None ):
         assert s_in and s_out
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
+        self.progress_callback = progress_callback
 
     def log(self, s):
         print s
@@ -474,8 +482,14 @@ class BoarMessageClient:
         self.s_out.flush()
         
     def __recv( self ):
-        datasize, binary_data_size = read_header(self.s_in)
-        data = self.s_in.read(datasize)
+        while True:
+            datasize, binary_data_size, is_progress_packet = read_header(self.s_in)
+            data = self.s_in.read(datasize)
+            if not is_progress_packet:
+                break
+            f = json.loads(data)
+            self.progress_callback(f)
+
         if binary_data_size != None:            
             return data, StreamDataSource(self.s_in, binary_data_size)
         else:
@@ -541,7 +555,9 @@ class BoarMessageServer:
             self.log( "BoarMessageServer.Serve(): connected")
             while 1:
                 try:
-                    datasize, binary_data_size = read_header(self.s_in)
+                    datasize, binary_data_size, is_progress_packet = read_header(self.s_in)
+                    if is_progress_packet:
+                        raise ConnectionLost("Got a progress packet from the client")
                 except WrongProtocolVersion, e:
                     self.__send_result("['Dummy message. The response header should tell the client that the server is of an incompatible version']")
                     break
