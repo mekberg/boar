@@ -87,7 +87,8 @@ def create_boar_proxy(from_server, to_server):
                 allowed_exceptions.append(obj)
 
     cb = lambda x: sys.stdout.write("Progress: %s%%" % (x*100))
-    server = jsonrpc.ServerProxy(jsonrpc.BoarMessageClient(from_server, to_server, progress_callback=cb), allowed_exceptions)
+    transport = jsonrpc.BoarMessageClient(from_server, to_server)
+    server = jsonrpc.ServerProxy(transport=transport, allowed_exceptions=allowed_exceptions)
 
     try:
         assert server.ping() == "pong"
