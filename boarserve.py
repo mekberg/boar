@@ -38,12 +38,19 @@ class PipedBoarServer:
         self.server = jsonrpc.BoarMessageServer(from_client, to_client, self.handler)
 
     def initialize(self):
-        repo = repository.Repo(self.repopath)
-        fr = front.Front(repo)
+        self.repo = repository.Repo(self.repopath)
+        fr = front.Front(self.repo)
         self.handler.register_instance(fr, "front")
 
     def serve(self):
-        self.server.serve()
+        try:
+            self.server.serve()
+        finally:
+            self._cleanup()
+
+    def _cleanup(self):
+        if self.repo.repo_mutex.is_locked():
+            self.repo.repo_mutex.release()
         
 def init_stdio_server(repopath):
     """This creates a boar server that uses sys.stdin/sys.stdout to
