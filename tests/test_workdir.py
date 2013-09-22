@@ -587,7 +587,7 @@ class TestConcurrency(unittest.TestCase, WorkdirHelper):
         write_file(self.workdir2, "aaa1.txt", "aaa")
 
         wd2_commit = self.wd2.front.commit
-        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.front.commit = lambda session_name, log_message, progress_callback: None
         self.wd2.checkin() # Will not complete
 
         write_file(self.workdir1, "aaa2.txt", "aaa")

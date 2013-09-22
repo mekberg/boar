@@ -397,7 +397,9 @@ class Workdir:
             print >>self.output, "Deleting", f
             front.remove(f)
 
-        self.revision = front.commit(self.sessionName, log_message)
+        pp = SimpleProgressPrinter(self.output, label="Verifying and integrating commit")
+        self.revision = front.commit(session_name=self.sessionName, log_message=log_message, progress_callback=pp.update)
+        pp.finished()
         return self.revision
 
 
@@ -615,7 +617,7 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
     assert "\\" not in sessionpath, "Was: '%s'" % (sessionpath)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
-    print >>log, "Sending", sessionpath
+    pp = SimpleProgressPrinter(log, u"Sending %s" % sessionpath)
     if not front.has_blob(expected_md5sum) and not front.new_snapshot_has_blob(expected_md5sum):
         # File does not exist in repo or previously in this new snapshot. Upload it.
         _send_file_hook(abspath) # whitebox testing
@@ -624,10 +626,11 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
             front.init_new_blob(expected_md5sum, blobinfo["size"])
             #print "check_in_file: front.init_new_blob()", expected_md5sum, time.time() - t0            
             datasource = FileDataSource(f, os.path.getsize(abspath))
-            front.add_blob_data_streamed(expected_md5sum, datasource = datasource)
+            front.add_blob_data_streamed(blob_md5 = expected_md5sum, progress_callback = pp.update, datasource = datasource)
             #print "check_in_file: front.add_blob_data_streamed()", expected_md5sum, time.time() - t0
             front.blob_finished(expected_md5sum)
             #print "check_in_file: front.blob_finished()", expected_md5sum, time.time() - t0
+    pp.finished()
 
     front.add(blobinfo)
 

@@ -417,14 +417,14 @@ class SessionWriter:
         self.metadatas[filename] = metadata
         del self.resulting_blobdict[metadata['filename']]
 
-    def commit(self, sessioninfo = {}):
+    def commit(self, sessioninfo = {}, progress_callback = lambda x: None):
         assert not self.dead
         try:
-            return self.__commit(sessioninfo)
+            return self.__commit(sessioninfo, progress_callback=progress_callback)
         finally:
             self.session_mutex.release()
 
-    def __commit(self, sessioninfo):
+    def __commit(self, sessioninfo, progress_callback = lambda x: None):
         assert not self.dead
         assert self.session_path != None
 
@@ -466,7 +466,7 @@ class SessionWriter:
         # It is not meant to be 100% safe. That responsibility lies with the lockfile.
         assert self.latest_snapshot == self.repo.find_last_revision(self.session_name), \
             "Session has been updated concurrently (Should not happen. Lockfile problems?) Commit aborted."
-        session_id = self.repo.consolidate_snapshot(self.session_path, self.forced_session_id)
+        session_id = self.repo.consolidate_snapshot(self.session_path, self.forced_session_id, progress_callback = progress_callback)
         return session_id
     
     def __del__(self):

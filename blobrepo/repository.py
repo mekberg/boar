@@ -750,17 +750,17 @@ class Repo:
         assert result > 0, "Corrupted queue directory - illegal session id"
         return result
 
-    def consolidate_snapshot(self, session_path, forced_session_id = None):
+    def consolidate_snapshot(self, session_path, forced_session_id = None, progress_callback = lambda f: None):
         assert isinstance(session_path, unicode)
         assert forced_session_id == None or isinstance(forced_session_id, int)
         assert not self.readonly, "Cannot consolidate because repo is read-only"
         self.repo_mutex.lock_with_timeout(60)
         try:
-            return self.__consolidate_snapshot(session_path, forced_session_id)
+            return self.__consolidate_snapshot(session_path, forced_session_id, progress_callback)
         finally:
             self.repo_mutex.release()
 
-    def __consolidate_snapshot(self, session_path, forced_session_id):
+    def __consolidate_snapshot(self, session_path, forced_session_id, progress_callback):
         assert isinstance(session_path, unicode)
         assert self.repo_mutex.is_locked()
         assert not self.get_queued_session_id()
@@ -774,7 +774,7 @@ class Repo:
         queue_dir = self.get_queue_path(session_id)
         assert not os.path.exists(queue_dir), "Queue entry collision: %s" % queue_dir
         shutil.move(session_path, queue_dir)
-        self.process_queue()
+        self.process_queue(progress_callback = progress_callback)
         return session_id
 
     def get_referring_snapshots(self, rev):
@@ -863,7 +863,8 @@ class Repo:
                 warn("Tried to erase a non-existing blob: %s" % blob)
         return len(orphan_blobs)
 
-    def process_queue(self):
+    def process_queue(self, progress_callback = lambda x: None):
+        progress_callback(.0)
         sw = StopWatch(enabled=False, name="process_queue")
         assert self.repo_mutex.is_locked()
         assert not self.readonly, "Repo is read only, cannot process queue"
@@ -871,19 +872,30 @@ class Repo:
         if session_id == None:
             return
         queued_item = self.get_queue_path(session_id)
+        progress_callback(.01)
         sw.mark("Lock mutex and init")
 
         transaction = Transaction(self, queued_item)
         transaction.verify_meta()
+        progress_callback(.02)
         sw.mark("Meta check 1")
 
         transaction.trim()
         sw.mark("Trim")
+        progress_callback(.10)
 
-        transaction.verify_blobs()
+        number_of_blobs = len(transaction.get_raw_blobs())
+        number_of_recipes = len(transaction.get_recipes())
+
+        # We have 0.8 progress to split between blobs and recipes
+        blob_ratio   = 0.8 * calculate_progress(number_of_blobs + number_of_recipes, number_of_blobs)
+        recipe_ratio = 0.8 * calculate_progress(number_of_blobs + number_of_recipes, number_of_recipes)
+        ph = ProgressHelper(start_f = .10, progress_callback = progress_callback)
+        
+        transaction.verify_blobs(ph.partial_progress(blob_ratio))
         sw.mark("Verify blobs")
 
-        transaction.verify_recipes()
+        transaction.verify_recipes(ph.partial_progress(recipe_ratio))
         sw.mark("Verify recipes")
 
         transaction.verify_meta()
@@ -896,14 +908,18 @@ class Repo:
         transaction.integrate_deletions()
         sw.mark("Deletions integrated")
 
+        progress_callback(.95)
         transaction.integrate_blocks()
+        progress_callback(.99)
         sw.mark("Block specifications inserted")
+
 
         session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
         assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
         self._before_transaction_completion()
         shutil.move(queued_item, session_path)
         assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
+        progress_callback(1.0)
         sw.mark("done")
 
     def _before_transaction_completion(self):
@@ -992,14 +1008,21 @@ class Transaction:
         assert is_md5sum(md5)
         return self.get_path(md5 + ".recipe")
 
-    def verify_blobs(self): 
+    def verify_blobs(self, progress_callback = lambda x: None): 
         """Read and checksum all raw blobs in the transaction. An
         assertion error is raised if any errors are found."""
-        for blob in self.get_raw_blobs():
+        raw_blobs = self.get_raw_blobs()
+        for n, blob in enumerate(raw_blobs):
             full_path = self.get_path(blob)
-            assert blob == md5sum_file(full_path), "Invalid blob found in queue dir:" + full_path
+            pp = PartialProgress(float(n) / float(len(raw_blobs)), float(n+1) / float(len(raw_blobs)), progress_callback)
+            size = os.path.getsize(full_path)
+            assert blob == md5sum_file(full_path, 
+                                       end=size, 
+                                       progress_callback=pp), "Invalid blob found in queue dir:" + full_path
+            assert os.path.getsize(full_path) == size
+            #progress_callback((1.0*n+1)/len(raw_blobs))
 
-    def verify_recipes(self):
+    def verify_recipes(self, progress_callback = lambda x: None):
         """Read and checksum all recipes in the transaction. An
         assertion error is raised if any errors are found."""        
         for recipe_blob in self.get_recipes():
