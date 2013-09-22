@@ -191,11 +191,11 @@ def md5sum_fileobj(f, start = 0, end = None):
     """Accepts a file object and returns the md5sum."""
     return checksum_fileobj(f, ["md5"], start, end)[0]
 
-def md5sum_file(f, start = 0, end = None):
+def md5sum_file(f, start = 0, end = None, progress_callback = lambda x: None):
     """Accepts a filename or a file object and returns the md5sum."""
-    return checksum_file(f, ["md5"], start, end)[0]
+    return checksum_file(f, ["md5"], start, end, progress_callback = progress_callback)[0]
 
-def checksum_fileobj(f, checksum_names, start = 0, end = None):
+def checksum_fileobj(f, checksum_names, start = 0, end = None, progress_callback = None):
     """Accepts a file object and returns one or more checksums. The
     desired checksums are specified in a list by name in the
     'checksum_names' argument."""
@@ -204,23 +204,30 @@ def checksum_fileobj(f, checksum_names, start = 0, end = None):
         assert name in ("md5", "sha256", "sha512")
         summer = hashlib.__dict__[name]()
         checksummers.append(summer)
+    data_read = 0
     for block in file_reader(f, start, end):
+        data_read += len(block)
         assert block != "", "Got an empty read"
         for m in checksummers:
             m.update(block)
+        if progress_callback:
+            if end:
+                progress_callback(float(data_read) / (end - start))
+            else:
+                progress_callback(None)
     result = []
     for m in checksummers:
         result.append(m.hexdigest())
     return result
 
-def checksum_file(f, checksum_names, start = 0, end = None):
+def checksum_file(f, checksum_names, start = 0, end = None, progress_callback = lambda x: None):
     """Accepts a filename or a file object and returns one or more
     checksums. The desired checksums are specified in a list by name
     in the 'checksum_names' argument."""
     assert f, "File must not be None"
     if isinstance(f, basestring):
         with safe_open(f, "rb") as fobj:
-            return checksum_fileobj(fobj, checksum_names, start, end)
+            return checksum_fileobj(fobj, checksum_names, start, end, progress_callback = progress_callback)
     return checksum_fileobj(f, checksum_names, start, end)
 
 def move_file(source, destination, mkdirs = False):
@@ -632,6 +639,19 @@ def encoded_stdout():
     else:
         return StreamEncoder(sys.stdout)
 
+def printable(s):
+    """Safely convert the given unicode string to a normal <str>
+    according to the preferred system encoding. Some characters may be
+    mangled if they cannot be expressed in the local encoding, but
+    under no circumstances will an encoding exception be raised."""
+    if type(s) == str:
+        return s
+    elif type(s) == unicode:
+        return s.encode(locale.getpreferredencoding(), "backslashreplace")
+    else:
+        raise ValueError("Argument must be a string or unicode")
+    
+
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all
     written strings according to the current preferred encoding, with
@@ -724,6 +744,9 @@ def unc_makedirs(s):
 def FakeFile():
     """ Behaves like a file object, but does not actually do anything."""
     return open(os.path.devnull, "w")
+
+# DevNull is an alias for FakeFile
+DevNull = FakeFile
 
 class FileAsString:
     def __init__(self, fo):
@@ -907,12 +930,6 @@ class StopWatch:
             print "%s %s %s (total %s)" % (prefix, msg, now - self.t_last, now - self.t_init )
         self.t_last = time.clock()
 
-
-class DevNull:
-    def write(self, *args):
-        pass
-
-
 def overrides(interface_class):
     """ This is a method decorator that can be used to ensure/document
     that a method overrides a method in a superclass."""
@@ -953,3 +970,66 @@ class TailBuffer:
         index2 = slice(index.start - self.shifted, index.stop - self.shifted)
         #print index, "->", index2
         return self.buffer.__getitem__(index2).tostring()
+
+
+def PartialProgress(f1, f2, progress_callback):
+    """Often a function accepting a progress callback needs to call
+    sub-functions to perform the task. By wrapping the given callback
+    with this function before passing it on, correct progress will be
+    sent upwards.
+
+    Like so:
+    
+    def LongRunningTask(progress_callback):
+        DoSomeStuff(PartialProgress(0.0, 0.5, progress_callback))
+        DoSomeMoreStuff(PartialProgress(0.5, 1.0, progress_callback))
+        return
+
+    The original progress callback will now see only a monotonously
+    increasing progress from 0 to 100%.
+    """
+    assert 0.0 <= f1 <= f2 <= 1.0
+    def wrapped_callback(f):
+        progress_callback(f1 + (f2 - f1) * f)
+    return wrapped_callback
+
+def calculate_progress(total_count, count, start_progress = 0.0):
+    """Calculates the progress in a way that is guaranteed to be safe
+    from divizion by zero exceptions or any other exceptions. If there
+    is any problem with the calculation or incoming arguments, this
+    function will return 0.0"""
+    default = 0.0
+    progress = float(start_progress)
+    if not (0.0 <= progress <= 1.0):
+        return default
+    if not (0 <= count <= total_count):
+        return default
+    try:
+        progress += float(count) / float(total_count)
+    except:
+        pass
+    assert type(progress) == float
+    if not (0.0 <= progress <= 1.0):
+        return default
+    return progress
+
+assert calculate_progress(0, 0) == 0.0    # Undefined progress
+assert calculate_progress(0, None) == 0.0 # Illegal argument
+assert calculate_progress(10, 5) == 0.5   # Normal
+assert calculate_progress(10, 10) == 1.0  # Normal
+assert calculate_progress(10, 11) == 0.0  # Too large count
+assert calculate_progress(10, -5) == 0.0  # Illegal count
+assert calculate_progress(-5, -5) == 0.0  # Illegal
+
+class ProgressHelper:
+    def __init__(self, start_f, progress_callback):
+        assert 0.0 <= start_f <= 1.0
+        self.current_progress = start_f
+        self.progress_callback = progress_callback
+    
+    def partial_progress(self, f):
+        pp = PartialProgress(self.current_progress, self.current_progress + f, self.progress_callback)
+        self.current_progress += f
+        assert 0.0 <= self.current_progress <= 1.0
+        return pp
+
