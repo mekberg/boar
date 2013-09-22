@@ -125,6 +125,9 @@ class Workdir:
         
     def __reload_manifests(self):
         self.manifest = {}
+        # session_filename -> set[manifest filename, ...]
+        self.manifests_by_file = {}
+        manifests_by_file = self.manifests_by_file
         for fn in self.tree:
             if not fn.endswith((".txt", ".TXT", ".md5", ".MD5")):
                 # About 5% faster than doing the regexp every time
@@ -144,11 +147,20 @@ class Workdir:
             for md5, filename in manifest_md5sums:
                 filename = tounicode(filename)
                 session_filename = posix_path_join(dirname, filename)
+                if session_filename not in manifests_by_file:
+                    manifests_by_file[session_filename] = set()
                 if session_filename in self.manifest:
                     if self.manifest[session_filename] != md5:
-                        raise UserError("Conflicting manifests for file "+os.path.join(dirname, filename))
+                        print "Conflicting manifests found. Listing all relevant manifests scanned so far:"
+                        for mf in manifests_by_file[session_filename]:
+                            print mf
+                        print("%s (first encountered conflict)" % fn)
+                        raise UserError("Conflicting manifests for '%s'" % (
+                                os.path.join(dirname, filename)))
                 else:
                     self.manifest[session_filename] = md5                    
+                manifests_by_file[session_filename].add(fn)
+
                 
     def __get_workdir_version(self):
         version_file = os.path.join(self.metadir, VERSION_FILE)
@@ -349,6 +361,7 @@ class Workdir:
         all_files = set(included_files)
         for fn in self.manifest.keys():
             if fn not in all_files:
+                #print self.manifests_by_file[fn]
                 raise UserError("File is described in a manifest but is not present in the workdir: %s" % fn)
             wd_path = strip_path_offset(self.offset, fn)
             if self.manifest[fn] != self.cached_md5sum(wd_path):
