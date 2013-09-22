@@ -154,3 +154,41 @@ def is_recipe_filename(filename):
         and filename_parts[1] == "recipe" \
         and is_md5sum(filename_parts[0])
 
+
+class SimpleProgressPrinter:
+    def __init__(self, output, label = "Processing"):
+        self.last_t = 0
+        self.start_t = time.time()
+        self.active = False
+        self.last_string = ""
+        self.label = printable(label); del label
+        self.symbols = list('-\\/')
+        self.output = output
+        self.updatecounter = 0
+
+        if os.getenv("BOAR_HIDE_PROGRESS") == "1":
+            # Only print the label, do nothing else.
+            self.output.write(self.label)
+            self.output.write("\n")
+            self.output = FakeFile()
+
+    def _say(self, s):
+        # self.output will point to /dev/null if quiet
+        self.output.write(s)
+        self.output.flush()
+
+    def update(self, f):
+        self.active = True
+        self.updatecounter += 1
+        now = time.time()
+        symbol = self.symbols.pop(0)
+        self.symbols.append(symbol)
+        self._say((" " * len(self.last_string)) + "\r")
+        self.last_string = self.label + ": %s%% [%s]" % (round(100.0 * f, 1), symbol)
+        self._say(self.last_string + "\r")
+        #print self.last_string
+        self.last_t = now
+
+    def finished(self):
+        if self.active:
+            self._say(self.last_string[:-3] + "    " + "\n")

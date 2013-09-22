@@ -25,7 +25,8 @@ from blobrepo import repository
 from boar_exceptions import *
 import sys
 from time import ctime, time
-from common import md5sum, is_md5sum, warn, get_json_module, StopWatch
+from common import md5sum, is_md5sum, warn, get_json_module, StopWatch, calculate_progress
+from boar_common import SimpleProgressPrinter
 from blobrepo.sessions import bloblist_fingerprint
 import copy
 
@@ -80,10 +81,14 @@ def clone(from_front, to_front):
     from_front.acquire_repo_lock()
     to_front.acquire_repo_lock()
     try:
-        __clone(from_front, to_front) 
+        __clone(from_front, to_front)
     finally:
-        from_front.release_repo_lock()
-        to_front.release_repo_lock()
+        # Always try to release the locks, but any errors here are
+        # probably not very interesting, let's ignore them.
+        try: to_front.release_repo_lock()
+        except: pass
+        try: from_front.release_repo_lock()
+        except: pass
 
 def __clone(from_front, to_front):
     # Check that other repo is a continuation of this one
@@ -156,6 +161,7 @@ def find_snapshots_to_delete(from_front, to_front):
 def __clone_single_snapshot(from_front, to_front, session_id):
     """ This function requires that a new snapshot is underway in
     to_front. It does not commit that snapshot. """
+    assert from_front != to_front
     other_bloblist = from_front.get_session_bloblist(session_id)
     other_raw_bloblist = from_front.get_session_raw_bloblist(session_id)
     for n, blobinfo in enumerate(other_raw_bloblist):
@@ -163,11 +169,19 @@ def __clone_single_snapshot(from_front, to_front, session_id):
         if not action:
             md5sum = blobinfo['md5sum']
             if not (to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum)):
-                print "Sending blob %s of %s (%s MB)" % (n, len(other_raw_bloblist), blobinfo['size'] / (1.0 * 2**20))
+                pp = SimpleProgressPrinter(sys.stdout, 
+                                           label="Sending blob %s of %s (%s MB)" % 
+                                           (n+1, len(other_raw_bloblist), 
+                                            round(blobinfo['size'] / (1.0 * 2**20), 3)))
                 sw = StopWatch(enabled=False, name="front.clone")
                 to_front.init_new_blob(md5sum, blobinfo['size'])
                 sw.mark("front.init_new_blob()")
-                to_front.add_blob_data_streamed(md5sum, datasource = from_front.get_blob(md5sum))
+                datasource = from_front.get_blob(md5sum)
+                pp.update(0.0)
+                to_front.add_blob_data_streamed(blob_md5 = md5sum, 
+                                                progress_callback = pp.update,
+                                                datasource = datasource)
+                pp.finished()
                 sw.mark("front.add_blob_data_streamed()")
                 to_front.blob_finished(md5sum)
                 sw.mark("front.finished()")
@@ -465,15 +479,17 @@ class Front:
         """ Must be called after a create_session()  """
         self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))
 
-    def add_blob_data_streamed(self, blob_md5, datasource):
+    def add_blob_data_streamed(self, blob_md5, progress_callback, datasource):
         import hashlib, common
         assert is_md5sum(blob_md5)
         summer = hashlib.md5()
+        total = datasource.bytes_left()
         while datasource.bytes_left() > 0:
             # repository.DEDUP_BLOCK_SIZE is a reasonable size - no other reason
             block = datasource.read(repository.DEDUP_BLOCK_SIZE) 
             summer.update(block)
             self.new_session.add_blob_data(blob_md5, block)
+            progress_callback(calculate_progress(total, total - datasource.bytes_left()))
         if summer.hexdigest() != blob_md5:
             raise common.ContentViolation("Received blob data differs from promised.")
     def blob_finished(self, blob_md5):
@@ -524,7 +540,7 @@ class Front:
         self.new_session = None
         return rev
 
-    def commit_raw(self, session_name, log_message, timestamp, date):
+    def commit_raw(self, session_name, log_message, timestamp, date, progress_callback = lambda x: None):
         """Commit a snapshot. For internal use. The session does not
         need to exist beforehand."""
         assert self.new_session, "There is no active snapshot to commit"
@@ -536,11 +552,11 @@ class Front:
         session_info["date"] = date
         if log_message:
             session_info["log_message"] = log_message
-        rev = self.new_session.commit(session_info)
+        rev = self.new_session.commit(session_info, progress_callback)
         self.new_session = None
         return rev
 
-    def commit(self, session_name, log_message = None):
+    def commit(self, session_name, log_message = None, progress_callback = lambda x: None):
         """Commit a snapshot started with create_snapshot(). The session must
         exist beforehand. Accepts an optional log message."""
         if log_message != None:
@@ -548,7 +564,7 @@ class Front:
         assert type(session_name) == unicode
         if not self.find_last_revision(session_name):
             raise UserError("Session '%s' does not seem to exist in the repo." % (session_name))
-        return self.commit_raw(session_name, log_message, int(time()), ctime())
+        return self.commit_raw(session_name, log_message, int(time()), ctime(), progress_callback = progress_callback)
 
     def get_blob_size(self, sum):
         return self.repo.get_blob_size(sum)
@@ -645,7 +661,7 @@ class DryRunFront:
     def get_all_rolling(self):
         return []
 
-    def add_blob_data_streamed(self, blob_md5, datasource):
+    def add_blob_data_streamed(self, blob_md5, progress_callback, datasource):
         while datasource.remaining:
             datasource.read(2**12)
 
@@ -658,7 +674,7 @@ class DryRunFront:
     def remove(self, filename):
         pass
 
-    def commit(self, name, log_message = None):
+    def commit(self, session_name, log_message = None, progress_callback = None):
         return 0
 
     def get_blob_size(self, sum):

@@ -104,7 +104,7 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
 
         # Make the checkin() go just almost all the way...
         wd2_commit = self.wd2.front.commit
-        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.front.commit = lambda session_name, log_message, progress_callback: None
 
         self.wd2.checkin() # Will not complete
         self.wd1.checkin()
@@ -121,7 +121,7 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
 
         # Make the checkin() go just almost all the way...
         wd2_commit = self.wd2.front.commit
-        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.front.commit = lambda session_name, log_message, progress_callback: None
 
         self.wd2.checkin() # Will not complete
         self.wd1.checkin()
@@ -142,7 +142,7 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
         # b.txt is deduplicated to aaa + bbbccc
         # Make the checkin() go just almost all the way...
         wd2_commit = self.wd2.front.commit
-        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.front.commit = lambda session_name, log_message, progress_callback: None
         self.wd2.checkin() # Will not complete
 
         # Is deduplicated to aaa + bbb
@@ -166,7 +166,7 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
 
         # Make the checkin() go just almost all the way...
         wd2_commit = self.wd2.front.commit
-        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.front.commit = lambda session_name, log_message, progress_callback: None
         self.wd2.checkin() # Will not complete
 
         # Now, make sure bbbccc exists as a recipe
@@ -194,7 +194,7 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
 
         # Make the checkin() go just almost all the way...
         wd2_commit = self.wd2.front.commit
-        self.wd2.front.commit = lambda session_name, log_message: None
+        self.wd2.front.commit = lambda session_name, log_message, progress_callback: None
 
         self.wd2.checkin() # Will not complete
         self.wd1.checkin()
