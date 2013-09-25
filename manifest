@@ -58,6 +58,8 @@ def load_tree(path):
     tree = get_tree(path)
     new_dict = {}
     for t in tree:
+        if not os.path.isfile(t):
+            continue
         if is_manifest_fn(t):
             continue
         new_dict[t] = md5sum_file(t)
@@ -94,12 +96,20 @@ def cmd_accept():
         sys.exit(1)
     replace_manifest(manifest, ugetcwd())
 
+
 def cmd_diff():
     old_dict = {}
     manifest_fn = get_manifest_fn(".")
     for md5, fn in read_md5sum(manifest_fn):
         old_dict[fn] = md5
     new_dict = load_tree(ugetcwd())
+    print "# Comparing with manifest", manifest_fn
+    number_of_unchanged_files, number_of_new_files, number_of_deleted_files = print_diff(old_dict, new_dict)
+    #print number_of_unchanged_files, "unchanged files"
+    print "# Set summary:", number_of_new_files, "new files,", number_of_deleted_files, "deleted files, ", len(set(new_dict.values())), "files in total"
+    print "# Current tree manifest md5:", md5sum(mkmanifest(new_dict).encode("utf8"))
+
+def print_diff(old_dict, new_dict):
     old_set = set(old_dict.values())
     new_set = set(new_dict.values())
     tc = TreeComparer(old_dict, new_dict)
@@ -130,13 +140,10 @@ def cmd_diff():
             print "M %s %s" % (a+r, fn)
         else:
             assert False
+    number_of_unchanged_files = len(old_set & new_set)
     number_of_new_files = len(new_set - old_set)
     number_of_deleted_files = len(old_set - new_set)
-    number_of_unchanged_files = len(old_set & new_set)
-    #print number_of_unchanged_files, "unchanged files"
-    print "# Comparing with manifest", manifest_fn
-    print "# Unique files:", number_of_new_files, "new files,", number_of_deleted_files, "deleted files,", len(new_set), "files in total"
-    print "# Current tree manifest md5:", md5sum(mkmanifest(new_dict).encode("utf8"))
+    return number_of_unchanged_files, number_of_new_files, number_of_deleted_files
 
 def main():
     cmd = sys.argv[1]
