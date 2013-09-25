@@ -69,7 +69,7 @@ def read_tree(path, skiplist = []):
     os.path.walk(path, visitor, result)
     return result
 
-def write_tree(path, filemap, create_root = True):
+def write_tree(path, filemap, create_root = True, overwrite = False):
     """Accepts a mapping {filename: content, ...} and writes it to the
     tree starting at the given """
     if create_root:
@@ -77,9 +77,10 @@ def write_tree(path, filemap, create_root = True):
     else:
         assert os.path.exists(path)
     for filename in filemap.keys():
-        assert not os.path.exists(filename)
         assert not os.path.isabs(filename)
         fullpath = os.path.join(path, filename)
+        if not overwrite:
+            assert not os.path.exists(fullpath)
         dirpath = os.path.dirname(fullpath)
         try:
             os.makedirs(dirpath)
@@ -495,7 +496,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
 
         wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
         wd.update_to_latest()
-        write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
+        write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False, overwrite=True)
         wd.checkin()
 
         wd = self.createWorkdir(self.repoUrl)
@@ -509,9 +510,9 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd = self.createWorkdir(self.repoUrl)
         wd.checkin()
         for n in range(0, 10):
-            write_tree(wd.root, {'file.txt': 'content 1'}, False)
+            write_tree(wd.root, {'file.txt': 'content 1'}, False, overwrite=True)
             self.assertEqual(wd.cached_md5sum(u"file.txt"), "9297ab3fbd56b42f6566284119238125")
-            write_tree(wd.root, {'file.txt': 'content 2'}, False)        
+            write_tree(wd.root, {'file.txt': 'content 2'}, False, overwrite=True)
             self.assertEqual(wd.cached_md5sum(u"file.txt"), "6685cd62b95f2c58818cb20e7292168b")
 
     def testIncludeModifications(self):
@@ -526,7 +527,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
 
         wd.front.set_session_include_list(u"TestSession", ["*.txt"])
         wd.update_to_latest()
-        write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False)
+        write_tree(wd.root, {'file-modified.ignore': 'f3 mod'}, False, overwrite=True)
         wd.checkin()
 
         wd = self.createWorkdir(self.repoUrl)
