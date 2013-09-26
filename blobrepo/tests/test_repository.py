@@ -60,20 +60,20 @@ class TestBlobRepo(unittest.TestCase):
             self.assert_(i in lst1)
 
     def test_empty_commit(self):
-        writer = self.repo.create_session(SESSION_NAME)
+        writer = self.repo.create_snapshot(SESSION_NAME)
         id = writer.commit()        
         self.assertEqual(1, id, "Session ids starts from 1") 
         self.assertEqual(self.repo.get_all_sessions(), [1], 
                          "There should be exactly one session")
 
     def test_double_commit(self):
-        writer = self.repo.create_session(SESSION_NAME)
+        writer = self.repo.create_snapshot(SESSION_NAME)
         writer.commit()        
         self.assertRaises(Exception, writer.commit)        
         
     def test_session_info(self):
         committed_info = copy(self.sessioninfo1)
-        writer = self.repo.create_session(SESSION_NAME)
+        writer = self.repo.create_snapshot(SESSION_NAME)
         id = writer.commit(committed_info)
         self.assertEqual(committed_info, self.sessioninfo1,
                          "Given info dict was changed during commit")
@@ -83,11 +83,11 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_simple_blob(self):
         committed_info = copy(self.fileinfo1)
-        writer = self.repo.create_session(SESSION_NAME)
+        writer = self.repo.create_snapshot(SESSION_NAME)
         writer.init_new_blob(DATA1_MD5, len(DATA1))
         writer.add_blob_data(DATA1_MD5, DATA1)
-        writer.add(committed_info)
         writer.blob_finished(DATA1_MD5)
+        writer.add(committed_info)
         self.assertEqual(committed_info, self.fileinfo1)
         id = writer.commit()
         reader = self.repo.get_session(id)
@@ -95,30 +95,30 @@ class TestBlobRepo(unittest.TestCase):
         self.assertEqual(blobinfos, [self.fileinfo1])
 
     def test_secondary_session(self):
-        writer1 = self.repo.create_session(SESSION_NAME)
+        writer1 = self.repo.create_snapshot(SESSION_NAME)
         writer1.init_new_blob(DATA1_MD5, len(DATA1))
         writer1.add_blob_data(DATA1_MD5, DATA1)
-        writer1.add(self.fileinfo1)
         writer1.blob_finished(DATA1_MD5)
+        writer1.add(self.fileinfo1)
         id1 = writer1.commit()
-        writer2 = self.repo.create_session(SESSION_NAME, base_session = id1)
+        writer2 = self.repo.create_snapshot(SESSION_NAME, base_session = id1)
         writer2.init_new_blob(DATA2_MD5, len(DATA2))
         writer2.add_blob_data(DATA2_MD5, DATA2)
-        writer2.add(self.fileinfo2)
         writer2.blob_finished(DATA2_MD5)
+        writer2.add(self.fileinfo2)
         id2 = writer2.commit()
         reader = self.repo.get_session(id2)
         blobinfos = list(reader.get_all_blob_infos())
         self.assertListsEqualAsSets(blobinfos, [self.fileinfo1, self.fileinfo2])
 
     def test_remove(self):
-        writer1 = self.repo.create_session(SESSION_NAME)
+        writer1 = self.repo.create_snapshot(SESSION_NAME)
         writer1.init_new_blob(DATA1_MD5, len(DATA1))
         writer1.add_blob_data(DATA1_MD5, DATA1)
-        writer1.add(self.fileinfo1)
         writer1.blob_finished(DATA1_MD5)
+        writer1.add(self.fileinfo1)
         id1 = writer1.commit()
-        writer2 = self.repo.create_session(SESSION_NAME, base_session = id1)
+        writer2 = self.repo.create_snapshot(SESSION_NAME, base_session = id1)
         writer2.remove(self.fileinfo1['filename'])
         id2 = writer2.commit()
         blobinfos = list(self.repo.get_session(id1).get_all_blob_infos())
@@ -127,19 +127,32 @@ class TestBlobRepo(unittest.TestCase):
         self.assertEqual(blobinfos, [])
 
     def test_remove_nonexisting(self):
-        writer1 = self.repo.create_session(SESSION_NAME)
+        writer1 = self.repo.create_snapshot(SESSION_NAME)
         self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")        
 
     def test_find_orphan_blobs(self):
         committed_info = copy(self.fileinfo1)
-        writer = self.repo.create_session(SESSION_NAME)
+        writer = self.repo.create_snapshot(SESSION_NAME)
         writer.init_new_blob(DATA1_MD5, len(DATA1))
         writer.add_blob_data(DATA1_MD5, DATA1)
-        writer.add(committed_info)
         writer.blob_finished(DATA1_MD5)
+        writer.add(committed_info)
         writer.commit()
         self.assertEqual(self.repo.get_orphan_blobs(), set())
         open(os.path.join(self.repo.repopath, "blobs", "55", "551d8cd98f00b204e9800998ecf8427e"), "w")
+        self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
+
+    def test_find_orphan_recipes(self):
+        committed_info = copy(self.fileinfo1)
+        writer = self.repo.create_snapshot(SESSION_NAME)
+        writer.init_new_blob(DATA1_MD5, len(DATA1))
+        writer.add_blob_data(DATA1_MD5, DATA1)
+        writer.blob_finished(DATA1_MD5)
+        writer.add(committed_info)
+        writer.commit()
+        self.assertEqual(self.repo.get_orphan_blobs(), set())
+        os.mkdir(os.path.join(self.repo.repopath, "recipes", "55"))
+        open(os.path.join(self.repo.repopath, "recipes", "55", "551d8cd98f00b204e9800998ecf8427e.recipe"), "w")
         self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
 
 if __name__ == '__main__':

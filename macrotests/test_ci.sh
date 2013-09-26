@@ -11,6 +11,7 @@ echo "Some data" >Test/file.txt || exit 1
 echo --- Test normal ci
 cat >expected.txt <<EOF
 Sending file.txt
+Verifying and integrating commit
 Checked in session id 2
 !Finished in (.*) seconds
 EOF
@@ -33,6 +34,7 @@ txtmatch.py expected.txt output.txt || {
 
 echo --- Test unchanged ci with --allow-empty
 cat >expected.txt <<EOF
+Verifying and integrating commit
 Checked in session id 3
 !Finished in (.*) seconds
 EOF
@@ -58,6 +60,7 @@ Sending Abc/bumblebee.txt
 Sending Abc/cobra.txt
 Sending Abc/dodo.txt
 Sending Abc/elephant.txt
+Verifying and integrating commit
 Checked in session id 4
 !Finished in (.*) seconds
 EOF

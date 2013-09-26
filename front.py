@@ -25,7 +25,8 @@ from blobrepo import repository
 from boar_exceptions import *
 import sys
 from time import ctime, time
-from common import md5sum, is_md5sum, warn, get_json_module
+from common import md5sum, is_md5sum, warn, get_json_module, StopWatch, calculate_progress
+from boar_common import SimpleProgressPrinter
 from blobrepo.sessions import bloblist_fingerprint
 import copy
 
@@ -80,10 +81,14 @@ def clone(from_front, to_front):
     from_front.acquire_repo_lock()
     to_front.acquire_repo_lock()
     try:
-        __clone(from_front, to_front) 
+        __clone(from_front, to_front)
     finally:
-        from_front.release_repo_lock()
-        to_front.release_repo_lock()
+        # Always try to release the locks, but any errors here are
+        # probably not very interesting, let's ignore them.
+        try: to_front.release_repo_lock()
+        except: pass
+        try: from_front.release_repo_lock()
+        except: pass
 
 def __clone(from_front, to_front):
     # Check that other repo is a continuation of this one
@@ -156,16 +161,30 @@ def find_snapshots_to_delete(from_front, to_front):
 def __clone_single_snapshot(from_front, to_front, session_id):
     """ This function requires that a new snapshot is underway in
     to_front. It does not commit that snapshot. """
+    assert from_front != to_front
     other_bloblist = from_front.get_session_bloblist(session_id)
     other_raw_bloblist = from_front.get_session_raw_bloblist(session_id)
-    for blobinfo in other_raw_bloblist:
+    for n, blobinfo in enumerate(other_raw_bloblist):
         action = blobinfo.get("action", None)
         if not action:
             md5sum = blobinfo['md5sum']
             if not (to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum)):
+                pp = SimpleProgressPrinter(sys.stdout, 
+                                           label="Sending blob %s of %s (%s MB)" % 
+                                           (n+1, len(other_raw_bloblist), 
+                                            round(blobinfo['size'] / (1.0 * 2**20), 3)))
+                sw = StopWatch(enabled=False, name="front.clone")
                 to_front.init_new_blob(md5sum, blobinfo['size'])
-                to_front.add_blob_data_streamed(md5sum, datasource = from_front.get_blob(md5sum))
+                sw.mark("front.init_new_blob()")
+                datasource = from_front.get_blob(md5sum)
+                pp.update(0.0)
+                to_front.add_blob_data_streamed(blob_md5 = md5sum, 
+                                                progress_callback = pp.update,
+                                                datasource = datasource)
+                pp.finished()
+                sw.mark("front.add_blob_data_streamed()")
                 to_front.blob_finished(md5sum)
+                sw.mark("front.finished()")
             to_front.add(blobinfo)
         elif action == "remove":
             to_front.remove(blobinfo['filename'])
@@ -196,6 +215,41 @@ def is_continuation(base_front, cont_front):
             return False
         if base_front.get_session_fingerprint(session_id) != cont_front.get_session_fingerprint(session_id):
             return False
+    return True
+
+def verify_repo(front, verify_blobs = True, verbose = False):
+    """Returns True if the repo was clean. Otherwise throws an
+    exception."""
+    for rev in range(1, front.repo_get_highest_used_revision() + 1):
+        front.repo_verify_snapshot(rev)
+    session_ids = front.get_session_ids()
+    if verbose: print "Verifying %s snapshots" % (len(session_ids))
+    existing_blobs = set(front.get_all_raw_blobs()) | set(front.get_all_recipes())
+    for i in range(0, len(session_ids)):
+        id = session_ids[i]
+        bloblist = front.get_session_bloblist(id) # We must not use a
+                                                  # cached bloblist
+                                                  # here - we're
+                                                  # verifying the
+                                                  # repo!
+        calc_fingerprint = bloblist_fingerprint(bloblist)
+        if calc_fingerprint != front.get_session_fingerprint(id):
+            raise CorruptionError("Fingerprint didn't match for snapshot %s" % id)
+        for bi in bloblist:
+            if bi['md5sum'] not in existing_blobs:
+                raise CorruptionError("Snapshot %s is missing blob %s" % (session_ids[i], bi['md5sum']))
+        if verbose: print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
+    if not verify_blobs:
+        if verbose: print "Skipping blob verification"
+        return True
+    if verbose: print "Collecting a list of all blobs..."
+    count = front.init_verify_blobs()
+    if verbose: print "Verifying %s blobs..." % (count)
+    done = 0
+    while done < count:
+        done += len(front.verify_some_blobs())
+        if verbose: print done, "of "+str(count)+" blobs verified, "+ \
+            str(round(1.0*done/count * 100,1)) + "% done."
     return True
 
 
@@ -233,6 +287,12 @@ class Front:
 
     def get_deleted_snapshots(self):
         return self.repo.get_deleted_snapshots()
+
+    def get_dedup_block_size(self):
+        return repository.DEDUP_BLOCK_SIZE
+
+    def get_dedup_block_location(self, sha):
+        return self.repo.get_block_location(sha)
 
     def get_deleted_snapshot_info(self, rev):
         """ Returns a tuple containing the snapshot deleted_name and
@@ -337,15 +397,18 @@ class Front:
         session_reader = self.repo.get_session(id)
         return copy.copy(session_reader.get_raw_bloblist())
 
+    def get_stats(self):
+        return self.repo.get_stats()
+
     def create_session(self, session_name, base_session = None, force_base_snapshot = False):
         """Creates a new snapshot for the given session. Commit() must
         be called when the construction of the new snapshot is
         completed()."""
         assert isinstance(session_name, basestring), session_name
         assert not self.new_session, "There already exists an active new snapshot"
-        self.new_session = self.repo.create_session(session_name = session_name, 
-                                                    base_session = base_session,
-                                                    force_base_snapshot = force_base_snapshot)
+        self.new_session = self.repo.create_snapshot(session_name = session_name, 
+                                                     base_session = base_session,
+                                                     force_base_snapshot = force_base_snapshot)
 
     def create_base_snapshot(self, session_name, truncate = False):
         assert not self.new_session
@@ -406,14 +469,29 @@ class Front:
     def init_new_blob(self, blob_md5, size):
         self.new_session.init_new_blob(blob_md5, size)
 
+    def get_all_rolling(self):
+        return self.repo.blocksdb.get_all_rolling()
+
+    def has_block(self, sha256):
+        return self.repo.blocksdb.has_block(sha256)
+
     def add_blob_data(self, blob_md5, b64data):
         """ Must be called after a create_session()  """
         self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))
 
-    def add_blob_data_streamed(self, blob_md5, datasource):
-        while datasource.remaining > 0:
-            self.new_session.add_blob_data(blob_md5, datasource.read(2**12))
-
+    def add_blob_data_streamed(self, blob_md5, progress_callback, datasource):
+        import hashlib, common
+        assert is_md5sum(blob_md5)
+        summer = hashlib.md5()
+        total = datasource.bytes_left()
+        while datasource.bytes_left() > 0:
+            # repository.DEDUP_BLOCK_SIZE is a reasonable size - no other reason
+            block = datasource.read(repository.DEDUP_BLOCK_SIZE) 
+            summer.update(block)
+            self.new_session.add_blob_data(blob_md5, block)
+            progress_callback(calculate_progress(total, total - datasource.bytes_left()))
+        if summer.hexdigest() != blob_md5:
+            raise common.ContentViolation("Received blob data differs from promised.")
     def blob_finished(self, blob_md5):
         self.new_session.blob_finished(blob_md5)
 
@@ -462,7 +540,7 @@ class Front:
         self.new_session = None
         return rev
 
-    def commit_raw(self, session_name, log_message, timestamp, date):
+    def commit_raw(self, session_name, log_message, timestamp, date, progress_callback = lambda x: None):
         """Commit a snapshot. For internal use. The session does not
         need to exist beforehand."""
         assert self.new_session, "There is no active snapshot to commit"
@@ -474,11 +552,11 @@ class Front:
         session_info["date"] = date
         if log_message:
             session_info["log_message"] = log_message
-        rev = self.new_session.commit(session_info)
+        rev = self.new_session.commit(session_info, progress_callback)
         self.new_session = None
         return rev
 
-    def commit(self, session_name, log_message = None):
+    def commit(self, session_name, log_message = None, progress_callback = lambda x: None):
         """Commit a snapshot started with create_snapshot(). The session must
         exist beforehand. Accepts an optional log message."""
         if log_message != None:
@@ -486,12 +564,12 @@ class Front:
         assert type(session_name) == unicode
         if not self.find_last_revision(session_name):
             raise UserError("Session '%s' does not seem to exist in the repo." % (session_name))
-        return self.commit_raw(session_name, log_message, int(time()), ctime())
+        return self.commit_raw(session_name, log_message, int(time()), ctime(), progress_callback = progress_callback)
 
     def get_blob_size(self, sum):
         return self.repo.get_blob_size(sum)
 
-    def get_blob(self, sum, offset = 0, size = -1):
+    def get_blob(self, sum, offset = 0, size = None):
         datasource = self.repo.get_blob_reader(sum, offset, size)
         return datasource
 
@@ -499,7 +577,16 @@ class Front:
         return self.repo.has_blob(sum)
 
     def get_all_blobs(self):
-        return self.repo.get_blob_names()
+        """ Returns a list of all blobs (raw or recipes) in the
+        repository. This method is deprecated. Use get_all_raw_blobs()
+        and/or get_all_recipes() instead."""
+        return self.get_all_raw_blobs() + self.get_all_raw_blobs(self)
+
+    def get_all_raw_blobs(self):
+        return self.repo.get_raw_blob_names()
+
+    def get_all_recipes(self):
+        return self.repo.get_recipe_names()
 
     def new_snapshot_has_blob(self, sum):
         assert self.new_session, "new_snapshot_has_blob() must only be called when a new snapshot is underway"
@@ -512,7 +599,7 @@ class Front:
 
     def init_verify_blobs(self):
         assert self.blobs_to_verify == []
-        self.blobs_to_verify = self.repo.get_blob_names()
+        self.blobs_to_verify = self.repo.get_raw_blob_names() + self.repo.get_recipe_names()
         for scanner in self.repo.scanners:
             scanner.scan_init()
         return len(self.blobs_to_verify)
@@ -545,6 +632,8 @@ class Front:
     def get_repo_identifier(self):
         return self.repo.get_repo_identifier()
 
+    def deduplication_enabled(self):
+        return self.repo.deduplication_enabled()
 
 class DryRunFront:
 
@@ -569,7 +658,10 @@ class DryRunFront:
     def add_blob_data(self, blob_md5, b64data):
         pass
 
-    def add_blob_data_streamed(self, blob_md5, datasource):
+    def get_all_rolling(self):
+        return []
+
+    def add_blob_data_streamed(self, blob_md5, progress_callback, datasource):
         while datasource.remaining:
             datasource.read(2**12)
 
@@ -582,13 +674,13 @@ class DryRunFront:
     def remove(self, filename):
         pass
 
-    def commit(self, name, log_message = None):
+    def commit(self, session_name, log_message = None, progress_callback = None):
         return 0
 
     def get_blob_size(self, sum):
         return self.realfront.get_blob_size(sum)
 
-    def get_blob_b64(self, sum, offset = 0, size = -1):
+    def get_blob_b64(self, sum, offset = 0, size = None):
         return self.realfront.get_blob_b64(sum, offset, size)
 
     def has_blob(self, sum):

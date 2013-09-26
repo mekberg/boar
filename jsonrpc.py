@@ -29,6 +29,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
 
 import sys, os
 import struct
+import inspect
 from boar_exceptions import *
 from common import *
 import traceback
@@ -167,7 +168,7 @@ class DataSource:
         this data source."""
         raise NotImplementedError()
     
-    def read(self, n):
+    def read(self, n = None):
         """Reads and returns a number of bytes. May return fewer bytes
         than specified if there are no more bytes to read."""
         raise NotImplementedError()
@@ -180,7 +181,9 @@ class StreamDataSource(DataSource):
     def bytes_left(self):
         return self.remaining
 
-    def read(self, n):
+    def read(self, n = None):
+        if n == None:
+            n = self.bytes_left()
         if self.remaining == 0:
             return ""
         bytes_to_read = min(n, self.remaining)
@@ -402,15 +405,18 @@ def log_filedate( filename ):
 
 #----------------------
 
-HEADER_SIZE=21
+HEADER_SIZE=22
 HEADER_MAGIC=0x626f6172 # "boar"
-HEADER_VERSION=5
+HEADER_VERSION=6
 
-def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L):
+def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L, progress_packet = False):
     assert binary_payload_size >= 0
     assert type(has_binary_payload) == bool
-    header_str = struct.pack("!III?Q", HEADER_MAGIC, HEADER_VERSION, payload_size,\
-                                 has_binary_payload, long(binary_payload_size))
+    assert type(progress_packet) == bool
+    if progress_packet:
+        assert binary_payload_size == 0 and not has_binary_payload        
+    header_str = struct.pack("!III?Q?", HEADER_MAGIC, HEADER_VERSION, payload_size,\
+                                 has_binary_payload, long(binary_payload_size), progress_packet)
     assert len(header_str) == HEADER_SIZE
     return header_str
 
@@ -426,28 +432,37 @@ def read_header(stream):
     if version_number != HEADER_VERSION:
         raise WrongProtocolVersion("Wrong message protocol version: Expected %s, got %s" % (HEADER_VERSION, version_number))
 
-    header_data = stream.read(13)
+    header_data = stream.read(HEADER_SIZE - 8)
 
-    if len(header_data) != 13:
+    if len(header_data) != HEADER_SIZE - 8:
         raise ConnectionLost("Transport stream closed by other side after greeting.")
 
-    payload_size, has_binary_payload, binary_payload_size = \
-        struct.unpack("!I?Q", header_data)
-
+    payload_size, has_binary_payload, binary_payload_size, is_progress_packet = \
+        struct.unpack("!I?Q?", header_data)
+    if is_progress_packet:
+        if binary_payload_size != 0 or has_binary_payload:
+            raise ConnectionLost("Connection closed due to malformed progress packet")
+    
     if not has_binary_payload:
         assert binary_payload_size == 0
         binary_payload_size = None
-    return payload_size, binary_payload_size
+
+    return payload_size, binary_payload_size, is_progress_packet
 
 class BoarMessageClient:
-    """This class is the client end of a connection capable of passing
-    opaque message strings and streamed data. 
+    """This class it a "transport". It is the client end of a
+    connection capable of passing opaque message strings and streamed
+    data.
     """
-    def __init__( self, s_in, s_out, logfunc=log_dummy ):
+    def __init__( self, s_in, s_out, logfunc=log_dummy):
         assert s_in and s_out
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
+        self.progress_callback = lambda x: None 
+
+    def set_progress_callback(self, cb):
+        self.progress_callback = cb
 
     def log(self, s):
         print s
@@ -460,6 +475,7 @@ class BoarMessageClient:
         return "<JsonrpcClient, %s, %s>" % (self.s_in, self.s_out)
     
     def __send( self, string, datasource = None ):
+        #print "CLIENT sending", string, datasource
         bin_length = 0
         if datasource:
             bin_length = datasource.bytes_left()
@@ -472,8 +488,14 @@ class BoarMessageClient:
         self.s_out.flush()
         
     def __recv( self ):
-        datasize, binary_data_size = read_header(self.s_in)
-        data = self.s_in.read(datasize)
+        while True:
+            datasize, binary_data_size, is_progress_packet = read_header(self.s_in)
+            data = self.s_in.read(datasize)
+            if not is_progress_packet:
+                break
+            f = json.loads(data)
+            self.progress_callback(f)
+
         if binary_data_size != None:            
             return data, StreamDataSource(self.s_in, binary_data_size)
         else:
@@ -534,12 +556,23 @@ class BoarMessageServer:
             self.s_out.write( result )
         self.s_out.flush()
 
+    def __send_progress(self, progress):
+        assert progress >= 0 or progress <= 1.0
+        progress_object = json.dumps(progress)
+        header = pack_header(len(progress_object), progress_packet = True)
+        self.s_out.write( header )
+        self.s_out.write( progress_object )
+        #Flushing not necessary or desired for progress
+        #self.s_out.flush()
+
     def serve(self):
         try:
             self.log( "BoarMessageServer.Serve(): connected")
             while 1:
                 try:
-                    datasize, binary_data_size = read_header(self.s_in)
+                    datasize, binary_data_size, is_progress_packet = read_header(self.s_in)
+                    if is_progress_packet:
+                        raise ConnectionLost("Got a progress packet from the client")
                 except WrongProtocolVersion, e:
                     self.__send_result("['Dummy message. The response header should tell the client that the server is of an incompatible version']")
                     break
@@ -551,7 +584,7 @@ class BoarMessageServer:
                     incoming_data_source = StreamDataSource(self.s_in, binary_data_size)
                 else:
                     incoming_data_source = None
-                result = self.handler.handle(data, incoming_data_source)
+                result = self.handler.handle(data, incoming_data_source, self.__send_progress)
                 if incoming_data_source:
                     assert incoming_data_source.bytes_left() == 0,\
                         "The data source object must be exhausted by the handler."
@@ -587,26 +620,38 @@ class ServerProxy:
         """
         #TODO: check parameters
         self.__transport = transport
+        self.__transport.set_progress_callback(self.__progress_callback)
         for exception_class in allowed_exceptions:
             assert isinstance(exception_class, type)
         self.allowed_exceptions = allowed_exceptions[:]
-        self.active_datasource = None
+        self.active_upload_datasource = None
+        self.active_download_datasource = None
+        self.caller_progress_callback = None
+
+    def __progress_callback(self, f):
+        if self.caller_progress_callback:
+            self.caller_progress_callback(f)
 
     def __str__(self):
         return repr(self)
     def __repr__(self):
         return "<ServerProxy for %s>" % (self.__transport)
 
-    def __req( self, methodname, args=None, kwargs=None, id=0 ):
+    def __req( self, methodname, args=None, kwargs=None, id=0, progress_callback=None):
         # JSON-RPC 2.0: only args OR kwargs allowed!
-        if self.active_datasource:
-            assert self.active_datasource.bytes_left() == 0, \
-                "The data source must be exhausted before any more jsonrpc calls can be made."
+        
+        if self.active_upload_datasource:
+            assert self.active_upload_datasource.bytes_left() == 0, \
+                "Client tried to make a RPC call during data upload."
+        if self.active_download_datasource:
+            assert self.active_download_datasource.bytes_left() == 0, \
+                "Client tried to make a RPC call during data download."
+
         datasource = kwargs.get("datasource", None)
 
         if datasource:
             assert isinstance(datasource, DataSource)
-            self.active_datasource = datasource
+            self.active_upload_datasource = datasource
             del kwargs["datasource"]
         for arg in args:
             assert not isinstance(arg, DataSource), "DataSource must be a keyword argument"
@@ -618,8 +663,13 @@ class ServerProxy:
         else:
             req_str  = JsonRpc20.dumps_request( methodname, kwargs, id )
 
-        resp_str, result_data_source = self.__transport.sendrecv( req_str, datasource)
+        try:
+            self.caller_progress_callback = progress_callback
+            resp_str, result_data_source = self.__transport.sendrecv( req_str, datasource)
+        finally:
+            self.caller_progress_callback = None
         if result_data_source:
+            self.active_download_datasource = result_data_source
             return result_data_source
         resp = JsonRpc20.loads_response( resp_str, self.allowed_exceptions)
         return resp[0]
@@ -648,7 +698,13 @@ class _method:
             raise AttributeError("invalid attribute '%s'" % name)
         return _method(self.__req, "%s.%s" % (self.__name, name))
     def __call__(self, *args, **kwargs):
-        return self.__req(self.__name, args, kwargs)
+        cb = None
+        if "progress_callback" in kwargs:
+            # Let's replace the callable object with a string
+            # placeholder so that the RPC can proceed normally.
+            cb = kwargs["progress_callback"]
+            kwargs["progress_callback"] = "progress_callback"
+        return self.__req(self.__name, args, kwargs, progress_callback = cb)
 
 #=========================================
 # server side: Server
@@ -708,7 +764,7 @@ class RpcHandler:
         else:
             self.funcs[name] = function
 
-    def handle(self, rpcstr, incoming_data_source):
+    def handle(self, rpcstr, incoming_data_source, progress_callback):
         """Handle a RPC-Request.
 
         :Parameters:
@@ -739,6 +795,9 @@ class RpcHandler:
             if isinstance(params, dict):
                 if incoming_data_source:
                     params['datasource'] = incoming_data_source
+                #print self.funcs[method], inspect.getargspec(self.funcs[method])
+                if "progress_callback" in inspect.getargspec(self.funcs[method]).args:
+                    params["progress_callback"] = progress_callback
                 result = self.funcs[method]( **params )
             else:
                 if incoming_data_source:     
