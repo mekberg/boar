@@ -31,11 +31,14 @@ import random, time
 
 from common import *
 from boar_common import *
-from blobreader import create_blob_reader
+import blobreader
 from jsonrpc import FileDataSource
 from boar_exceptions import *
+from blobreader import create_blob_reader
 
-LATEST_REPO_FORMAT = 4
+import deduplication
+
+LATEST_REPO_FORMAT = 5
 REPOID_FILE = "repoid.txt"
 VERSION_FILE = "version.txt"
 RECOVERYTEXT_FILE = "recovery.txt"
@@ -45,7 +48,9 @@ SESSIONS_DIR = "sessions"
 RECIPES_DIR = "recipes"
 TMP_DIR = "tmp"
 DERIVED_DIR = "derived"
-DERIVED_SHA256_DIR = "derived/sha256"
+DERIVED_SHA256_DIR = os.path.join(DERIVED_DIR, "sha256")
+DERIVED_BLOCKS_DIR = os.path.join(DERIVED_DIR, "blocks")
+DERIVED_BLOCKS_DB = os.path.join(DERIVED_BLOCKS_DIR, "blocks.db")
 DELETE_MARKER = "deleted.json"
 
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
@@ -57,6 +62,10 @@ REPO_DIRS_V3 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
 REPO_DIRS_V4 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
     DERIVED_DIR)
+REPO_DIRS_V5 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
+    DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR)
+
+DEDUP_BLOCK_SIZE = 2**16
 
 recoverytext = """Repository format v%s
 
@@ -132,24 +141,25 @@ def integrity_assert(test, errormsg = None):
     if not test:
         raise CorruptionError(errormsg)
 
-def create_repository(repopath):
+def create_repository(repopath, enable_deduplication = False):
+    if enable_deduplication and not deduplication.dedup_available:
+        # Ok, we COULD create a deduplicated repo without the module,
+        # but the user is likely to be confused when he cannot use it.
+        raise UserError("Cannot create deduplicated repository: deduplication module is not installed")
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
-    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR:
+    for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR:
         os.mkdir(os.path.join(repopath, d))
     create_file(os.path.join(repopath, "recovery.txt"), recoverytext)
     create_file(os.path.join(repopath, REPOID_FILE), generate_random_repoid())
-
-def is_recipe_filename(filename):
-    filename_parts = filename.split(".")
-    return len(filename_parts) == 2 \
-        and filename_parts[1] == "recipe" \
-        and is_md5sum(filename_parts[0])
+    if enable_deduplication:
+        with open(os.path.join(repopath, "ENABLE_DEDUPLICATION"), "wb"):
+            pass
 
 def looks_like_repo(repo_path):
     """Superficial check to see if the given path contains anything
     resembling a repo of any version."""
-    assert LATEST_REPO_FORMAT == 4 # Look through this function when updating format
+    assert LATEST_REPO_FORMAT == 5 # Look through this function when updating format
     for dirname in (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR):
         dirpath = os.path.join(repo_path, dirname)
         if not (os.path.exists(dirpath) and os.path.isdir(dirpath)):
@@ -159,6 +169,15 @@ def looks_like_repo(repo_path):
 def has_pending_operations(repo_path):
     dirpath = os.path.join(repo_path, QUEUE_DIR)
     return len(os.listdir(dirpath)) != 0
+
+def get_recipe_md5(recipe_filename):
+    md5 = recipe_filename.split(".")[0]
+    assert is_md5sum(md5)
+    return md5
+
+BlocksDB = deduplication.FakeBlocksDB
+if deduplication.dedup_available:
+    BlocksDB = deduplication.BlocksDB
 
 class Repo:
     def __init__(self, repopath):
@@ -176,22 +195,26 @@ class Repo:
         self.scanners = ()
         self.repo_mutex = FileMutex(os.path.join(repopath, TMP_DIR), "__REPOLOCK__")
         misuse_assert(os.path.exists(self.repopath), "No such directory: %s" % (self.repopath))
-
-        self.readonly = False
+        self.readonly = os.path.exists(os.path.join(repopath, "READONLY"))
         if not isWritable(os.path.join(repopath, TMP_DIR)):
             if self.get_queued_session_id() != None:
                 raise UserError("Repo is write protected with pending changes. Cannot continue.")
-            if self.__get_repo_version() not in (0, 1, 2, 3, 4):
+            if self.__get_repo_version() not in (0, 1, 2, 3, 4, 5):
                 # Intentional explicit counting so that we'll remember to check compatability with future versions
                 raise UserError("Repo is write protected and from an unsupported older version of boar. Cannot continue.")
             notice("Repo is write protected - only read operations can be performed")
             self.readonly = True
+
+        if self.deduplication_enabled() and not deduplication.dedup_available:
+            self.readonly = True
+            notice("This repository requires the native deduplication module for writing - only read operations can be performed.")
 
         if not self.readonly:
             self.repo_mutex.lock_with_timeout(60)
             try:
                 self.__upgrade_repo()
                 self.__quick_check()
+                self.blocksdb = BlocksDB(os.path.join(self.repopath, DERIVED_BLOCKS_DB), DEDUP_BLOCK_SIZE)
                 self.process_queue()
             finally:
                 self.repo_mutex.release()
@@ -217,14 +240,17 @@ class Repo:
         if repo_version != LATEST_REPO_FORMAT:
             raise UserError("Repo version %s can not be handled by this version of boar" % repo_version)
         assert_msg = "Repository at %s is missing vital files. (Is it really a repository?)" % self.repopath
-        assert LATEST_REPO_FORMAT == 4 # Check below must be updated when repo format changes
-        for directory in REPO_DIRS_V4:
+        assert LATEST_REPO_FORMAT == 5 # Check below must be updated when repo format changes
+        for directory in REPO_DIRS_V5:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
         integrity_assert(os.path.exists(os.path.join(self.repopath, REPOID_FILE)), 
                          "Repository at %s does not have an identity file." % self.repopath)
 
     def allows_permanent_erase(self):
         return os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
+
+    def deduplication_enabled(self):
+        return os.path.exists(os.path.join(self.repopath, "ENABLE_DEDUPLICATION"))
 
     def __upgrade_repo(self):
         assert not self.readonly, "Repo is read only, cannot upgrade"
@@ -247,7 +273,9 @@ class Repo:
         if self.__get_repo_version() == 3:
             self.__upgrade_repo_v3()
             assert self.__get_repo_version() == 4
-
+        if self.__get_repo_version() == 4:
+            self.__upgrade_repo_v4()
+            assert self.__get_repo_version() == 5
         try:
             self.__quick_check()
         except:
@@ -373,8 +401,34 @@ class Repo:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
 
+    def __upgrade_repo_v4(self):
+        """ This upgrade will perform the following actions:
+        * Update "version.txt" to 5
+        """
+        assert not self.readonly, "Repo is read only, cannot upgrade"
+        version = self.__get_repo_version()
+        assert version == 4
+        if not isWritable(self.repopath):
+            raise UserError("Cannot upgrade repository - write protected")
+        for directory in REPO_DIRS_V4:
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), \
+                                 "Repository says it is v4 format but is missing %s" % directory)
+        try:
+            if not dir_exists(os.path.join(self.repopath, DERIVED_BLOCKS_DIR)):
+                os.mkdir(os.path.join(self.repopath, DERIVED_BLOCKS_DIR))
+            if not dir_exists(os.path.join(self.repopath, RECIPES_DIR)):
+                os.mkdir(os.path.join(self.repopath, RECIPES_DIR))
+            replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
+            replace_file(os.path.join(self.repopath, VERSION_FILE), "5")
+        except OSError, e:
+            raise UserError("Upgrade could not complete. Make sure that the repository "+
+                            "root is writable and try again. The error was: '%s'" % e)
+
     def get_path(self, subdir, *parts):
         return os.path.join(self.repopath, subdir, *parts)
+
+    def get_tmpdir(self):
+        return self.get_path(TMP_DIR)
 
     def get_repo_identifier(self):
         """Returns the identifier for the repo, or None if the
@@ -416,11 +470,19 @@ class Repo:
         assert is_md5sum(sum), "Was: %s" % (sum)
         return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
 
+    def has_block(self, sha):
+        return self.blocksdb.has_block(sha)
+
+    def get_block_location(self, sha):
+        blob, offset = self.blocksdb.get_blob_location(sha)
+        assert self.has_raw_blob(blob)
+        return blob, offset
+
     def get_recipe_path(self, recipe):
         if is_recipe_filename(recipe):
-            recipe = recipe.split(".")[0]
+            recipe = get_recipe_md5(recipe)
         assert is_md5sum(recipe)
-        return os.path.join(self.repopath, RECIPES_DIR, recipe + ".recipe")
+        return os.path.join(self.repopath, RECIPES_DIR, recipe[0:2], recipe + ".recipe")
 
     def has_raw_blob(self, sum):
         """Returns true if there is an actual (non-recipe based)
@@ -442,7 +504,14 @@ class Repo:
         recpath = self.get_recipe_path(sum)
         if not os.path.exists(recpath):
             return None
-        recipe = read_json(f)
+        try:
+            recipe = read_json(recpath)
+        except ValueError:
+            raise CorruptionError("Recipe is malformed: %s" % recpath)
+        if "md5sum" not in recipe:
+            raise CorruptionError("Recipe is missing properties: %s" % recpath)
+        if recipe['md5sum'] != sum:
+            raise CorruptionError("Recipe name does not match recipe contents: %s" % recpath)
         return recipe
 
     def get_blob_size(self, sum):
@@ -455,41 +524,29 @@ class Repo:
             raise ValueError("No such blob or recipe exists: "+sum)
         return long(recipe['size'])
 
-    def get_blob_reader(self, sum, offset = 0, size = -1):
+    def get_blob_reader(self, sum, offset = 0, size = None):
+        """ Returns a blob reader object that can be used to stream
+        the requested data. """
+        assert offset >= 0, offset
+        assert size == None or size >= 0, size
         if self.has_raw_blob(sum):
             blobsize = self.get_blob_size(sum)
-            if size == -1:
+            if size == None:
                 size = blobsize
-            assert blobsize <= offset + size
+            assert offset + size <= blobsize
             path = self.get_blob_path(sum)
             fo = safe_open(path, "rb")
             fo.seek(offset)
             return FileDataSource(fo, size)
         recipe = self.get_recipe(sum)
         if recipe:
-            assert False, "Recipes not implemented yet"
+            reader = blobreader.RecipeReader(recipe, self, offset=offset, size=size)
+            return reader
         raise ValueError("No such blob or recipe exists: "+sum)
-
-    def get_blob(self, sum, offset = 0, size = -1):
-        """ Returns None if there is no such blob """
-        if self.has_raw_blob(sum):
-            path = self.get_blob_path(sum)
-            with safe_open(path, "rb") as f:
-                f.seek(offset)
-                data = f.read(size)
-            return data
-        recipe = self.get_recipe(sum)
-        if recipe:
-            reader = create_blob_reader(recipe, self)
-            reader.seek(offset)
-            return reader.read(size)
-        else:
-            raise ValueError("No such blob or recipe exists: "+sum)
 
     def get_session_path(self, session_id):
         assert isinstance(session_id, int)
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
-
         
     def get_all_sessions(self):
         return get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
@@ -535,8 +592,8 @@ class Repo:
             self.session_readers[id] = sessions.SessionReader(self, self.get_session_path(id))
         return self.session_readers[id]
 
-    def create_session(self, session_name, base_session = None, session_id = None, force_base_snapshot = False):
-        misuse_assert(not self.readonly, "Cannot create a session in a write protected repo")
+    def create_snapshot(self, session_name, base_session = None, session_id = None, force_base_snapshot = False):
+        misuse_assert(not self.readonly, "Repository is read-only")
         assert isinstance(session_name, unicode)
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
@@ -563,7 +620,7 @@ class Repo:
     def find_next_session_id(self):
         return self.get_highest_used_revision() + 1
 
-    def get_blob_names(self):
+    def get_raw_blob_names(self):
         blobpattern = re.compile("/([0-9a-f]{32})$")
         assert blobpattern.search("b5/b5fb453aeaaef8343353cc1b641644f9")
         tree = get_tree(os.path.join(self.repopath, BLOB_DIR))
@@ -574,33 +631,103 @@ class Repo:
                 matches.add(m.group(1))
         return list(matches)
 
-    def get_orphan_blobs(self):
+    def get_recipe_names(self):
+        recipepattern = re.compile("([0-9a-f]{32})([.]recipe)$")
+        assert recipepattern.search("b5fb453aeaaef8343353cc1b641644f9.recipe")
+        tree = get_tree(os.path.join(self.repopath, RECIPES_DIR))
+        matches = set()
+        for f in tree:
+            m = recipepattern.search(f)
+            if m:
+                matches.add(m.group(1))
+        return list(matches)
+
+    def get_stats(self):
+        result = []
+        result.append(('number_of_snapshots', len(self.get_all_sessions())))
+        result.append(('number_of_user_files', len(self.get_all_level_1_blobs())))
+        result.append(('number_of_raw_blobs', len(self.get_raw_blob_names())))
+        result.append(('number_of_recipes', len(self.get_recipe_names())))
+        virtual_size = sum([self.get_blob_size(md5) for md5 in self.get_all_level_1_blobs()])
+        actual_size = sum([self.get_blob_size(md5) for md5 in self.get_raw_blob_names()])
+        result.append(('virtual_size', virtual_size))
+        result.append(('actual_size', actual_size))
+        try:
+            result.append(('dedup_removed_percentage', 
+                           round((1.0 - 1.0 * actual_size / virtual_size) * 100, 2)))
+        except ZeroDivisionError:
+            result.append(('dedup_removed_percentage', None))
+
+        try:
+            result.append(('dedup_blocksdb_size', os.path.getsize(os.path.join(self.repopath, DERIVED_BLOCKS_DB))))
+        except:
+            result.append(('dedup_blocksdb_size', None))
+
+        return result
+
+    def get_all_level_1_blobs(self):
+        """Return a set of all blobs and recipes that are directly
+        referred to by any snapshot. (This excludes blobs only used in
+        recipes) This method takes into account any pending new
+        snapshot as well."""
+
         used_blobs = set()
         for sid in self.get_all_sessions():
             snapshot = self.get_session(sid)
             for blobinfo in snapshot.get_raw_bloblist():
                 if 'md5sum' in blobinfo:
                     used_blobs.add(blobinfo['md5sum'])
+
         if self.get_queued_session_id():
             # Must ensure that any queued new snapshot is considered as well
-            queued_session = sessions.SessionReader(None, self.get_path(QUEUE_DIR, str(self.get_queued_session_id())))
+            queue_dir = self.get_path(QUEUE_DIR, str(self.get_queued_session_id()))
+            queued_session = sessions.SessionReader(None, queue_dir)
             for blobinfo in queued_session.get_raw_bloblist():
-                if 'md5sum' in blobinfo:
+                if 'md5sum' in blobinfo and blobinfo.get("action", None) == None:
                     used_blobs.add(blobinfo['md5sum'])
-        orphans = set(self.get_blob_names()) - used_blobs
+
+        return used_blobs
+
+    def get_orphan_blobs(self):
+        """Returns a list of all blobs (recipes and raw blobs) that
+        exists in the repo but aren't referred to by any
+        snapshot. This method asserts that it must not be called
+        during the processing of a commit containing new blobs or
+        recipes."""
+
+        queue_dir = self.get_path(QUEUE_DIR, str(self.get_queued_session_id()))
+        if self.get_queued_session_id():
+            # We simply has no need for this case right now. Just make
+            # sure it is clear that we don't support it.
+            for item in os.listdir(queue_dir):
+                assert not (is_recipe_filename(item) or is_md5sum(item)), \
+                    "get_orphan_blobs() must not be called while a non-truncate commit is in progress"
+
+        used_blobs = self.get_all_level_1_blobs()
+        for blob in set(used_blobs):
+            recipe = self.get_recipe(blob)
+            if recipe:
+                for piece in recipe['pieces']:
+                    used_blobs.add(piece['source'])
+        
+        orphans = set()
+        orphans.update(self.get_raw_blob_names())
+        orphans.update(self.get_recipe_names())
+        orphans -= used_blobs
         return orphans
 
     def verify_blob(self, sum):
         recipe = self.get_recipe(sum)
+        md5_summer = hashlib.md5()
         if recipe:
-            assert False, "recipes not implemented"
-            #reader = create_blob_reader(recipe, self)
-            #verified_ok = (sum == md5sum_file(reader))
+            reader = create_blob_reader(recipe, self)
+            while reader.bytes_left():
+                md5_summer.update(reader.read(4096))
+            return sum == md5_summer.hexdigest()
         if not self.has_raw_blob(sum):
             raise ValueError("No such blob or recipe: " + sum)
         path = self.get_blob_path(sum)
         with safe_open(path, "rb") as f:
-            md5_summer = hashlib.md5()
             for block in file_reader(f):
                 md5_summer.update(block)
             md5 = md5_summer.hexdigest()
@@ -608,9 +735,9 @@ class Repo:
         return verified_ok 
 
     def find_redundant_raw_blobs(self):
-        all_blobs = self.get_blob_names()
+        all_blobs = self.get_raw_blob_names()
         for blob in all_blobs:
-            if self.has_recipe_blob(blob) and self.has_raw_blob(blob):
+            if self.has_recipe_blob(blob):
                 yield blob
 
     def get_queued_session_id(self):
@@ -623,17 +750,17 @@ class Repo:
         assert result > 0, "Corrupted queue directory - illegal session id"
         return result
 
-    def consolidate_snapshot(self, session_path, forced_session_id = None):
+    def consolidate_snapshot(self, session_path, forced_session_id = None, progress_callback = lambda f: None):
         assert isinstance(session_path, unicode)
         assert forced_session_id == None or isinstance(forced_session_id, int)
         assert not self.readonly, "Cannot consolidate because repo is read-only"
         self.repo_mutex.lock_with_timeout(60)
         try:
-            return self.__consolidate_snapshot(session_path, forced_session_id)
+            return self.__consolidate_snapshot(session_path, forced_session_id, progress_callback)
         finally:
             self.repo_mutex.release()
 
-    def __consolidate_snapshot(self, session_path, forced_session_id):
+    def __consolidate_snapshot(self, session_path, forced_session_id, progress_callback):
         assert isinstance(session_path, unicode)
         assert self.repo_mutex.is_locked()
         assert not self.get_queued_session_id()
@@ -647,7 +774,7 @@ class Repo:
         queue_dir = self.get_queue_path(session_id)
         assert not os.path.exists(queue_dir), "Queue entry collision: %s" % queue_dir
         shutil.move(session_path, queue_dir)
-        self.process_queue()
+        self.process_queue(progress_callback = progress_callback)
         return session_id
 
     def get_referring_snapshots(self, rev):
@@ -661,7 +788,7 @@ class Repo:
                 result.append(rev)
         return result
 
-    def __erase_snapshots(self, snapshot_ids):
+    def _erase_snapshots(self, snapshot_ids):
         assert self.repo_mutex.is_locked()
         if not snapshot_ids:
             # Avoid check for erase permissions if not erasing anything
@@ -680,6 +807,7 @@ class Repo:
             except OSError, e:
                 if e.errno == 13:
                     raise UserError("Snapshot %s is write protected, cannot erase. Change your repository file permissions and try again." % rev)
+                raise
 
     def __erase_snapshot(self, rev, trashdir):
         # Carefully here... We must allow for a resumed operation 
@@ -703,7 +831,7 @@ class Repo:
         for filename in "session.json", "bloblist.json", "session.md5", session_data['fingerprint'] + ".fingerprint":
             full_path = os.path.join(session_path, filename)
             if os.path.exists(full_path):
-                os.unlink(full_path)
+                unsafe_delete(full_path)
 
         _snapshot_delete_test_hook(rev)
 
@@ -720,52 +848,234 @@ class Repo:
         misuse_assert(not self.readonly, "Cannot erase blobs from a write protected repo")
         orphan_blobs = self.get_orphan_blobs()
         trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_blobs_", dir = self.get_path(TMP_DIR))
+
+        self.blocksdb.begin()
+        self.blocksdb.delete_blocks([blob for blob in orphan_blobs if self.has_raw_blob(blob)])
+        self.blocksdb.commit()            
+
         for blob in orphan_blobs:
-            os.rename(self.get_blob_path(blob), os.path.join(trashdir, blob))
+            if self.has_recipe_blob(blob):
+                recipe_path = self.get_recipe_path(blob)
+                os.rename(recipe_path, os.path.join(trashdir, blob + ".recipe"))
+            elif self.has_raw_blob(blob):
+                os.rename(self.get_blob_path(blob), os.path.join(trashdir, blob))
+            else:
+                warn("Tried to erase a non-existing blob: %s" % blob)
         return len(orphan_blobs)
 
-    def process_queue(self):
+    def process_queue(self, progress_callback = lambda x: None):
+        progress_callback(.0)
+        sw = StopWatch(enabled=False, name="process_queue")
         assert self.repo_mutex.is_locked()
         assert not self.readonly, "Repo is read only, cannot process queue"
         session_id = self.get_queued_session_id()
         if session_id == None:
             return
         queued_item = self.get_queue_path(session_id)
-        items = os.listdir(queued_item)
+        progress_callback(.01)
+        sw.mark("Lock mutex and init")
 
-        # Check the checksums of all blobs
-        for filename in items:
-            if not is_md5sum(filename):
-                continue
-            blob_path = os.path.join(queued_item, filename)
-            assert filename == md5sum_file(blob_path), "Invalid blob found in queue dir:" + blob_path
-    
-        # Check the existence of all required files
-        # TODO: check the contents for validity
-        meta_info = read_json(os.path.join(queued_item, "session.json"))
+        transaction = Transaction(self, queued_item)
+        transaction.verify_meta()
+        progress_callback(.02)
+        sw.mark("Meta check 1")
+
+        transaction.trim()
+        sw.mark("Trim")
+        progress_callback(.10)
+
+        number_of_blobs = len(transaction.get_raw_blobs())
+        number_of_recipes = len(transaction.get_recipes())
+
+        # We have 0.8 progress to split between blobs and recipes
+        blob_ratio   = 0.8 * calculate_progress(number_of_blobs + number_of_recipes, number_of_blobs)
+        recipe_ratio = 0.8 * calculate_progress(number_of_blobs + number_of_recipes, number_of_recipes)
+        ph = ProgressHelper(start_f = .10, progress_callback = progress_callback)
         
-        contents = os.listdir(queued_item)
+        transaction.verify_blobs(ph.partial_progress(blob_ratio))
+        sw.mark("Verify blobs")
+
+        transaction.verify_recipes(ph.partial_progress(recipe_ratio))
+        sw.mark("Verify recipes")
+
+        transaction.verify_meta()
+        sw.mark("Meta check 2")
+
+        # Everything seems OK, move the blobs and consolidate the session
+        transaction.integrate_files()
+        sw.mark("Files integrated")
+        
+        transaction.integrate_deletions()
+        sw.mark("Deletions integrated")
+
+        progress_callback(.95)
+        transaction.integrate_blocks()
+        progress_callback(.99)
+        sw.mark("Block specifications inserted")
+
+
+        session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
+        assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
+        self._before_transaction_completion()
+        shutil.move(queued_item, session_path)
+        assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
+        progress_callback(1.0)
+        sw.mark("done")
+
+    def _before_transaction_completion(self):
+        """This method is called before the final transaction
+        completion stage. It is intended to be overridden for whitebox
+        testing."""
+        pass
+
+
+class Transaction:
+    
+    def __init__(self, repo, transaction_dir):
+        self.repo = repo
+        self.path = transaction_dir
+        self.session_reader = sessions.SessionReader(repo, self.path)
+
+    def integrate_deletions(self):
         snapshots_to_delete = []
+        snapshots_to_delete_file = os.path.join(self.path, "delete.json")
+        if os.path.exists(snapshots_to_delete_file):
+            # Intentionally redundant check for erase enable flag
+            assert os.path.exists(os.path.join(self.repo.repopath, "ENABLE_PERMANENT_ERASE"))
+            snapshots_to_delete = read_json(snapshots_to_delete_file)
+            self.repo._erase_snapshots(snapshots_to_delete)
+
+        if os.path.exists(os.path.join(self.path, "delete.json")):
+            self.repo.erase_orphan_blobs()
+            safe_delete_file(os.path.join(self.path, "delete.json"))
+
+
+    def integrate_files(self):
+        for filename in os.listdir(self.path):
+            if is_md5sum(filename):
+                # Any redundant blobs should have been trimmed above
+                assert not self.repo.has_blob(filename)
+                blob_to_move = os.path.join(self.path, filename)
+                destination_path = self.repo.get_blob_path(filename)
+                move_file(blob_to_move, destination_path, mkdirs = True)
+            elif is_recipe_filename(filename):
+                # Any redundant recipes should have been trimmed above
+                assert not self.repo.has_blob(get_recipe_md5(filename))
+                recipe_to_move = os.path.join(self.path, filename)
+                destination_path = self.repo.get_recipe_path(filename)
+                move_file(recipe_to_move, destination_path, mkdirs = True)
+            else:
+                pass # The rest becomes a snapshot definition directory
+
+
+    def integrate_blocks(self):
+        blocksdb = self.repo.blocksdb
+        blocks_fname = os.path.join(self.path, "blocks.json")
+        if not os.path.exists(blocks_fname):
+            return
+        blocks = read_json(blocks_fname)
+        blocksdb.begin()
+        for block_spec in blocks:
+            blob_md5, offset, rolling, sha256 = block_spec
+            # Possibly another commit sneaked in a recipe while we
+            # were looking the other way. Let's be lenient for now.
+
+            # assert self.has_raw_blob(blob_md5), "Tried to register a
+            # block for non-existing blob %s" % blob_md5
+            if self.repo.has_raw_blob(blob_md5):
+                blocksdb.add_block(blob_md5, offset, sha256)
+                blocksdb.add_rolling(rolling)
+        blocksdb.commit()
+        safe_delete_file(blocks_fname)
+        
+
+    def get_raw_blobs(self):
+        """Returns a list of all raw blobs that are present in the transaction directory"""
+        return [fn for fn in os.listdir(self.path) if is_md5sum(fn)]
+
+    def get_recipes(self):
+        """Returns a list of all blob recipes that are present in the
+        transaction directory."""
+        return [get_recipe_md5(fn) for fn in os.listdir(self.path) if is_recipe_filename(fn)]
+
+    def get_path(self, filename):
+        """Returns the full path to a filename in this transaction directory."""
+        assert os.path.dirname(filename) == ""
+        return os.path.join(self.path, filename)
+    
+    def get_recipe_path(self, md5):
+        """Returns the full path to a recipe in this transaction directory."""
+        assert is_md5sum(md5)
+        return self.get_path(md5 + ".recipe")
+
+    def verify_blobs(self, progress_callback = lambda x: None): 
+        """Read and checksum all raw blobs in the transaction. An
+        assertion error is raised if any errors are found."""
+        raw_blobs = self.get_raw_blobs()
+        for n, blob in enumerate(raw_blobs):
+            full_path = self.get_path(blob)
+            pp = PartialProgress(float(n) / float(len(raw_blobs)), float(n+1) / float(len(raw_blobs)), progress_callback)
+            size = os.path.getsize(full_path)
+            assert blob == md5sum_file(full_path, 
+                                       end=size, 
+                                       progress_callback=pp), "Invalid blob found in queue dir:" + full_path
+            assert os.path.getsize(full_path) == size
+            #progress_callback((1.0*n+1)/len(raw_blobs))
+
+    def verify_recipes(self, progress_callback = lambda x: None):
+        """Read and checksum all recipes in the transaction. An
+        assertion error is raised if any errors are found."""        
+        for recipe_blob in self.get_recipes():
+            full_path = self.get_recipe_path(recipe_blob)
+            md5summer = hashlib.md5()
+            recipe = read_json(full_path)
+            reader = blobreader.RecipeReader(recipe, self.repo, local_path=self.path)
+            while reader.bytes_left():
+                # DEDUP_BLOCK_SIZE should fit the data nicely, as
+                # a recipe will be chunked suchwise.
+                md5summer.update(reader.read(DEDUP_BLOCK_SIZE))
+            assert recipe_blob == md5summer.hexdigest(), "Invalid recipe found in queue dir:" + full_path
+        
+
+    def verify_meta(self):
+        """Check the existence of all required files in the
+        transaction and make sure everything is consistent. This
+        method does not verify the integrity of blobs or recipes."""
+        # TODO: check the contents for validity
+        meta_info = read_json(self.get_path("session.json"))
+        contents = os.listdir(self.path)
+
+        has_recipes = False
+        has_blobs = False
+        has_delete = False
 
         # Check that there are no unexpected files in the snapshot,
         # and perform a simple test for json well-formedness
         for filename in contents:
             if is_md5sum(filename): 
+                has_blobs = True
                 continue # Blob
             if filename == meta_info['fingerprint']+".fingerprint":
                 continue # Fingerprint file
             if filename in ["session.json", "bloblist.json"]:
-                read_json(os.path.join(queued_item, filename)) # Check if malformed
+                read_json(self.get_path(filename)) # Check if malformed
                 continue
             if filename in ["session.md5"]:
                 continue
             if is_recipe_filename(filename):
-                read_json(os.path.join(queued_item, filename)) # Check if malformed
+                read_json(self.get_path(filename)) # Check if malformed
+                has_recipes = True
                 continue
             if filename == "delete.json":
-                snapshots_to_delete = read_json(os.path.join(queued_item, "delete.json"))
+                read_json(self.get_path("delete.json"))
+                has_delete = True
+                continue
+            if filename == "blocks.json":
+                read_json(self.get_path("blocks.json"))
                 continue
             assert False, "Unexpected file in new session:" + filename
+        if has_delete:
+            assert not (has_blobs or has_recipes), "Truncation commits must not contain any blobs or recipes"
 
         # Check that all necessary files are present in the snapshot
         assert set(contents) >= \
@@ -773,38 +1083,25 @@ class Repo:
                      "session.json", "bloblist.json", "session.md5"]), \
                      "Missing files in queue dir: "+str(contents)
 
-        # Everything seems OK, move the blobs and consolidate the session
-        for filename in items:
-            if is_md5sum(filename):
-                blob_to_move = os.path.join(queued_item, filename)
-                destination_path = self.get_blob_path(filename)
-                # Check for existence before moving. Another
-                # snapshot might have checked in this same file
-                # concurrently, see issue 70.
-                if os.path.exists(destination_path):
-                    os.remove(blob_to_move)
-                else:
-                    move_file(blob_to_move, destination_path, mkdirs = True)
-            elif is_recipe_filename(filename):
-                recipe_to_move = os.path.join(queued_item, filename)
-                destination_path = self.get_recipe_path(filename)
-                move_file(recipe_to_move, destination_path, mkdirs = True)
+    def trim(self):
+        """Some items in the transaction may have become redundant due
+        to commits that have occured since we started this
+        commit. Trim them away."""
+        used_blobs = set() # All the blobs that this commit must have
+        for blobinfo in self.session_reader.get_raw_bloblist():
+            if 'action' not in blobinfo:
+                used_blobs.add(blobinfo['md5sum'])
+
+        for recipe_blob in self.get_recipes():
+            assert recipe_blob in used_blobs            
+            if self.repo.has_recipe_blob(recipe_blob) or self.repo.has_raw_blob(recipe_blob):
+                safe_delete_recipe(self.get_recipe_path(recipe_blob))
             else:
-                pass # The rest becomes a snapshot definition directory
-
-        if snapshots_to_delete:
-            # Intentionally redundant check for erase enable flag
-            assert os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
-            self.__erase_snapshots(snapshots_to_delete)
-        if os.path.exists(os.path.join(queued_item, "delete.json")):
-            self.erase_orphan_blobs()
-            safe_delete_file(os.path.join(queued_item, "delete.json"))
-
-        session_path = os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
-        assert not os.path.exists(session_path), "Session path already exists: %s" % session_path
-        shutil.move(queued_item, session_path)
-        assert not self.get_queued_session_id(), "Commit completed, but queue should be empty after processing"
-
+                used_blobs.update(get_recipe_blobs(self.get_recipe_path(recipe_blob)))
+        
+        for blob in self.get_raw_blobs():
+            if self.repo.has_blob(blob) or blob not in used_blobs:
+                safe_delete_blob(self.get_path(blob))
 
 def get_all_ids_in_directory(path):
     result = []
@@ -815,6 +1112,14 @@ def get_all_ids_in_directory(path):
     assert len(result) == len(set(result))
     result.sort()
     return result
+
+def get_recipe_blobs(recipe_filename):
+    result = set()
+    recipe = read_json(recipe_filename)
+    for piece in recipe['pieces']:
+        result.add(piece['source'])
+    return result
+
 
 def _snapshot_delete_test_hook(rev):
     """ This method is intended to be replaced during testing to

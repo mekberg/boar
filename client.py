@@ -86,7 +86,9 @@ def create_boar_proxy(from_server, to_server):
             if type(obj) == type and issubclass(obj, Exception):
                 allowed_exceptions.append(obj)
 
-    server = jsonrpc.ServerProxy(jsonrpc.BoarMessageClient(from_server, to_server), allowed_exceptions)
+    cb = lambda x: sys.stdout.write("Progress: %s%%" % (x*100))
+    transport = jsonrpc.BoarMessageClient(from_server, to_server)
+    server = jsonrpc.ServerProxy(transport=transport, allowed_exceptions=allowed_exceptions)
 
     try:
         assert server.ping() == "pong"
@@ -127,9 +129,22 @@ def connect_ssh(url):
     else:
         raise UserError("Not a valid boar ssh URL: "+str(url))
     ssh_cmd = __get_ssh_command()
-    cmd = '%s "%s" boar serve -S "%s"' % (ssh_cmd, host, path)
+    boar_cmd = "boar"
+    if os.getenv("BOAR_SERVER_CLI"):
+        boar_cmd = os.getenv("BOAR_SERVER_CLI")
+
+    # Propagate any useful environment in this space-separated list
+    env = "BOAR_DUMMY=1"
+
+    # Propagate BOAR_DISABLE_DEDUP to enable remote testing
+    # with/without dedup module
+    if os.getenv("BOAR_DISABLE_DEDUP") == "1":
+        env += " " + "BOAR_DISABLE_DEDUP=1"
+
+    cmd = '%s "%s" %s "%s" serve -S "%s"' % (ssh_cmd, host, env, boar_cmd, path)
     if user:
-        cmd = '%s -l "%s" "%s" boar serve -S "%s"' % (ssh_cmd, user, host, path)
+        cmd = '%s -l "%s" "%s" %s "%s" serve -S "%s"' % (ssh_cmd, user, host, env, boar_cmd, path)
+
     return _connect_cmd(cmd)
 
 def connect_tcp(url):

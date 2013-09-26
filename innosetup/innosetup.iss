@@ -2,11 +2,9 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Boar"
-#define MyAppVersion "21-Jul-2012"
+#define MyAppVersion "16-Nov-2012"
 #define MyAppPublisher "Mats Ekberg"
 #define MyAppURL "http://www.boarvcs.com/"
-#define Win32Dir "C:\Python26\boar\boar-win32"
-#define SrcDir "C:\Python26\boar"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
@@ -27,15 +25,15 @@ AllowNoIcons=true
 OutputBaseFilename=boar-setup-win32
 Compression=lzma/Max
 SolidCompression=true
-OutputDir=C:\Python26
+OutputDir=..
 ChangesEnvironment=true
-InfoAfterFile="{#SrcDir}\innosetup\post-install-message.txt"
+InfoAfterFile="post-install-message.txt"
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "{#Win32Dir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]

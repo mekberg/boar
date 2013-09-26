@@ -46,7 +46,7 @@ METADIR = ".boar"
 CCACHE_FILE = "ccache.db"
 
 class Workdir:
-    def __init__(self, repoUrl, sessionName, offset, revision, root):
+    def __init__(self, repoUrl, sessionName, offset, revision, root, front = None):
         assert repoUrl == None or isinstance(repoUrl, unicode)
         assert isinstance(sessionName, unicode)
         assert isinstance(offset, unicode)
@@ -61,9 +61,15 @@ class Workdir:
         self.revision = revision
         self.root = root
         self.metadir = os.path.join(self.root, METADIR)
-        self.front = None
+        self.front = front
         self.use_progress_printer(True)
         self.__upgrade()
+
+        if os.path.exists(self.metadir):
+            # The "front" argument is a kludge to avoid connecting to
+            # the repo twice for new workdirs. Don't use it for
+            # anything else.
+            assert not front, "A front object can only be passed to an empty workdir"
 
         if self.repoUrl:
             self.front = self.get_front()
@@ -108,13 +114,20 @@ class Workdir:
 
     def __reload_tree(self):
         progress = self.ScanProgressPrinter()
-        self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False, \
-                                 progress_printer = progress)
+        try:
+            self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False, \
+                                     progress_printer = progress)
+        except UndecodableFilenameException, e:
+            raise UserError("Found a filename that is illegal under the current file system encoding (%s): '%s'" % 
+                            (sys.getfilesystemencoding(), e.human_readable_name))
         self.tree_csums == None
         self.__reload_manifests()
         
     def __reload_manifests(self):
         self.manifest = {}
+        # session_filename -> set[manifest filename, ...]
+        self.manifests_by_file = {}
+        manifests_by_file = self.manifests_by_file
         for fn in self.tree:
             if not fn.endswith((".txt", ".TXT", ".md5", ".MD5")):
                 # About 5% faster than doing the regexp every time
@@ -134,11 +147,20 @@ class Workdir:
             for md5, filename in manifest_md5sums:
                 filename = tounicode(filename)
                 session_filename = posix_path_join(dirname, filename)
+                if session_filename not in manifests_by_file:
+                    manifests_by_file[session_filename] = set()
                 if session_filename in self.manifest:
                     if self.manifest[session_filename] != md5:
-                        raise UserError("Conflicting manifests for file "+os.path.join(dirname, filename))
+                        print "Conflicting manifests found. Listing all relevant manifests scanned so far:"
+                        for mf in manifests_by_file[session_filename]:
+                            print mf
+                        print("%s (first encountered conflict)" % fn)
+                        raise UserError("Conflicting manifests for '%s'" % (
+                                os.path.join(dirname, filename)))
                 else:
                     self.manifest[session_filename] = md5                    
+                manifests_by_file[session_filename].add(fn)
+
                 
     def __get_workdir_version(self):
         version_file = os.path.join(self.metadir, VERSION_FILE)
@@ -339,6 +361,7 @@ class Workdir:
         all_files = set(included_files)
         for fn in self.manifest.keys():
             if fn not in all_files:
+                #print self.manifests_by_file[fn]
                 raise UserError("File is described in a manifest but is not present in the workdir: %s" % fn)
             wd_path = strip_path_offset(self.offset, fn)
             if self.manifest[fn] != self.cached_md5sum(wd_path):
@@ -352,6 +375,7 @@ class Workdir:
         new snapshot will be created as a modification of the snapshot
         given in the 'base_snapshot' argument."""
 
+        #print "All checksums:", front.get_all_rolling()
         # To increase the chance of detecting spurious reading errors,
         # all the files should at this point have been scanned and had
         # their checksums stored in the checksum cache. The
@@ -373,20 +397,22 @@ class Workdir:
                 raise UserError("File %s contents conflicts with manifest" % wd_path)
             try:
                 check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
-            except ConstraintViolation:
+            except ContentViolation:
                 raise UserError("File changed during commit: %s" % wd_path)
             except EnvironmentError, e:
                 if ignore_errors:
-                    warn("Ignoring unreadable file: %s" % abspath)
+                    warn("Ignoring unreadable (%s) file: %s" % (e, abspath))
                 else:
                     front.cancel_snapshot()
-                    raise UserError("Unreadable file: %s" % abspath)
+                    raise UserError("Unreadable (%s) file: %s" % (e, abspath))
 
         for f in deleted_files:
             print >>self.output, "Deleting", f
             front.remove(f)
 
-        self.revision = front.commit(self.sessionName, log_message)
+        pp = SimpleProgressPrinter(self.output, label="Verifying and integrating commit")
+        self.revision = front.commit(session_name=self.sessionName, log_message=log_message, progress_callback=pp.update)
+        pp.finished()
         return self.revision
 
 
@@ -604,15 +630,21 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
     assert "\\" not in sessionpath, "Was: '%s'" % (sessionpath)
     assert os.path.exists(abspath), "Tried to check in file that does not exist: " + abspath
     blobinfo = create_blobinfo(abspath, sessionpath, expected_md5sum)
-    print >>log, "Sending", sessionpath
+    pp = SimpleProgressPrinter(log, u"Sending %s" % sessionpath)
     if not front.has_blob(expected_md5sum) and not front.new_snapshot_has_blob(expected_md5sum):
         # File does not exist in repo or previously in this new snapshot. Upload it.
         _send_file_hook(abspath) # whitebox testing
         with open_raw(abspath) as f:
+            #t0 = time.time()
             front.init_new_blob(expected_md5sum, blobinfo["size"])
+            #print "check_in_file: front.init_new_blob()", expected_md5sum, time.time() - t0            
             datasource = FileDataSource(f, os.path.getsize(abspath))
-            front.add_blob_data_streamed(expected_md5sum, datasource = datasource)
+            front.add_blob_data_streamed(blob_md5 = expected_md5sum, progress_callback = pp.update, datasource = datasource)
+            #print "check_in_file: front.add_blob_data_streamed()", expected_md5sum, time.time() - t0
             front.blob_finished(expected_md5sum)
+            #print "check_in_file: front.blob_finished()", expected_md5sum, time.time() - t0
+    pp.finished()
+
     front.add(blobinfo)
 
 def init_workdir(path):
@@ -660,20 +692,6 @@ def load_meta_info(metapath):
 
 def create_front(repoUrl):
     return client.connect(repoUrl)
-
-def init_repo_from_meta(path):
-    front = None
-    msg = None
-    meta = find_meta(path)
-    if not meta:
-        raise UserError("No workdir found at %s" % path)
-
-    info = load_meta_info(meta)
-    repo_path = info['repo_path']
-    session_name = info['session_name']
-    session_id = info['session_id']
-    front = create_front(repo_path)
-    return front
 
 def create_blobinfo(abspath, sessionpath, md5sum):
     assert is_md5sum(md5sum)

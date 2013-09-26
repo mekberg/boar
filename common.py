@@ -152,9 +152,11 @@ def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):
     f.seek(0, os.SEEK_END)
     real_end = f.tell()
     assert end == None or end <= real_end, "Can't read past end of file"
-    f.seek(start)
     if end == None:
         end = real_end
+    assert 0 <= end <= real_end
+    assert 0 <= start <= end
+    f.seek(start)
     bytes_left = end - start
     while bytes_left > 0:
         data = f.read(min(bytes_left, blocksize))
@@ -177,15 +179,20 @@ def md5sum(data):
     m.update(data)
     return m.hexdigest()
 
+def sha256(data):
+    m = hashlib.sha256()
+    m.update(data)
+    return m.hexdigest()
+
 def md5sum_fileobj(f, start = 0, end = None):
     """Accepts a file object and returns the md5sum."""
     return checksum_fileobj(f, ["md5"], start, end)[0]
 
-def md5sum_file(f, start = 0, end = None):
+def md5sum_file(f, start = 0, end = None, progress_callback = lambda x: None):
     """Accepts a filename or a file object and returns the md5sum."""
-    return checksum_file(f, ["md5"], start, end)[0]
+    return checksum_file(f, ["md5"], start, end, progress_callback = progress_callback)[0]
 
-def checksum_fileobj(f, checksum_names, start = 0, end = None):
+def checksum_fileobj(f, checksum_names, start = 0, end = None, progress_callback = None):
     """Accepts a file object and returns one or more checksums. The
     desired checksums are specified in a list by name in the
     'checksum_names' argument."""
@@ -194,23 +201,30 @@ def checksum_fileobj(f, checksum_names, start = 0, end = None):
         assert name in ("md5", "sha256", "sha512")
         summer = hashlib.__dict__[name]()
         checksummers.append(summer)
+    data_read = 0
     for block in file_reader(f, start, end):
+        data_read += len(block)
         assert block != "", "Got an empty read"
         for m in checksummers:
             m.update(block)
+        if progress_callback:
+            if end:
+                progress_callback(float(data_read) / (end - start))
+            else:
+                progress_callback(None)
     result = []
     for m in checksummers:
         result.append(m.hexdigest())
     return result
 
-def checksum_file(f, checksum_names, start = 0, end = None):
+def checksum_file(f, checksum_names, start = 0, end = None, progress_callback = lambda x: None):
     """Accepts a filename or a file object and returns one or more
     checksums. The desired checksums are specified in a list by name
     in the 'checksum_names' argument."""
     assert f, "File must not be None"
     if isinstance(f, basestring):
         with safe_open(f, "rb") as fobj:
-            return checksum_fileobj(fobj, checksum_names, start, end)
+            return checksum_fileobj(fobj, checksum_names, start, end, progress_callback = progress_callback)
     return checksum_fileobj(f, checksum_names, start, end)
 
 def move_file(source, destination, mkdirs = False):
@@ -417,6 +431,17 @@ class __DummyProgressPrinter:
     def update(self): pass
     def finished(self): pass
 
+class UndecodableFilenameException(Exception):
+    def __init__(self, path, filename):
+        assert type(filename) == str, "Tried to raise UndecodableFilenameException with decoded filename"
+        assert type(path) == unicode, "Tried to raise UndecodableFilenameException with non-unicode path"
+        self.human_readable_name = "%s%s%s" % (
+            path.encode(sys.getfilesystemencoding()).encode("string_escape"), os.sep, filename.encode("string_escape"))
+        Exception.__init__(self, "Path '%s' can not be decoded with the default system encoding (%s)" % 
+                           (self.human_readable_name, sys.getfilesystemencoding()))
+        self.path = path
+        self.filename = filename
+
 def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     """ Returns a simple list of all the files under the given root
     directory. Any files or directories given in the skip argument
@@ -443,7 +468,8 @@ def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
             if file_to_skip in names:
                 names.remove(file_to_skip)
         for name in names:
-            assert type(name) == unicode, "All filenames should be unicode"
+            if type(name) != unicode:
+                raise UndecodableFilenameException(dirname, name)
             try:
                 fullpath = os.path.join(dirname, name)
                 unc_path = unc_abspath(fullpath)
@@ -610,6 +636,19 @@ def encoded_stdout():
     else:
         return StreamEncoder(sys.stdout)
 
+def printable(s):
+    """Safely convert the given unicode string to a normal <str>
+    according to the preferred system encoding. Some characters may be
+    mangled if they cannot be expressed in the local encoding, but
+    under no circumstances will an encoding exception be raised."""
+    if type(s) == str:
+        return s
+    elif type(s) == unicode:
+        return s.encode(locale.getpreferredencoding(), "backslashreplace")
+    else:
+        raise ValueError("Argument must be a string or unicode")
+    
+
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all
     written strings according to the current preferred encoding, with
@@ -703,6 +742,38 @@ def FakeFile():
     """ Behaves like a file object, but does not actually do anything."""
     return open(os.path.devnull, "w")
 
+# DevNull is an alias for FakeFile
+DevNull = FakeFile
+
+class FileAsString:
+    def __init__(self, fo):
+        self.fo = fo
+        self.fo.seek(0, 2)
+        self.size = self.fo.tell()
+        
+    def __len__(self):
+        return self.size
+    
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            start, stop, step = index.start, index.stop, index.step
+            assert step == None
+            if stop == VERY_LARGE_NUMBER:
+                stop = self.size
+        else:
+            start = index
+            stop = start + 1
+        assert 0 <= start <= stop <= self.size, (start, stop, step, self.size)
+        self.fo.seek(start)
+        return self.fo.read(stop - start)
+    
+    def append(self, s):
+        self.fo.seek(0, 2)
+        self.fo.write(s)
+        self.fo.seek(0, 2)
+        self.size = self.fo.tell()
+        
+
 class RateLimiter:
     """This class makes it easy to perform some action only when a
     certain time has passed. The maxrate parameter is given in Hz and
@@ -755,10 +826,12 @@ class StrictFileWriter:
     exceed the given size. Also, the file must not exist before, and
     it must have the given md5 checksum when finished. If any of the
     contraints are violated, an ConstraintViolation exception is
-    thrown.
+    thrown will be thrown when the StrictFileWriter is closed, or when
+    too much data is written.
 
     A sparse file with the given size will be created, which will
-    reduce fragmentation on some platforms (NTFS). """
+    reduce fragmentation on some platforms (NTFS). 
+    """
     def __init__(self, filename, md5, size, overwrite = False):
         assert is_md5sum(md5)
         assert type(size) == int or type(size) == long
@@ -811,6 +884,149 @@ class StrictFileWriter:
         return self
     
     def __exit__(self, type, value, traceback):
-        self.close()
-
+        if type:
+            # An exception has occured within the "with" clause. Let's
+            # not hide it.
+            self.__close()
+        else:
+            self.close()
  
+def common_tail(s1, s2):
+    s1r = s1[::-1]
+    s2r = s2[::-1]
+    n = 0
+    try:
+        while s1r[n] == s2r[n]:
+            n+=1
+    except IndexError:
+        pass
+    if n == 0:
+        return ""
+    return s1[-n:]
+        
+class Struct:
+    def __init__(self, **entries): 
+        self.__dict__.update(entries)
+
+    def __repr__(self):
+        return "<Struct: %s>" % repr(self.__dict__) 
+
+
+import time
+class StopWatch:
+    def __init__(self, enabled = True, name = None):
+        self.t_init = time.clock()
+        self.t_last = time.clock()
+        self.enabled = enabled
+        self.name = name
+
+    def mark(self, msg = None):
+        now = time.clock()
+        if self.enabled:
+            prefix = ("SW (%s):" % self.name) if self.name else "SW:"
+            print "%s %s %s (total %s)" % (prefix, msg, now - self.t_last, now - self.t_init )
+        self.t_last = time.clock()
+
+def overrides(interface_class):
+    """ This is a method decorator that can be used to ensure/document
+    that a method overrides a method in a superclass."""
+    def overrider(method):
+        assert(method.__name__ in dir(interface_class))
+        return method
+    return overrider
+
+import array
+class TailBuffer:
+    """ A buffer that only physically keeps the last bytes of the data
+    that is appended to it, but can be accessed using the positions of
+    the original data. All data is kept until release() is called by
+    the user."""
+
+    def __init__(self):
+        self.buffer = array.array("c")
+        self.shifted = 0
+        
+    def append(self, s):
+        self.buffer.fromstring(s)
+
+    def release(self, offset):
+        assert offset >= self.shifted
+        shift = offset - self.shifted
+        self.shifted += shift
+        del self.buffer[:shift]
+        #print "Tail buffer is now virtually", (len(self)), "bytes, but only", len(self.buffer), "in reality"
+
+    def __len__(self):
+        return int(self.shifted + len(self.buffer))
+    
+    def __getitem__(self, index):
+        assert isinstance(index, slice)
+        assert index.step == None, index
+        assert index.start >= self.shifted and index.stop >= self.shifted, \
+            "Requested slice %s overlaps with the released part of the buffer (up to %s)" % (index, self.shifted) 
+        index2 = slice(index.start - self.shifted, index.stop - self.shifted)
+        #print index, "->", index2
+        return self.buffer.__getitem__(index2).tostring()
+
+
+def PartialProgress(f1, f2, progress_callback):
+    """Often a function accepting a progress callback needs to call
+    sub-functions to perform the task. By wrapping the given callback
+    with this function before passing it on, correct progress will be
+    sent upwards.
+
+    Like so:
+    
+    def LongRunningTask(progress_callback):
+        DoSomeStuff(PartialProgress(0.0, 0.5, progress_callback))
+        DoSomeMoreStuff(PartialProgress(0.5, 1.0, progress_callback))
+        return
+
+    The original progress callback will now see only a monotonously
+    increasing progress from 0 to 100%.
+    """
+    assert 0.0 <= f1 <= f2 <= 1.0
+    def wrapped_callback(f):
+        progress_callback(f1 + (f2 - f1) * f)
+    return wrapped_callback
+
+def calculate_progress(total_count, count, start_progress = 0.0):
+    """Calculates the progress in a way that is guaranteed to be safe
+    from divizion by zero exceptions or any other exceptions. If there
+    is any problem with the calculation or incoming arguments, this
+    function will return 0.0"""
+    default = 0.0
+    progress = float(start_progress)
+    if not (0.0 <= progress <= 1.0):
+        return default
+    if not (0 <= count <= total_count):
+        return default
+    try:
+        progress += float(count) / float(total_count)
+    except:
+        pass
+    assert type(progress) == float
+    if not (0.0 <= progress <= 1.0):
+        return default
+    return progress
+
+assert calculate_progress(0, 0) == 0.0    # Undefined progress
+assert calculate_progress(0, None) == 0.0 # Illegal argument
+assert calculate_progress(10, 5) == 0.5   # Normal
+assert calculate_progress(10, 10) == 1.0  # Normal
+assert calculate_progress(10, 11) == 0.0  # Too large count
+assert calculate_progress(10, -5) == 0.0  # Illegal count
+assert calculate_progress(-5, -5) == 0.0  # Illegal
+
+class ProgressHelper:
+    def __init__(self, start_f, progress_callback):
+        assert 0.0 <= start_f <= 1.0
+        self.current_progress = start_f
+        self.progress_callback = progress_callback
+    
+    def partial_progress(self, f):
+        pp = PartialProgress(self.current_progress, self.current_progress + f, self.progress_callback)
+        self.current_progress += f
+        assert 0.0 <= self.current_progress <= 1.0
+        return pp
+

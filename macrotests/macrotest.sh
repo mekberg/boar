@@ -38,6 +38,7 @@ for testcase in $testcases; do
     TMPDIR=`mktemp --tmpdir=/tmp -d "boar-${testcase}.XXXXXX"`
     OUTPUT="${TMPDIR}.log"
     export BOAR_CACHEDIR="$TMPDIR/cache"
+    export BOAR_HIDE_PROGRESS=1
     ( cd $TMPDIR && bash $BOARTESTHOME/${testcase} >$OUTPUT 2>&1 ) ||
 	{
 	    echo

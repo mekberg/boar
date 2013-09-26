@@ -11,6 +11,7 @@ echo "Some data" >Import/file.txt || exit 1
 echo --- Test dry-run import
 cat >expected.txt <<EOF
 Sending file.txt
+Verifying and integrating commit
 NOTICE: Nothing was imported.
 !Finished in (.*) seconds
 EOF
@@ -24,6 +25,7 @@ rm output.txt || exit 1
 echo --- Test normal import
 cat >expected.txt <<EOF
 Sending file.txt
+Verifying and integrating commit
 Checked in session id 2
 !Finished in (.*) seconds
 EOF
@@ -57,6 +59,7 @@ txtmatch.py expected.txt output.txt || {
 echo --- Test unchanged import with --allow-empty
 rm -r Import/.boar || exit 1
 cat >expected.txt <<EOF
+Verifying and integrating commit
 Checked in session id 3
 !Finished in (.*) seconds
 EOF
@@ -89,6 +92,7 @@ Sending abc/bumblebee.txt
 Sending abc/cobra.txt
 Sending abc/dodo.txt
 Sending abc/elephant.txt
+Verifying and integrating commit
 Checked in session id 5
 !Finished in (.*) seconds
 EOF

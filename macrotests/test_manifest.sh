@@ -17,6 +17,7 @@ cat >expected.txt <<EOF
 NOTICE: Using manifest file manifest-md5.txt
 Sending file.txt
 Sending manifest-md5.txt
+Verifying and integrating commit
 Checked in session id 2
 !Finished in (.*) seconds
 EOF
@@ -48,7 +49,10 @@ EOF
 cat >expected.txt <<EOF
 NOTICE: Using manifest file manifest-efe6d1786f752ff3efd364dbd2d52239.md5
 NOTICE: Using manifest file manifest-md5.txt
-ERROR: Conflicting manifests for file file.txt
+Conflicting manifests found. Listing all relevant manifests scanned so far:
+manifest-efe6d1786f752ff3efd364dbd2d52239.md5
+manifest-md5.txt (first encountered conflict)
+ERROR: Conflicting manifests for 'file.txt'
 !Finished in (.*) seconds
 EOF
 
@@ -81,6 +85,7 @@ cat >expected.txt <<EOF
 NOTICE: Using manifest file manifest-md5.txt
 NOTICE: Using manifest file manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
 Sending manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
+Verifying and integrating commit
 Checked in session id 3
 !Finished in .* seconds
 EOF
@@ -100,6 +105,7 @@ WARNING: Found manifest file manifest-sha1.txt, but hash type 'sha1' is not
 NOTICE: Using manifest file manifest-md5.txt
 NOTICE: Using manifest file manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
 Sending manifest-sha1.txt
+Verifying and integrating commit
 Checked in session id 4
 !Finished in .* seconds
 EOF

@@ -30,9 +30,24 @@ def safe_delete_file(path):
     path = os.path.normcase(path)
     filename = os.path.basename(path)
     assert not is_md5sum(filename), "safe_delete prevented deletion of blob"
+    assert not is_recipe_filename(filename), "safe_delete prevented deletion of recipe"
     assert filename not in ("bloblist.json", "session.json", "session.md5"), "safe_delete prevented deletion of session data"
     assert not filename.endswith(".fingerprint"), "safe_delete prevented deletion of session fingerprint"
-    assert not filename.endswith(".recipe"), "safe_delete prevented deletion of recipe data"
+    os.remove(path)
+
+def safe_delete_recipe(path):
+    path = os.path.normcase(path)
+    filename = os.path.basename(path)
+    assert is_recipe_filename(filename), "safe_delete_recipe can only delete recipes"
+    os.remove(path)
+
+def safe_delete_blob(path):
+    path = os.path.normcase(path)
+    filename = os.path.basename(path)
+    assert is_md5sum(filename), "safe_delete_recipe can only delete blobs"
+    os.remove(path)
+
+def unsafe_delete(path):
     os.remove(path)
 
 def bloblist_to_dict(bloblist):
@@ -114,14 +129,66 @@ def sorted_bloblist(bloblist):
 def parse_manifest_name(path):
     """Returns a tuple (lowercase hash name, hash). Both are None if
     the path is not a valid manifest filename."""
-    m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5)", path, flags=re.IGNORECASE)
+    m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5|(manifest.md5))", path, flags=re.IGNORECASE)
     if not m:
         return None, None
+    if m.group(5):
+        return "md5", None
     if m.group(3):
         hashname = m.group(3).lower()
         return hashname, None
-    else:
-        hashname = "md5"
-        manifest_hash = m.group(4).lower()
-        return hashname, manifest_hash
+    hashname = "md5"
+    manifest_hash = m.group(4).lower()
+    return hashname, manifest_hash
 
+assert parse_manifest_name("/tmp/manifest.md5") == ("md5", None)
+assert parse_manifest_name("/tmp/manifest-d41d8cd98f00b204e9800998ecf8427e.md5") == ("md5", "d41d8cd98f00b204e9800998ecf8427e")
+assert parse_manifest_name("/tmp/manifest-md5.txt") == ("md5", None)
+assert parse_manifest_name("/tmp/manifest-sha256.txt") == ("sha256", None)
+assert parse_manifest_name("/tmp/tjohej.txt") == (None, None)
+assert parse_manifest_name("/tmp/tjohej.md5") == (None, None)
+
+def is_recipe_filename(filename):
+    filename_parts = filename.split(".")
+    return len(filename_parts) == 2 \
+        and filename_parts[1] == "recipe" \
+        and is_md5sum(filename_parts[0])
+
+
+class SimpleProgressPrinter:
+    def __init__(self, output, label = "Processing"):
+        self.last_t = 0
+        self.start_t = time.time()
+        self.active = False
+        self.last_string = ""
+        self.label = printable(label); del label
+        self.symbols = list('-\\/')
+        self.output = output
+        self.updatecounter = 0
+
+        if os.getenv("BOAR_HIDE_PROGRESS") == "1":
+            # Only print the label, do nothing else.
+            self.output.write(self.label)
+            self.output.write("\n")
+            self.output = FakeFile()
+
+    def _say(self, s):
+        # self.output will point to /dev/null if quiet
+        self.output.write(s)
+        self.output.flush()
+
+    def update(self, f):
+        self.active = True
+        self.updatecounter += 1
+        now = time.time()
+        symbol = self.symbols.pop(0)
+        self.symbols.append(symbol)
+        self._say((" " * len(self.last_string)) + "\r")
+        self.last_string = self.label + ": %s%% [%s]" % (round(100.0 * f, 1), symbol)
+        self._say(self.last_string + "\r")
+        #print self.last_string
+        self.last_t = now
+
+    def finished(self):
+        if self.active:
+            self._say(self.last_string[:-3] + "    " + "\n")
