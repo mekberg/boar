@@ -479,7 +479,7 @@ class Front:
         """ Must be called after a create_session()  """
         self.new_session.add_blob_data(blob_md5, base64.b64decode(b64data))
 
-    def add_blob_data_streamed(self, blob_md5, progress_callback, datasource):
+    def add_blob_data_streamed(self, blob_md5, datasource):
         import hashlib, common
         assert is_md5sum(blob_md5)
         summer = hashlib.md5()
@@ -489,7 +489,6 @@ class Front:
             block = datasource.read(repository.DEDUP_BLOCK_SIZE) 
             summer.update(block)
             self.new_session.add_blob_data(blob_md5, block)
-            progress_callback(calculate_progress(total, total - datasource.bytes_left()))
         if summer.hexdigest() != blob_md5:
             raise common.ContentViolation("Received blob data differs from promised.")
     def blob_finished(self, blob_md5):

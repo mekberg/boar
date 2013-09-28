@@ -625,8 +625,8 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
             #t0 = time.time()
             front.init_new_blob(expected_md5sum, blobinfo["size"])
             #print "check_in_file: front.init_new_blob()", expected_md5sum, time.time() - t0            
-            datasource = FileDataSource(f, os.path.getsize(abspath))
-            front.add_blob_data_streamed(blob_md5 = expected_md5sum, progress_callback = pp.update, datasource = datasource)
+            datasource = FileDataSource(f, os.path.getsize(abspath), progress_callback = pp.update)
+            front.add_blob_data_streamed(blob_md5 = expected_md5sum, datasource = datasource)
             #print "check_in_file: front.add_blob_data_streamed()", expected_md5sum, time.time() - t0
             front.blob_finished(expected_md5sum)
             #print "check_in_file: front.blob_finished()", expected_md5sum, time.time() - t0
