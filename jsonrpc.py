@@ -30,6 +30,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
 import sys, os
 import struct
 import inspect
+import select
+
 from boar_exceptions import *
 from common import *
 import traceback
@@ -195,9 +197,13 @@ class StreamDataSource(DataSource):
         return data
 
 class FileDataSource(DataSource):
-    def __init__(self, fo, data_size):
+    def __init__(self, fo, data_size, progress_callback = lambda x: None):
+        assert 0 <= data_size
+        assert callable(progress_callback)
         self.fo = fo
         self.remaining = data_size
+        self.total = data_size
+        self.progress_callback = progress_callback
         if self.remaining == 0:
             self.fo.close()
 
@@ -217,6 +223,7 @@ class FileDataSource(DataSource):
         assert self.remaining >= 0
         if self.remaining == 0:
             self.fo.close()
+        self.progress_callback(calculate_progress(self.total, self.total - self.remaining))
         return data
 
 #----------------------
@@ -485,6 +492,12 @@ class BoarMessageClient:
         if datasource:
             while datasource.bytes_left() > 0:
                 self.s_out.write(datasource.read(2**14))
+                if os.name == "posix":
+                    # Select() only works for sockets on windows, but
+                    # this assert will let us discover protocol errors
+                    # on linux at least, which is quite useful.
+                    incoming_data, _, _ = select.select([self.s_in], [], [], 0)
+                    assert not incoming_data, "No incoming data allowed during send"
         self.s_out.flush()
         
     def __recv( self ):
@@ -558,12 +571,12 @@ class BoarMessageServer:
 
     def __send_progress(self, progress):
         assert progress >= 0 or progress <= 1.0
+        progress = round(progress, 3)
         progress_object = json.dumps(progress)
         header = pack_header(len(progress_object), progress_packet = True)
         self.s_out.write( header )
         self.s_out.write( progress_object )
-        #Flushing not necessary or desired for progress
-        #self.s_out.flush()
+        #self.s_out.flush() # Not necessary or desirable for progress
 
     def serve(self):
         try:
@@ -795,18 +808,16 @@ class RpcHandler:
             if isinstance(params, dict):
                 if incoming_data_source:
                     params['datasource'] = incoming_data_source
-                #print self.funcs[method], inspect.getargspec(self.funcs[method])
                 if "progress_callback" in inspect.getargspec(self.funcs[method]).args:
                     params["progress_callback"] = progress_callback
                 result = self.funcs[method]( **params )
             else:
-                if incoming_data_source:     
+                if incoming_data_source:
                     result = self.funcs[method]( *params, **{'datasource': incoming_data_source} )
                 else:
                     result = self.funcs[method]( *params )
             if isinstance(result, DataSource):
                 return result
-
         except RPCFault, err:
             self.dead = True
             return JsonRpc20.dumps_error( err, id=None )
