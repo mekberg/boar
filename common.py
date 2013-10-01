@@ -127,15 +127,12 @@ def read_file(path, expected_md5 = None):
 
 def parse_md5sum(text):
     """Expects a sting containing a classic md5sum.exe output format,
-    and returns the data on the form [(md5, filename), ...]. Note that
-    the data must be utf-8 encoded, or an UnicodeDecodeError will be
-    raised. One notable source of such non-utf-8 files is md5sum.exe
-    on Windows."""
+    and returns the data on the form [(md5, filename), ...]."""
+    assert type(text) == unicode
     result = []
     for line in text.splitlines():
         line = line.rstrip("\r\n")
         filename = line[34:]
-        filename = filename.decode("utf-8")
         result.append((line[0:32], convert_win_path_to_unix(filename)))
     return result
 
@@ -144,9 +141,7 @@ def read_md5sum(path, expected_md5 = None):
     the form [(md5, filename), ...]. Note that the data must be utf-8 encoded,
     or an UnicodeDecodeError will be raised. One notable source of such
     non-utf-8 files is md5sum.exe on Windows."""
-    data = read_file(path, expected_md5)
-    if data.startswith('\xef\xbb\xbf'):
-        data = data[3:] # Remove unicode BOM
+    data = read_file(path, expected_md5).decode("utf-8-sig")
     return parse_md5sum(data)
 
 _file_reader_sum = 0
@@ -178,6 +173,8 @@ def safe_open(path, flags = "rb"):
     return open(path, "rb")
 
 def md5sum(data):
+    if type(data) != str:
+        raise ValueError("Value must be a basic string")
     m = hashlib.md5()
     m.update(data)
     return m.hexdigest()

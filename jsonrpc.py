@@ -165,6 +165,10 @@ def dictkeyclean(d):
 # JSON-RPC 1.0
 
 class DataSource:
+    def __init__(self):
+        # Don't use this
+        raise NotImplementedError()
+    
     def bytes_left(self):
         """Return the number of bytes that remains to be read from
         this data source."""
@@ -175,14 +179,27 @@ class DataSource:
         than specified if there are no more bytes to read."""
         raise NotImplementedError()
 
+    def set_progress_callback(self, progress_callback):
+        raise NotImplementedError()
+
 class StreamDataSource(DataSource):
     def __init__(self, stream, data_size):
         self.stream = stream
+        assert 0 <= data_size
         self.remaining = data_size
+        self.total = data_size
+        self.set_progress_callback(lambda x: None)
 
+    @overrides(DataSource)
+    def set_progress_callback(self, progress_callback):
+        assert callable(progress_callback)
+        self.progress_callback = progress_callback
+
+    @overrides(DataSource)
     def bytes_left(self):
         return self.remaining
 
+    @overrides(DataSource)
     def read(self, n = None):
         if n == None:
             n = self.bytes_left()
@@ -194,22 +211,29 @@ class StreamDataSource(DataSource):
         assert len(data) == bytes_to_read
         assert len(data) <= n
         assert self.remaining >= 0
+        self.progress_callback(calculate_progress(self.total, self.total - self.remaining))
         return data
 
 class FileDataSource(DataSource):
     def __init__(self, fo, data_size, progress_callback = lambda x: None):
         assert 0 <= data_size
-        assert callable(progress_callback)
         self.fo = fo
         self.remaining = data_size
         self.total = data_size
-        self.progress_callback = progress_callback
+        self.set_progress_callback(progress_callback)
         if self.remaining == 0:
             self.fo.close()
 
+    @overrides(DataSource)
+    def set_progress_callback(self, progress_callback):
+        assert callable(progress_callback)
+        self.progress_callback = progress_callback
+
+    @overrides(DataSource)
     def bytes_left(self):
         return self.remaining
 
+    @overrides(DataSource)
     def read(self, n = None):
         if n == None:
             n = self.remaining
@@ -491,13 +515,13 @@ class BoarMessageClient:
         self.s_out.write(string)
         if datasource:
             while datasource.bytes_left() > 0:
-                self.s_out.write(datasource.read(2**14))
                 if os.name == "posix":
                     # Select() only works for sockets on windows, but
                     # this assert will let us discover protocol errors
                     # on linux at least, which is quite useful.
                     incoming_data, _, _ = select.select([self.s_in], [], [], 0)
                     assert not incoming_data, "No incoming data allowed during send"
+                self.s_out.write(datasource.read(2**14))
         self.s_out.flush()
         
     def __recv( self ):

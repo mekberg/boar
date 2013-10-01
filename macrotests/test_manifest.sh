@@ -49,7 +49,10 @@ EOF
 cat >expected.txt <<EOF
 NOTICE: Using manifest file manifest-efe6d1786f752ff3efd364dbd2d52239.md5
 NOTICE: Using manifest file manifest-md5.txt
-ERROR: Conflicting manifests for file file.txt
+Conflicting manifests found. Listing all relevant manifests scanned so far:
+manifest-efe6d1786f752ff3efd364dbd2d52239.md5
+manifest-md5.txt (first encountered conflict)
+ERROR: Conflicting manifests for 'file.txt'
 !Finished in (.*) seconds
 EOF
 

@@ -36,6 +36,7 @@ class RecipeReader(DataSource):
         assert 'size' in recipe and recipe['size'] >= 0
         self.repo = repo
         self.local_path = local_path
+        self.progress_callback = lambda x: None
 
         self.pieces = []
         self.blob_paths = {} # Blob id -> blob path
@@ -75,7 +76,7 @@ class RecipeReader(DataSource):
 
         assert self.segment_start_in_recipe + self.bytes_left_in_segment <= recipe['size']
 
-
+    @overrides(DataSource)
     def bytes_left(self):
         return self.bytes_left_in_segment
 
@@ -116,6 +117,7 @@ class RecipeReader(DataSource):
         blob_read_size = min(available_blob_data_size, max_size)
         return self.__read_from_blob(piece['source'], blob_pos, blob_read_size)
 
+    @overrides(DataSource)
     def read(self, readsize = None):
         assert self.bytes_left_in_segment >= 0
         if readsize == None:
@@ -132,7 +134,12 @@ class RecipeReader(DataSource):
             data = self.__read_piece_data(self.pieces[self.current_piece_index], current_recipe_read_position, remaining)
             result += data
             self.bytes_left_in_segment -= len(data)
+        self.progress_callback(calculate_progress(self.segment_size, self.segment_size - self.bytes_left_in_segment))
         return result
+
+    def set_progress_callback(self, progress_callback):
+        assert callable(progress_callback)
+        self.progress_callback = progress_callback
 
 
 def benchmark():
