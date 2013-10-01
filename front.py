@@ -178,8 +178,8 @@ def __clone_single_snapshot(from_front, to_front, session_id):
                 sw.mark("front.init_new_blob()")
                 datasource = from_front.get_blob(md5sum)
                 pp.update(0.0)
+                datasource.set_progress_callback(pp.update)
                 to_front.add_blob_data_streamed(blob_md5 = md5sum, 
-                                                progress_callback = pp.update,
                                                 datasource = datasource)
                 pp.finished()
                 sw.mark("front.add_blob_data_streamed()")
@@ -660,7 +660,7 @@ class DryRunFront:
     def get_all_rolling(self):
         return []
 
-    def add_blob_data_streamed(self, blob_md5, progress_callback, datasource):
+    def add_blob_data_streamed(self, blob_md5=None, progress_callback=None, datasource=None):
         while datasource.remaining:
             datasource.read(2**12)
 

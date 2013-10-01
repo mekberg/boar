@@ -153,7 +153,7 @@ def verify_manifests(front, sid, verbose = False, required_manifests = []):
             if calculated_manifest_md5 in remaining_required_manifests:
                 del remaining_required_manifests[calculated_manifest_md5]
 
-        md5data = parse_md5sum(manifest_raw)
+        md5data = parse_md5sum(manifest_raw.decode("utf-8-sig"))
         for md5, filename in md5data:
             session_path = posixpath.join(manifest_basedir, filename)
             if session_path in blobdict and blobdict[session_path]['md5sum'] == md5:

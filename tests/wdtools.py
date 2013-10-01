@@ -26,17 +26,18 @@ def read_tree(path, skiplist = []):
     os.path.walk(path, visitor, result)
     return result
 
-def write_tree(path, filemap, create_root = True):
+def write_tree(path, filemap, create_root = True, overwrite = False):
     """Accepts a mapping {filename: content, ...} and writes it to the
     tree starting at the given """
     if create_root:
         os.mkdir(path)
     else:
-        assert os.path.exists(path)
+        assert os.path.exists(path) and os.path.isdir(path)
     for filename in filemap.keys():
-        assert not os.path.exists(filename)
         assert not os.path.isabs(filename)
         fullpath = os.path.join(path, filename)
+        if not overwrite:
+            assert not os.path.exists(fullpath)
         dirpath = os.path.dirname(fullpath)
         try:
             os.makedirs(dirpath)
