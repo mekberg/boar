@@ -162,7 +162,7 @@ class SimpleProgressPrinter:
         self.active = False
         self.last_string = ""
         self.label = printable(label); del label
-        self.symbols = list('-\\/')
+        self.symbols = list('-\\|/')
         self.output = output
         self.updatecounter = 0
 
@@ -183,9 +183,9 @@ class SimpleProgressPrinter:
         now = time.time()
         symbol = self.symbols.pop(0)
         self.symbols.append(symbol)
-        self._say((" " * len(self.last_string)) + "\r")
+        eraser = (" " * len(self.last_string)) + "\r"
         self.last_string = self.label + ": %s%% [%s]" % (round(100.0 * f, 1), symbol)
-        self._say(self.last_string + "\r")
+        self._say(eraser + self.last_string + "\r")
         #print self.last_string
         self.last_t = now
 
