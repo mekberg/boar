@@ -280,10 +280,12 @@ class SessionWriter:
         self.session_mutex = FileMutex(os.path.join(self.repo.repopath, repository.TMP_DIR), self.session_name)
         self.session_mutex.lock()
         assert os.path.exists(self.repo.repopath)
+        currentmask = os.umask(0o777)
+        os.umask(currentmask)
         self.session_path = tempfile.mkdtemp( \
             prefix = "tmp_", 
             dir = os.path.join(self.repo.repopath, repository.TMP_DIR))
-
+        os.chmod(self.session_path, currentmask ^ 0o777)
         if self.force_base_snapshot:
             self.writer = _NaiveSessionWriter(session_name, None, self.session_path)
         else:
