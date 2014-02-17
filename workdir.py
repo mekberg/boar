@@ -344,7 +344,17 @@ class Workdir:
 
         self.verify_manifest(unchanged_files + new_files + modified_files)
 
-        self.__create_snapshot(new_files + modified_files, deleted_files, base_snapshot, front, log_message, ignore_errors, force_base_snapshot)
+        latest_latest_rev = front.find_last_revision(self.sessionName)
+        if latest_rev != latest_latest_rev:
+            raise UserError("The session was modified during the scan, cannot proceed. Please try again.")
+        
+        self.__create_snapshot(new_files + modified_files, 
+                               deleted_files, 
+                               base_snapshot, 
+                               front, 
+                               log_message, 
+                               ignore_errors, 
+                               force_base_snapshot)
 
         if write_meta:
             self.write_metadata()
