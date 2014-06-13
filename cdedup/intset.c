@@ -133,6 +133,9 @@ inline int contains_intset(IntSet* const intset, const uint64_t int_to_find) {
     return 0;
   }
   for(unsigned i=0; i < bucket->used_slots; i++){
+    __builtin_prefetch(&bucket->slots[i], 0, 0);
+  }
+  for(unsigned i=0; i < bucket->used_slots; i++){
     if(bucket->slots[i] == int_to_find){
       return 1;
     }
