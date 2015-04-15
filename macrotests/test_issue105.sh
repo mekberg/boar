@@ -2,6 +2,16 @@
 # Issue 105: Too restrictive permissions on session folders
 #
 
+if [ "$BOAR_TEST_REMOTE_REPO" == "1" ]; then
+    # Not meaningful for remote
+    exit 0
+fi
+
+if [ "$BOAR_TEST_REMOTE_REPO" == "2" ]; then
+    # Not meaningful for remote
+    exit 0
+fi
+
 # Just make sure that everything works as expected before we start the
 # actual test
 (umask 0000 && touch test.txt) || exit 1
