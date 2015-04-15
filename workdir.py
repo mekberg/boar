@@ -348,13 +348,13 @@ class Workdir:
         if latest_rev != latest_latest_rev:
             raise UserError("The session was modified during the scan, cannot proceed. Please try again.")
         
-        self.__create_snapshot(new_files + modified_files, 
-                               deleted_files, 
-                               base_snapshot, 
-                               front, 
-                               log_message, 
-                               ignore_errors, 
-                               force_base_snapshot)
+        self._create_snapshot(files=new_files + modified_files, 
+                              deleted_files=deleted_files, 
+                              base_snapshot=base_snapshot, 
+                              front=front, 
+                              log_message=log_message, 
+                              ignore_errors=ignore_errors, 
+                              force_base_snapshot=force_base_snapshot)
 
         if write_meta:
             self.write_metadata()
@@ -378,7 +378,7 @@ class Workdir:
                 raise UserError("File %s contents conflicts with manifest" % wd_path)
 
 
-    def __create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors, force_base_snapshot):
+    def _create_snapshot(self, files, deleted_files, base_snapshot, front, log_message, ignore_errors, force_base_snapshot):
         """ Creates a new snapshot of the files in this
         workdir. Modified and new files are passed in the 'files'
         argument, deleted files in the 'deleted_files' argument. The
