@@ -1177,7 +1177,7 @@ def cmd_diffrepo(args):
         raise UserError("You must specify exactly two existing repositories.")
     repopath1, repopath2 = args
     if repopath1.startswith("boar://") or repopath2.startswith("boar://"):
-        raise UserError("Cloning requires local repositories")
+        raise UserError("Can only compare local repositories")
     repopath1 = os.path.abspath(repopath1)
     repopath2 = os.path.abspath(repopath2)
     repo1 = Front(client.user_friendly_open_local_repository(repopath1))
