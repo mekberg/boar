@@ -21,6 +21,7 @@ import os
 import time
 import cProfile
 import posixpath
+import errno
 
 from optparse import OptionParser, SUPPRESS_HELP
 from blobrepo import repository
@@ -39,6 +40,13 @@ from boar_common import *
 import boarserve
 
 json = get_json_module()
+
+def beta(f):
+    assert f.__name__.startswith("cmd_")
+    def beta_warning(*args, **kwargs):
+        print "WARNING: The '%s' command should be considered beta, meaning that there may be bugs\n         and usage details will probably change in the future." % f.__name__[4:]
+        f(*args, **kwargs)
+    return beta_warning
 
 BOAR_VERSION = "boar-devel.16-Nov-2012"
 
@@ -208,6 +216,7 @@ def cmd_locate(args):
                     print "   " + bi['filename']
     print "%s files exists in the given session, %s do not." % (found, len(missing))
 
+@beta
 def cmd_scanblocks(args):
     import hashlib
     front = connect_to_repo(get_repo_url())
@@ -509,6 +518,7 @@ def cmd_stats(args):
     for name, value in front.get_stats():
         print "%-30s %s" % (name, value)
 
+@beta
 def cmd_manifests(args):
     parser = OptionParser(usage="usage: boar manifests [options] <session name>")
     parser.add_option("-e", "--require", dest = "required_manifests", action="append", default=[],
@@ -834,6 +844,7 @@ def cmd_mksession(args):
     front.mksession(session_name)
     print "New session '%s' was created successfully" % (session_name)
 
+@beta
 def cmd_mkstandalone(args):
     if len(args) == 0:
         args = ["--help"]
@@ -1099,6 +1110,7 @@ def cmd_find(front, args):
         if bi['md5sum'] == cs:
             print bi['filename']
 
+@beta
 def cmd_lostfiles(args):
     restore_missing = "-u" in args
     wd = workdir.init_workdir(ucwd)
@@ -1191,6 +1203,58 @@ def cmd_diffrepo(args):
         return_code = 1
     return return_code
 
+@beta
+def cmd_findlost(args):
+    front = connect_to_repo(get_repo_url())
+    if len(args) != 2:
+        raise UserError("You must specify a session and a directory to store the findings in.")
+    sessionName = args[0]
+    outputDir = args[1]
+    all_revisions = front.get_session_ids(sessionName)
+    #last_revision = front.find_last_revision(sessionName)
+    progress = SimpleProgressPrinter(sys.stdout, "Loading revisions")
+    last_revision = all_revisions.pop()
+    all_blobs = {}
+    for n, rev in enumerate(all_revisions):
+        progress.update(1.0 * n / len(all_revisions))
+        current_revision_blobs = invert_bloblist(front.get_session_bloblist(rev))
+        for blobid, blobinfos in current_revision_blobs.items():
+            if blobid in all_blobs:
+                all_blobs[blobid].extend(blobinfos)
+            else:
+                all_blobs[blobid] = blobinfos[:]
+    #print "Finding last: ", last_revision
+    last_revision_blobs = invert_bloblist(front.get_session_bloblist(last_revision))
+    lost_blobids = set(all_blobs.keys()) - set(last_revision_blobs.keys())
+    progress.update(1.0)
+    progress.finished()
+    print len(lost_blobids), "lost"
+    tocopy = []
+    for blobid in lost_blobids:
+        filenames = set([blobinfo['filename'] for blobinfo in all_blobs[blobid]])
+        for filename in sorted(filenames):
+            print blobid.ljust(32), filename
+            tocopy.append((blobid, filename))
+            #blobid = ""
+
+    for blobid, filename in tocopy:
+        output_path = os.path.join(outputDir, filename)
+        print "Writing", blobid, output_path
+        dirname = os.path.dirname(output_path)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+        n = 0
+        while os.path.exists(output_path):
+            n += 1
+            output_path = os.path.join(outputDir, filename + ("(%d)" % n))
+            
+        with open(output_path, "w") as f:
+            datareader = front.get_blob(blobid)
+            while datareader.bytes_left() > 0:
+                f.write(datareader.read(2**14))
+
+@beta
 def cmd_export_md5(wd, args):
     wd.export_md5()
 
@@ -1343,6 +1407,8 @@ def main():
         return cmd_getprop(args[1:])
     elif args[0] == "scanblocks":
         return cmd_scanblocks(args[1:])
+    elif args[0] == "findlost":
+        return cmd_findlost(args[1:])
     else:
         print_help()
         return 1
