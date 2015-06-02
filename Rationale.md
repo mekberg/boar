@@ -1,0 +1,48 @@
+## Why Boar? ##
+
+It is not always obvious why the world needs another VCS/Backup software. Here I attempt to rationalize my decision to start the Boar project.
+
+### The problem ###
+I like my data. I want to keep my data. After using computers for 25 years, I've had my share of data loss events. Before losing that first HDD, it is only natural to have a feeling of invincibility. Disk crashes might be considered a remote possibility, and the small risk acceptable. But time goes by, and small risks become certainties. Having lost a full non-backed up HDD, you never forget. Years later, you might recall some text you wrote or some picture you had, which are lost forever. After such an event, most people will start doing some kind of backups.
+
+There are of course plenty of horror stories about backups as well. The classical mistake is to maintain good backups, but never attempt to restore them. They might not contain the data you think they do. Or worse, they might have been silently corrupted while writing by a faulty RAM module or a buggy disk controller. You will not notice until you try to read them back, which might not be until it is already too late.
+
+But even rigorously maintained backups can easily become a headache themselves. Sooner or later you will need to make room for new data, and then you lose your data history. Typically, you will remove pics-folder-2009.zip to make room for pics-folder-2010.zip (maybe you have room for a few more generations on a modern HDD though). If there are some file present in the first archive but not in the second, you will not notice, and the data will be lost. If you have made any modifications or deletions of data, intentional or not, the originals will then be lost. Maybe you make backups on discs such as DVDs, and just pile them higher and higher. Besides from taking up a lot of space, you will have no idea if the earlier backups are still working. And even if they are still readable, that old backup program you used back then might be out of production and impossible to get hold of. Again, you will not notice until you need them.
+
+Most of these arguments apply to the "cloud" (storing your data using company provided services) as well. Some cloud services (like dropbox) has "infinite revision history" for a fee. So you are safe, right? Well, you are safer than most. But that file history is a fragile thing. You can not download the history, it is tied to the service. Over a timespan of 5-10-20 years, a lot can happen to a company. At least there should be a way of migrating your data, including file history. But even if there was such a way, there would be the problem of verification. How do you know that the list of files you see on the cloud service site really contains the data you once uploaded? I have personally, by pure luck, discovered that one cloud service was missing half a photo in a folder containing maybe 10000 other files. I do not know the reason for the missing half, maybe I had done something weird, like rebooted in the middle of an update. But still, half the file was missing and the service reported that it was perfectly synced. How often do you really download all the content from a cloud service and compare it to the original? It might be considered borderline paranoia to not trust these well-known large services. But still, I am planning to keep my data for a long time, and given enough time, even unlikely things happen.
+
+If your backup effectively contain your file version history, your backup itself contains unique information. This means the backups themselves are as important as the original data. This means you need to perform backups of your backups, or there will only exist a single copy of your file history. Even if your backup software takes care of verification of the original backup, it will usually not help you maintain verified copies of the backup. And if you at this point are considering using a backup software to backup your backups, you are surely starting to see the problem.
+
+To summarize: the ideal storage for your important files should have the following properties.
+
+  * File integrity must be guaranteed by checksums and easily verifiable.
+  * File history is an essential part of your data. It must be backed up and stored redundantly, just as your other data.
+  * No accidential changes in the storage should be possible - this especially goes for data deletion.
+  * Storage must be efficient - collapsing redundant data blocks when possible.
+  * There should be no artificial limits on file sizes.
+  * The storage format must be very simple, so that software obsolescense will not render the storage unreadable.
+  * It must be fast to access the data. This is not a backup archive, this is the primary location of the data, and therefore speed is important.
+
+### The solution - Boar ###
+
+Boar attempts to solve these problems. Everything, including the repository meta data files, are checksummed. The repository works mostly like any other version control system. File trees are imported, parts of the file tree is checked out into workdirs. Files are checked in after they have been modified or deleted. This is very much similar to the workflow of code control systems such as Subversion or Mercurial. The Boar repository is the primary copy of your files, and you only keep those files checked out that you need to. For instance, you might have all your raw sdcard photos, including all the blurry ones and the "almost" ones, in the repository, and only check out a nice small subset suitable for presentation.
+
+All changes are stored and files can easily be restored to any point in time. Identical files are only stored once, and true data deduplication will be included eventually. There is no theoretical limit on file sizes. All file operations uses a fixed amount of memory. The repository format is very simple - the essential parts are simply lists of files and their checksums, and the files themselves are stored named after their own checksum. Restoring a snapshot is as simple as iterating over this list and copying every file to its destination. All the files are stored using the normal file system. This means that access to them is as fast as can be. It is even possible to mount a snapshot (using FUSE) and access it without checking it out.
+
+You can create a copy of the repository using the Boar "clone" command. This will create a new, verified, copy of the repository. If you already have a copy of the repository, the same command will update the copy with only the necessary files and then verify that it is complete. You can rest assured that every single bit on that copy is just as it is supposed to be, as all the file data is checksummed. **There is no need anymore for incremental backups, or of purging old backups. The verified copy of the Boar repository contains everything you need.**
+
+Now go download it.
+
+## What's wrong with all the other ones? ##
+Q: There are zillions of mature backup and version control applications. Why one more?
+
+A: Good question. I have found the following problems with existing software and practices:
+
+  * **Not handling large files well** Most vcs software (subversion, mercurial) is optimized for relatively small files. If you try to commit large files, they are either very slow and/or runs out of memory. Boar makes no assumptions about the size of your files.
+  * **Platform specific** I need to be able to access my data from both windows and linux. Boar is tested on these two platforms, but there is no reason why it shouldn’t work anywhere there is a python interpreter.
+  * **Proprietary and/or complicated file formats** I want to be sure that I can extract my files in the future, even if I no longer have access to the original software for some reason. Boar uses an open and very simple format, to make sure that any programmer easily can write a small program to handle the repository.
+  * **Unknown data integrity** If you use tools to set up a synchronized copy of your important data, you can be pretty sure that your data will still be there if one copy is lost. But how do you know that the data is still what you expect? Any silent data corruption on the master will most likely spread to your copies before you notice. Boar makes extensive use of checksums to ensure that any corruption will be detected.
+  * **Assuming humans are perfect** There are a number of file systems and tools that provide synchronization of data. Used alone, this is a perfect way to lose data due to user error. Accidential deletions, cut & pasting files when you meant copy & paste, overwriting the original image when you meant to save a scaled-down copy. User error is much more likely to threaten your data than hardware problems.
+  * **Does not provide random read access** For a tool to be useful as a primary storage of your files, you need to be able to access them quickly. Many backup tools (like “tar”) expect you to write often and read seldom. Boar offers fast access to your files, either as regular check-outs, or as a mounted snapshot in Linux (using FUSE).
+  * **Domain specific** There are for instance solutions for digital images that are tightly coupled with image editing software. Often these applications also offers workflows that are useful in that area, but which are useless for non-professionals. Also, I have many types of data that I need to store safely, so using different systems for each one of them is impractical. Boar does not care what file types you use it for.
+  * **Expensive** There are always great solutions for corporations with deep pockets. Boar might be for them as well, but primarily it is for the rest of us.
