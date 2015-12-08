@@ -1290,7 +1290,7 @@ def connect_to_repo(repourl):
     return client.connect(repourl)
 
 def json_bug_test():
-    if type(json.loads(json.dumps("abc"))) != unicode:
+    if json_has_bug():
         raise UserError("Your Python version seems to contain a known json decoding bug (http://bugs.python.org/issue10038). It affects Python 2.7 and 2.7.1. You should upgrade (or downgrade) your Python installation.")
     
 def main():

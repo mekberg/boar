@@ -29,10 +29,17 @@ import textwrap
 from tempfile import TemporaryFile
 from threading import current_thread
 
-try: 
-    # Simplejson can be a lot faster, but has some odd optimization
-    # that makes the result mix str and unicode instances. By
-    # converting the argument string into unicode
+def json_has_bug():
+    if type(json.loads(json.dumps("abc"))) != unicode: # Simplejson, built-in json
+        return True
+    try:
+        json.dumps({}, indent=4) # ujson < 1.33 lacks "indent"
+    except:
+        return True
+    return False
+
+try:
+    #import ujson as json
     import simplejson as json
     original_loads = json.loads
     def unicode_loads(s, *args, **kw):
@@ -40,7 +47,8 @@ try:
             s = unicode(s, "utf-8")
         return original_loads(s, *args, **kw)
     json.loads = unicode_loads
-except ImportError: 
+
+except ImportError:
     import json
 
 del json.load # Let's not use this
