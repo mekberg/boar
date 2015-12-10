@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.6
 # -*- coding: utf-8 -*-
 
 # Copyright 2010 Mats Ekberg
@@ -1003,6 +1003,30 @@ def cmd_cat(args):
             while datasource.bytes_left():
                 stdout.write(datasource.read(4096))
 
+def cmd_export(args): 
+    parser = OptionParser(usage="usage: boar export [options] [<blobid>:<destination filename>] ...")
+    # parser.add_option("-f", "--revision", action="store", dest = "revision", type="int", 
+    #                   help="The revision to fetch")
+    (options, args) = parser.parse_args(args)    
+    if not args:
+        raise UserError("You must specify one or more export specifications")    
+    #stdout = dedicated_stdout()
+    #globals()["suppress_finishmessage"] = True
+    front = connect_to_repo(get_repo_url())
+    
+    for exportspec in args:
+        blobid, destination = exportspec.split(":")
+        assert front.has_blob(blobid)
+        assert not os.path.exists(destination)
+
+    for exportspec in args:
+        blobid, destination = exportspec.split(":")
+        assert not os.path.exists(destination)
+        fo = open(destination, "w")
+        datasource = front.get_blob(blobid)
+        while datasource.bytes_left():
+            fo.write(datasource.read(4096))
+        fo.close()
 
 def _get_blobid(front, revision, session_path):
     """Convenience function to fetch the id of a blob given a revision
@@ -1426,6 +1450,8 @@ def main():
         return cmd_getprop(args[1:])
     elif args[0] == "scanblocks":
         return cmd_scanblocks(args[1:])
+    elif args[0] == "export":
+        return cmd_export(args[1:])
     elif args[0] == "findlost":
         return cmd_findlost(args[1:])
     else:
