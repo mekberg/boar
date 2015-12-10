@@ -696,7 +696,7 @@ def cmd_update(args):
     print "Workdir now at revision", wd.revision
 
 def cmd_ci(args):
-    parser = OptionParser(usage="usage: boar ci [options]")
+    parser = OptionParser(usage="usage: boar ci [options] [files]")
     parser.add_option("-m", "--message", dest = "message", metavar = "ARG",
                       help="An optional log message describing this commit")
     parser.add_option("-a", "--add-only", dest = "addonly", action="store_true",
@@ -706,17 +706,36 @@ def cmd_ci(args):
     parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
                       help="Do not print any progress information")
     (options, args) = parser.parse_args(args)
-    if args:
-        raise UserError("Unexpected arguments: "+str(args))
+
     wd = workdir.init_workdir(ucwd)
     if not wd:
         raise UserError(not_a_workdir_msg)
     wd.use_progress_printer(not options.quiet)
     log_message = None
     if options.message:
-        log_message = tounicode(options.message)    
-    session_id = wd.checkin(add_only = options.addonly, log_message = log_message, allow_empty = options.allow_empty)
-    if session_id:
+        log_message = tounicode(options.message)
+
+    included_files = []
+    while args: # Add the included files
+        fn = args.pop(0)
+        if fn.startswith("/") or fn.startswith("\\"):
+            raise UserError("Path must not be absolute")
+        workdir_cwd = strip_path_offset(wd.root, ucwd, separator=os.sep)
+        path_in_session = wd.wd_sessionpath(os.path.join(workdir_cwd, fn))
+        path_in_workdir = os.path.join(workdir_cwd, fn)
+        abs_path = os.path.join(wd.root, path_in_workdir)
+        if os.path.isdir(abs_path):
+            raise UserError("Directories can not be committed explicitly")
+        included_files.append(path_in_session)
+
+    if not included_files:
+        included_files = None
+        
+    session_id = wd.checkin(add_only = options.addonly, 
+                            log_message = log_message, 
+                            allow_empty = options.allow_empty, 
+                            include=included_files)
+    if session_id != None:
         print "Checked in session id", session_id
     else:
         notice("Didn't find any changes to check in.", sys.stdout)

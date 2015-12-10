@@ -295,7 +295,8 @@ class Workdir:
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
-                    log_message = None, ignore_errors = False, allow_empty = False):
+                    log_message = None, ignore_errors = False, allow_empty = False, \
+                    include = None):
         front = self.get_front()
         if dry_run:
             front = DryRunFront(front)
@@ -311,6 +312,21 @@ class Workdir:
 
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes(self.revision, ignore_errors = ignore_errors)
+
+        
+        if include != None:
+            include = set(include)
+            unchanged_files = [fn for fn in unchanged_files if fn in include]
+            new_files = [fn for fn in new_files if fn in include]
+            modified_files = [fn for fn in modified_files if fn in include]
+            deleted_files = [fn for fn in deleted_files if fn in include]
+            ignored_files = [fn for fn in ignored_files if fn in include]
+            all_processed_files = set(new_files + modified_files + deleted_files)
+            unprocessed_files = include - all_processed_files
+            if unprocessed_files:
+                raise UserError("Some explicitly listed files were not found in the workdir: \n" + 
+                                ", ".join(unprocessed_files))
+            del (include, all_processed_files, unprocessed_files )
 
         stats = self.front.get_session_load_stats(self.revision)
         if stats and stats['total_count'] == 0:
@@ -347,7 +363,7 @@ class Workdir:
         latest_latest_rev = front.find_last_revision(self.sessionName)
         if latest_rev != latest_latest_rev:
             raise UserError("The session was modified during the scan, cannot proceed. Please try again.")
-        
+
         self._create_snapshot(files=new_files + modified_files, 
                               deleted_files=deleted_files, 
                               base_snapshot=base_snapshot, 
@@ -361,6 +377,29 @@ class Workdir:
             self.__set_workdir_version(CURRENT_VERSION)
 
         return self.revision
+
+    # def actually_commit(self, added_files, deleted_files):
+    #     self.verify_manifest(unchanged_files + new_files + modified_files)
+
+    #     latest_latest_rev = front.find_last_revision(self.sessionName)
+    #     if latest_rev != latest_latest_rev:
+    #         raise UserError("The session was modified during the scan, cannot proceed. Please try again.")
+        
+    #     self.__create_snapshot(new_files + modified_files, 
+    #                            deleted_files, 
+    #                            base_snapshot, 
+    #                            front, 
+    #                            log_message, 
+    #                            ignore_errors, 
+    #                            force_base_snapshot)
+
+    #     if write_meta:
+    #         self.write_metadata()
+    #         self.__set_workdir_version(CURRENT_VERSION)
+
+    #     return self.revision
+
+        
 
     def verify_manifest(self, included_files):
         """Verify that the given set of files does not conflict with
