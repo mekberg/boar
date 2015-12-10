@@ -31,6 +31,15 @@ def call(cmd, check=True, cwd=None):
     """Execute a command and return output and status code. If 'check' is True,
     an exception will be raised if the command exists with an error code. If
     'cwd' is set, the command will execute in that directory."""
+    def localencoding(us):
+        if type(us) == unicode:
+            if os.name == "nt":
+                return us.encode("mbcs")
+            else:
+                return us.encode("utf8")
+        return us
+    cmd = [localencoding(s) for s in cmd]
+    cwd = localencoding(cwd)
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, cwd=cwd)
     stdout = p.communicate()[0]
     returncode = p.poll()
@@ -82,11 +91,11 @@ class TestCli(unittest.TestCase):
 
     def tearDown(self):
         global REPO, SESSION, WORKDIR
+        os.chdir(BOAR_HOME)
         shutil.rmtree(self.testdir)
         if "REPO" in globals(): del REPO,
         if "SESSION" in globals(): del SESSION
         if "WORKDIR" in globals(): del WORKDIR
-        os.chdir(BOAR_HOME)
 
     def testCat(self):
         testdata = "a\n\b\n\c"
@@ -130,8 +139,8 @@ class TestCli(unittest.TestCase):
         assert "Checked in session id 3" in output
         output, returncode = call([BOAR,  "--repo", REPO, 
                                    "contents", "-r", "3", SESSION])
-        self.assertItemsEqual(json.loads(output)['files'],
-                              [{"filename": "file_unchanged.txt",
+        self.assertEqual(sorted(json.loads(output)['files']),
+                              sorted([{"filename": "file_unchanged.txt",
                                 "size": 18,
                                 "md5": "eeefefca582568aabfbca7f5fce6a20a"
                                 },
@@ -142,7 +151,7 @@ class TestCli(unittest.TestCase):
                                {"filename": "file_new.txt",
                                 "size": 3,
                                 "md5": "22af645d1859cb5ca6da0c484f1f37ea"
-                                }])
+                                }]))
 
     def testPartialCommitInOffsetWorkdir(self):
         self.setupWorkdir(SESSION, offset="subdir1")
@@ -174,8 +183,8 @@ class TestCli(unittest.TestCase):
         assert "Checked in session id 3" in output
         output, returncode = call([BOAR,  "--repo", REPO, 
                                    "contents", "-r", "3", SESSION])
-        self.assertItemsEqual(json.loads(output)['files'],
-                              [{"filename": "subdir1/subdir2/file_unchanged.txt",
+        self.assertEqual(sorted(json.loads(output)['files']),
+                              sorted([{"filename": "subdir1/subdir2/file_unchanged.txt",
                                 "size": 18,
                                 "md5": "eeefefca582568aabfbca7f5fce6a20a"
                                 },
@@ -186,7 +195,7 @@ class TestCli(unittest.TestCase):
                                {"filename": "subdir1/subdir2/file_new.txt",
                                 "size": 3,
                                 "md5": "22af645d1859cb5ca6da0c484f1f37ea"
-                                }])
+                                }]))
 
 
 if __name__ == '__main__':
