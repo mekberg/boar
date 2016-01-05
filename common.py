@@ -413,8 +413,8 @@ def my_relpath(path, start=os.path.curdir):
         raise ValueError("no path specified")
     assert isinstance(path, unicode)
     assert isinstance(start, unicode)
-    absstart = os.path.abspath(start)
-    abspath = os.path.abspath(path)
+    absstart = uabspath(start)
+    abspath = uabspath(path)
     if absstart[-1] != os.path.sep:
         absstart += os.path.sep
     assert abspath.startswith(absstart), abspath + " " + absstart
@@ -450,6 +450,12 @@ class UndecodableFilenameException(Exception):
         self.path = path
         self.filename = filename
 
+def uabspath(path):
+    if os.path.isabs(path):
+        return path
+    assert type(path) == unicode
+    return os.path.normpath(os.path.join(os.getcwdu(), path))
+
 def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     """ Returns a simple list of all the files under the given root
     directory. Any files or directories given in the skip argument
@@ -462,6 +468,8 @@ def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     """
     assert isinstance(root, unicode) # type affects os.path.walk callback args
     assert type(skip) == type([]), "skip list must be a list"
+
+    absolute_root = uabspath(root)
 
     if not progress_printer:
         progress_printer = __DummyProgressPrinter()
@@ -496,7 +504,7 @@ def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
             progress_printer.update()
 
     all_files = []
-    os.path.walk(root, visitor, all_files)
+    os.path.walk(absolute_root, visitor, all_files)
     progress_printer.finished()
     return all_files
 
@@ -719,7 +727,7 @@ def unc_abspath(s):
     converts the path to an UNC path without using the broken python 2.x os.path
     tools."""
     if os.name != "nt":
-        return os.path.abspath(s)
+        return uabspath(s)
     if s.startswith(r"\\"):
         assert not "/" in s
         return s

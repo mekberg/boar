@@ -25,6 +25,82 @@ if __name__ == '__main__':
 
 import common
 
+class TestGetTree(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp(prefix=u'testcommon_gettreeÅÄÖ_', dir=TMPDIR)
+        self.testdir = os.path.join(self.tmpdir, u"testdirÅÄÖ")
+        os.mkdir(self.testdir)
+        self.old_cwd = os.getcwd()
+        os.chdir(self.tmpdir)
+
+    def tearDown(self):
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.tmpdir, ignore_errors = True)
+
+    def path(self, fn):
+        assert not os.path.isabs(fn)
+        return os.path.join(self.testdir, fn)
+
+    def addFile(self, fn, data = None):
+        assert not os.path.isabs(fn)
+        if data == None:
+            data = fn
+        if type(data) == unicode:
+            data = data.encode("utf8")
+        dirname = os.path.dirname(fn)
+        if dirname:
+            os.makedirs(self.path(dirname))
+        open(self.path(fn), "w").write(data)
+
+    def assertTreeEquals(self, tree, expected):
+        self.assertEquals(sorted(tree), sorted(expected))
+
+    def testTestTools(self):
+        self.assertTrue(os.path.isabs(self.path(u'test1.txt')))
+
+    def testSimple(self):
+        self.addFile("test1.txt")
+        self.addFile("subdir/test2.txt")
+        self.addFile(u"räksmörgåsar/räksmörgås.txt")
+
+        tree = common.get_tree(self.testdir)
+        self.assertTreeEquals(tree, [u'test1.txt', 
+                                     u'subdir/test2.txt', 
+                                     u'räksmörgåsar/räksmörgås.txt'])
+
+    def testSimpleWithRelativeRoot(self):
+        self.addFile("test1.txt")
+        self.addFile("subdir/test2.txt")
+        self.addFile(u"räksmörgåsar/räksmörgås.txt")
+
+        self.assertTrue(os.path.exists(u"testdirÅÄÖ"))
+        tree = common.get_tree(u"testdirÅÄÖ")
+        self.assertTreeEquals(tree, [u'test1.txt', 
+                                     u'subdir/test2.txt', 
+                                     u'räksmörgåsar/räksmörgås.txt'])
+
+    def testAbsolute(self):
+        self.addFile("test1.txt")
+        self.addFile("subdir/test2.txt")
+        self.addFile(u"räksmörgåsar/räksmörgås.txt")
+
+        tree = common.get_tree(self.testdir, absolute_paths = True)
+        self.assertTreeEquals(tree, [self.path(u'test1.txt'),
+                                     self.path(u'subdir/test2.txt'), 
+                                     self.path(u'räksmörgåsar/räksmörgås.txt')])
+
+    def testAbsoluteWithRelativeRoot(self):
+        self.addFile("test1.txt")
+        self.addFile("subdir/test2.txt")
+        self.addFile(u"räksmörgåsar/räksmörgås.txt")
+
+        tree = common.get_tree(u"testdirÅÄÖ", absolute_paths = True)
+        self.assertTreeEquals(tree, [self.path(u'test1.txt'),
+                                     self.path(u'subdir/test2.txt'), 
+                                     self.path(u'räksmörgåsar/räksmörgås.txt')])
+
+        
+
 class TestStrictFileWriterBasics(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix='testcommon_', dir=TMPDIR)
@@ -98,10 +174,12 @@ class TestStrictFileWriterEnforcement(unittest.TestCase):
         self.assertEquals("avocado", open(self.filename).read())
 
     def testHappyPath2(self):
+        self.sfw.write("")
         self.sfw.write("avo")
         self.sfw.write("cad")
         self.sfw.write("")
         self.sfw.write("o")
+        self.sfw.write("")
         self.sfw.close()
         self.assertEquals("avocado", open(self.filename).read())
 
