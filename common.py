@@ -434,10 +434,6 @@ def open_raw(filename):
     #     print "Failed using O_DIRECT", e
     #     return open(filename, "rb")
 
-class __DummyProgressPrinter:
-    """Dummy progress printer for use in get_tree"""
-    def update(self): pass
-    def finished(self): pass
 
 class UndecodableFilenameException(Exception):
     def __init__(self, path, filename):
@@ -456,56 +452,70 @@ def uabspath(path):
     assert type(path) == unicode
     return os.path.normpath(os.path.join(os.getcwdu(), path))
 
-def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
-    """ Returns a simple list of all the files under the given root
+# def uncify_absolute(fn):
+#     if os.name == 'nt':
+#         assert len(fn) > 2 and fn[1] == ":"
+#         # Likely a windows non-UNC absolute path
+#         return "\\\\?\\" + fn
+#     return fn
+
+def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_printer = None):
+    """ Returns a list of all the files under the given root
     directory. Any files or directories given in the skip argument
     will not be returned or scanned.
 
+    The path components are separated by the local OS standard
+    separator ("/" on posix systems, "\" on windows), unless a
+    separator is explicitly given.
+
     The progress printer, if given, must be an object with two methods
-    "update()" and "finished()", neither accepting any
-    parameters. Update will be called once for every file seen, and
-    then finished will be called.
+    "update()" and "finished()". Update will be called every time a
+    directory has been processed and will be given the total number of
+    files found so far. When processing has completed, finished() will
+    be called.
     """
     assert isinstance(root, unicode) # type affects os.path.walk callback args
     assert type(skip) == type([]), "skip list must be a list"
+    assert sep in ("/", "\\")
+    if absolute_paths:
+        assert sep == os.sep, "Non-standard separator not allowed when generating absolute paths"
 
     absolute_root = uabspath(root)
 
     if not progress_printer:
-        progress_printer = __DummyProgressPrinter()
-
-    if not absolute_paths:
-        post_process = lambda fn: convert_win_path_to_unix(my_relpath(fn, root))
-    else:
-        post_process = convert_win_path_to_unix
-
-    def visitor(out_list, dirname, names):
-        for file_to_skip in skip:
-            if file_to_skip in names:
-                names.remove(file_to_skip)
-        for name in names:
-            if type(name) != unicode:
-                raise UndecodableFilenameException(dirname, name)
-            try:
-                fullpath = os.path.join(dirname, name)
-                unc_path = unc_abspath(fullpath)
-                assert os.path.exists(unc_path), "File was removed during scan"
-                if os.path.isdir(unc_path):
-                    continue
-            except OSError:
-                print "Failed on file:", dirname, name
-                raise
-
-            f = post_process(fullpath)
-            assert not is_windows_path(f), "Was:" + f
-            assert not ".." in f.split("/"), "Was:" + f
-            assert not "\\" in f, "Was:" + f
-            out_list.append(f)
-            progress_printer.update()
+        class DummyProgressPrinter:
+            def update(self, new_value=None): pass
+            def finished(self): pass
+        progress_printer = DummyProgressPrinter()
 
     all_files = []
-    os.path.walk(absolute_root, visitor, all_files)
+
+    def rec_tree(root, path):
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(root)
+            names = os.listdir(u".")
+            for name in names:
+                if type(name) != unicode:
+                    raise UndecodableFilenameException(root, name)
+                if name in skip:
+                    continue
+                stat = os.stat(name)
+                if os.path.stat.S_ISDIR(stat.st_mode):
+                    rec_tree(name, path + name + sep)
+                else:
+                    all_files.append(path + name)
+            progress_printer.update(new_value=len(all_files))
+        finally:
+            os.chdir(old_cwd)
+
+    if absolute_paths:
+        rec_tree(absolute_root, absolute_root + sep)
+    else:
+        rec_tree(absolute_root, "")
+
     progress_printer.finished()
+
     return all_files
 
 class FileMutex:

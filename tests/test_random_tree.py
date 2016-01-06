@@ -106,7 +106,7 @@ class TestRandomTree(unittest.TestCase):
         self._assertWorkdirEqualsTree(u"second_workdir", r)
 
     def _assertWorkdirEqualsTree(self, workdir, randtree):
-        all_files = get_tree(os.path.abspath(workdir), skip = [".boar"])
+        all_files = get_tree(os.path.abspath(workdir), skip = [".boar"], sep = "/")
         all_files.remove("manifest-md5.txt")
         self.assertEqual(set(all_files), set(map(backslashes_to_slashes, randtree.files)))
         for fn in all_files:

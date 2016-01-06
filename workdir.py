@@ -117,6 +117,8 @@ class Workdir:
         try:
             self.tree = get_tree(self.root, skip = [METADIR], absolute_paths = False, \
                                      progress_printer = progress)
+            if os.name == 'nt':
+                self.tree = [fn.replace("\\", "/") for fn in self.tree]
         except UndecodableFilenameException, e:
             raise UserError("Found a filename that is illegal under the current file system encoding (%s): '%s'" % 
                             (sys.getfilesystemencoding(), e.human_readable_name))
@@ -812,8 +814,11 @@ class ScanProgressPrinter:
     def __print(self):
         print self.msg, self.count, "\r",
 
-    def update(self):
-        self.count += 1
+    def update(self, new_value=None):
+        if new_value != None:
+            self.count = new_value
+        else:
+            self.count += 1
         now = time.time()
         if now - self.last_t < 0.1:
             return
@@ -827,7 +832,7 @@ class ScanProgressPrinter:
 
 class DummyScanProgressPrinter:
     def __init__(self, msg = ""): pass
-    def update(self): pass
+    def update(self, new_value=None): pass
     def finished(self): pass
 
 

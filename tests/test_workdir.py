@@ -558,7 +558,7 @@ class TestPartialCheckin(unittest.TestCase, WorkdirHelper):
         wd.setLogOutput(DevNull())
         wd.use_progress_printer(False)
         wd.checkout()
-        tree = get_tree(wd.root, absolute_paths = False)
+        tree = get_tree(wd.root, sep = "/", absolute_paths = False)
         #tree = wd.get_tree(absolute_paths = True)
         self.assertEquals(set(tree), set(["insubdir.txt", '.boar/info', '.boar/wd_version.txt']))
 

@@ -8,9 +8,11 @@ $BOAR mksession --repo=TESTREPO AnotherTestSession || exit 1
 $BOAR --repo=TESTREPO co AnotherTestSession || exit 1
 
 echo "Rev 2" >TestSession/r2.txt || exit 1
-# md5("avocado") -> 6118fda28fbc20966ba8daafdf836683
+# md5("avocado\n") -> c6f3a2db52a478d9d00fd1059dac6e0a
 echo "avocado" >TestSession/soon_to_be_orhpan_blob.txt || exit 1 
 (cd TestSession && $BOAR ci -q) || exit 1
+
+test -e TESTREPO/blobs/c6/c6f3a2db52a478d9d00fd1059dac6e0a || exit 1
 
 rm TestSession/r2.txt || exit 1
 rm TestSession/soon_to_be_orhpan_blob.txt || exit 1
@@ -65,6 +67,7 @@ EOF
 $BOAR --repo=TESTREPO_truncated list --dump >output.txt 2>&1 || { echo "List command failed"; exit 1; }
 txtmatch.py expected.txt output.txt || { echo "Unexpected dump output"; exit 1; }
 
+test -e TESTREPO_truncated/blobs/c6/c6f3a2db52a478d9d00fd1059dac6e0a || exit 1 # Not-yet-orphan blob still exists
 
 echo --- Perform truncate
 cat >expected_truncate_msg.txt <<EOF
@@ -81,6 +84,9 @@ txtmatch.py expected_truncate_msg.txt truncate_msg.txt || {
 echo --- Verify that the repo has the expected number of snapshots
 test -e "TESTREPO_truncated/sessions/8" || { echo "Independent snapshot 8 should exist"; exit 1; }
 test ! -e "TESTREPO_truncated/sessions/9" || { echo "Snapshot 9 should not exist"; exit 1; }
+
+echo --- Verify that orphaned blobs has been removed
+test ! -e TESTREPO_truncated/blobs/c6/c6f3a2db52a478d9d00fd1059dac6e0a || { echo "Orphan blob was not removed"; exit 1; }
 
 echo --- Verify that TestSession contains the expected revision
 cat >expected_list_msg.txt <<EOF

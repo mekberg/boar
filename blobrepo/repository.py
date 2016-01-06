@@ -623,7 +623,7 @@ class Repo:
     def get_raw_blob_names(self):
         blobpattern = re.compile("/([0-9a-f]{32})$")
         assert blobpattern.search("b5/b5fb453aeaaef8343353cc1b641644f9")
-        tree = get_tree(os.path.join(self.repopath, BLOB_DIR))
+        tree = get_tree(os.path.join(self.repopath, BLOB_DIR), sep="/")
         matches = set()
         for f in tree:
             m = blobpattern.search(f)
@@ -631,10 +631,11 @@ class Repo:
                 matches.add(m.group(1))
         return list(matches)
 
+    
     def get_recipe_names(self):
         recipepattern = re.compile("([0-9a-f]{32})([.]recipe)$")
         assert recipepattern.search("b5fb453aeaaef8343353cc1b641644f9.recipe")
-        tree = get_tree(os.path.join(self.repopath, RECIPES_DIR))
+        tree = get_tree(os.path.join(self.repopath, RECIPES_DIR), sep="/")
         matches = set()
         for f in tree:
             m = recipepattern.search(f)
