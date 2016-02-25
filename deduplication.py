@@ -154,7 +154,7 @@ class BlockChecksum:
 
     def feed_string(self, s):
         self.buffer.append(s)
-        while len(self.buffer) - self.position >= self.window_size:
+        while self.buffer.virtual_size() - self.position >= self.window_size:
             block = self.buffer[self.position:self.position+self.window_size]
             block_md5 = md5sum(block)
             block_rolling = calc_rolling(block, self.window_size)
@@ -400,7 +400,7 @@ class RecipeFinder(GenericStateMachine):
             offset = max(self.feed_byte_count - self.block_size, self.end_of_last_hit)
             self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = offset)
         self.dispatch(EOF_EVENT,offset = self.feed_byte_count)
-        assert len(self.tail_buffer) == self.feed_byte_count
+        assert self.tail_buffer.virtual_size() == self.feed_byte_count
         assert self.get_state() == END_STATE
         assert self.restored_md5summer.hexdigest() == self.md5summer.hexdigest()
         self.original_piece_handler.close()
@@ -502,7 +502,7 @@ class RecipeFinder(GenericStateMachine):
         assert self.closed
         if self.recipe == None:
             self.recipe = OrderedDict([("md5sum", self.md5summer.hexdigest()),
-                                       ("size", len(self.tail_buffer)),
+                                       ("size", self.tail_buffer.virtual_size()),
                                        ("method", "concat"),
                                        ("pieces", list(self.__seq2rec()))])
             # We now have a complete and useful recipe. But can it be improved?

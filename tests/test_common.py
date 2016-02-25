@@ -155,6 +155,17 @@ class TestStripPathOffset(unittest.TestCase):
         # The child path must start with the offset
         self.assertRaises(AssertionError, common.strip_path_offset, "/b", "/a")
 
+class TestTailBuffer(unittest.TestCase):
+    def test_large_buffer(self):
+        tb = common.TailBuffer()
+        ONE_HUNDRED_MB = "x" * (100 * 2**20)
+        for n in range(50): # 5GB should be enough for anyone
+            tb.append(ONE_HUNDRED_MB)
+            size = tb.virtual_size()
+            self.assertTrue(isinstance(size, (int, long)))
+            tb.release(size)
+        self.assertEqual(tb.virtual_size(), 50 * 100 * 2**20)
+
 class TestMisc(unittest.TestCase):
     def test_common_tail(self):
         def test(s1, s2, expected):
