@@ -30,19 +30,19 @@ class TreeComparer:
         basepairs = set(self.basetree.items())
         newpairs = set(self.newtree.items())
         self.deleted_files = basefilenames.difference(newfilenames)
-        self.new_files = newfilenames.difference(basefilenames)
+        self.added_files = newfilenames.difference(basefilenames)
         identical_pairs = basepairs.intersection(newpairs)
         self.unchanged_files = set(dict(identical_pairs).keys())
-        self.modified_files = newfilenames.difference(self.new_files, self.unchanged_files)
+        self.modified_files = newfilenames.difference(self.added_files, self.unchanged_files)
 
     def as_tuple(self):
-        return tuple(self.unchanged_files), tuple(self.new_files), tuple(self.modified_files), tuple(self.deleted_files)
+        return tuple(self.unchanged_files), tuple(self.added_files), tuple(self.modified_files), tuple(self.deleted_files)
 
     def all_filenames(self):
         return set(self.basetree.keys()).union(set(self.newtree.keys()))
 
     def all_changed_filenames(self):
-        return self.new_files.union(self.modified_files).union(self.deleted_files)
+        return self.added_files.union(self.modified_files).union(self.deleted_files)
 
     def is_deleted(self, filename):
         return filename in self.deleted_files
@@ -51,7 +51,7 @@ class TreeComparer:
         return filename in self.modified_files
     
     def is_new(self, filename):
-        return filename in self.new_files
+        return filename in self.added_files
     
     def is_unchanged(self, filename):
         return filename in self.unchanged_files
@@ -65,17 +65,17 @@ def __selftest():
 
     newlist = {"modified.txt": "modified content2",
                "unchanged.txt": "unchanged content",
-               "new.txt": "new content"
+               "added.txt": "new content"
                }
 
     comp = TreeComparer(oldlist, newlist)
     assert comp.deleted_files == set(["deleted.txt"]), comp.deleted_files
     assert comp.unchanged_files == set(["unchanged.txt"]), comp.unchanged_files
-    assert comp.new_files == set(["new.txt"]), comp.new_files
+    assert comp.added_files == set(["added.txt"]), comp.added_files
     assert comp.modified_files == set(["modified.txt"]), comp.modified_files
 
-    assert comp.all_filenames() == set(["deleted.txt", "modified.txt", "unchanged.txt", "new.txt"])
-    assert comp.all_changed_filenames() == set(["deleted.txt", "modified.txt", "new.txt"])
+    assert comp.all_filenames() == set(["deleted.txt", "modified.txt", "unchanged.txt", "added.txt"])
+    assert comp.all_changed_filenames() == set(["deleted.txt", "modified.txt", "added.txt"])
 
     assert comp.is_modified("modified.txt")
     assert not comp.is_deleted("modified.txt")
@@ -92,10 +92,10 @@ def __selftest():
     assert comp.is_unchanged("unchanged.txt")
     assert not comp.is_new("unchanged.txt")
 
-    assert not comp.is_modified("new.txt")
-    assert not comp.is_deleted("new.txt")
-    assert not comp.is_unchanged("new.txt")
-    assert comp.is_new("new.txt")
+    assert not comp.is_modified("added.txt")
+    assert not comp.is_deleted("added.txt")
+    assert not comp.is_unchanged("added.txt")
+    assert comp.is_new("added.txt")
 
 
 __selftest()
