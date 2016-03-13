@@ -474,11 +474,21 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
     files found so far. When processing has completed, finished() will
     be called.
     """
-    assert isinstance(root, unicode) # type affects os.path.walk callback args
+    assert isinstance(root, unicode) # Avoid any encoding problems later
     assert type(skip) == type([]), "skip list must be a list"
     assert sep in ("/", "\\")
     if absolute_paths:
         assert sep == os.sep, "Non-standard separator not allowed when generating absolute paths"
+    if root.startswith("\\\\"): # UNC paths cannot be translated. Just make sure it's valid.
+        assert os.sep == "\\", "Windows (UNC) paths are not valid on this system"
+        assert "/" not in root, "Forward slashes not allowed in windows-style (UNC) paths"
+    else:
+        if sep == "\\": 
+            root = root.replace("/", "\\")
+        elif sep == "/": 
+            root = root.replace("\\", "/")
+        else: 
+            assert False
 
     absolute_root = uabspath(root)
 
