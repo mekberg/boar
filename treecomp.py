@@ -49,10 +49,10 @@ class TreeComparer:
 
     def is_modified(self, filename):
         return filename in self.modified_files
-    
+
     def is_new(self, filename):
         return filename in self.new_files
-    
+
     def is_unchanged(self, filename):
         return filename in self.unchanged_files
 

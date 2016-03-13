@@ -50,7 +50,7 @@ class Workdir:
         assert repoUrl == None or isinstance(repoUrl, unicode)
         assert isinstance(sessionName, unicode)
         assert isinstance(offset, unicode)
-        assert not offset.endswith("/") or offset.endswith("\\")
+        assert not (offset.endswith("/") or offset.endswith("\\"))
         assert revision == None or isinstance(revision, int)
         assert isinstance(root, unicode)
         assert os.path.isabs(root), "Workdir path must be absolute. Was: " + root
@@ -120,11 +120,11 @@ class Workdir:
             if os.name == 'nt':
                 self.tree = [fn.replace("\\", "/") for fn in self.tree]
         except UndecodableFilenameException, e:
-            raise UserError("Found a filename that is illegal under the current file system encoding (%s): '%s'" % 
+            raise UserError("Found a filename that is illegal under the current file system encoding (%s): '%s'" %
                             (sys.getfilesystemencoding(), e.human_readable_name))
         self.tree_csums == None
         self.__reload_manifests()
-        
+
     def __reload_manifests(self):
         self.manifest = {}
         # session_filename -> set[manifest filename, ...]
@@ -160,10 +160,10 @@ class Workdir:
                         raise UserError("Conflicting manifests for '%s'" % (
                                 os.path.join(dirname, filename)))
                 else:
-                    self.manifest[session_filename] = md5                    
+                    self.manifest[session_filename] = md5
                 manifests_by_file[session_filename].add(fn)
 
-                
+
     def __get_workdir_version(self):
         version_file = os.path.join(self.metadir, VERSION_FILE)
         if os.path.exists(version_file):
@@ -225,7 +225,7 @@ class Workdir:
         target = strip_path_offset(self.offset, session_path)
         target_path = os.path.join(self.root, target)
         print >>self.output, target
-        fetch_blob(self.get_front(), md5, target_path, overwrite = overwrite)        
+        fetch_blob(self.get_front(), md5, target_path, overwrite = overwrite)
 
     def update_revision(self, new_revision = None):
         assert new_revision == None or isinstance(new_revision, int)
@@ -315,7 +315,7 @@ class Workdir:
         unchanged_files, new_files, modified_files, deleted_files, ignored_files = \
             self.get_changes(self.revision, ignore_errors = ignore_errors)
 
-        
+
         if include != None:
             include = set(include)
             unchanged_files = [fn for fn in unchanged_files if fn in include]
@@ -326,7 +326,7 @@ class Workdir:
             all_processed_files = set(new_files + modified_files + deleted_files)
             unprocessed_files = include - all_processed_files
             if unprocessed_files:
-                raise UserError("Some explicitly listed files were not found in the workdir: \n" + 
+                raise UserError("Some explicitly listed files were not found in the workdir: \n" +
                                 ", ".join(unprocessed_files))
             del (include, all_processed_files, unprocessed_files )
 
@@ -336,7 +336,7 @@ class Workdir:
             force_base_snapshot = True
         elif stats:
             # Add the impact of this new snapshot
-            stats['remove_count'] += len(deleted_files)            
+            stats['remove_count'] += len(deleted_files)
             stats['add_count'] += len(new_files) + len(modified_files)
             stats['total_count'] += len(new_files) - len(deleted_files)
             # If there are more removals than actual files, let's make
@@ -366,12 +366,12 @@ class Workdir:
         if latest_rev != latest_latest_rev:
             raise UserError("The session was modified during the scan, cannot proceed. Please try again.")
 
-        self._create_snapshot(files=new_files + modified_files, 
-                              deleted_files=deleted_files, 
-                              base_snapshot=base_snapshot, 
-                              front=front, 
-                              log_message=log_message, 
-                              ignore_errors=ignore_errors, 
+        self._create_snapshot(files=new_files + modified_files,
+                              deleted_files=deleted_files,
+                              base_snapshot=base_snapshot,
+                              front=front,
+                              log_message=log_message,
+                              ignore_errors=ignore_errors,
                               force_base_snapshot=force_base_snapshot)
 
         if write_meta:
@@ -386,13 +386,13 @@ class Workdir:
     #     latest_latest_rev = front.find_last_revision(self.sessionName)
     #     if latest_rev != latest_latest_rev:
     #         raise UserError("The session was modified during the scan, cannot proceed. Please try again.")
-        
-    #     self.__create_snapshot(new_files + modified_files, 
-    #                            deleted_files, 
-    #                            base_snapshot, 
-    #                            front, 
-    #                            log_message, 
-    #                            ignore_errors, 
+
+    #     self.__create_snapshot(new_files + modified_files,
+    #                            deleted_files,
+    #                            base_snapshot,
+    #                            front,
+    #                            log_message,
+    #                            ignore_errors,
     #                            force_base_snapshot)
 
     #     if write_meta:
@@ -401,7 +401,7 @@ class Workdir:
 
     #     return self.revision
 
-        
+
 
     def verify_manifest(self, included_files):
         """Verify that the given set of files does not conflict with
@@ -510,7 +510,7 @@ class Workdir:
         if sums and not recent_change:
             return sums
         return None
-        
+
 
     def cached_md5sum(self, relative_path):
         """Return the md5 checksum of the given file as hex encoded
@@ -597,7 +597,7 @@ class Workdir:
         remaining_files = total_files
         remaining_bytes = total_bytes
 
-        progress = self.ChecksumProgressPrinter()        
+        progress = self.ChecksumProgressPrinter()
         progress.update(total_files, remaining_files, total_bytes, remaining_bytes)
 
         for fn in files_to_checksum:
@@ -688,7 +688,7 @@ def check_in_file(front, abspath, sessionpath, expected_md5sum, log = FakeFile()
         with open_raw(abspath) as f:
             #t0 = time.time()
             front.init_new_blob(expected_md5sum, blobinfo["size"])
-            #print "check_in_file: front.init_new_blob()", expected_md5sum, time.time() - t0            
+            #print "check_in_file: front.init_new_blob()", expected_md5sum, time.time() - t0
             datasource = FileDataSource(f, os.path.getsize(abspath), progress_callback = pp.update)
             front.add_blob_data_streamed(blob_md5 = expected_md5sum, datasource = datasource)
             #print "check_in_file: front.add_blob_data_streamed()", expected_md5sum, time.time() - t0
@@ -709,7 +709,7 @@ def init_workdir(path):
                  sessionName = wdparams["sessionName"],
                  offset = wdparams["offset"],
                  revision = wdparams["revision"],
-                 root = wdparams["root"]) 
+                 root = wdparams["root"])
     return wd
 
 def load_workdir_parameters(path):
@@ -718,12 +718,12 @@ def load_workdir_parameters(path):
         return None
     info = load_meta_info(metapath)
     root = os.path.split(metapath)[0]
-    return {"repoUrl": info['repo_path'], 
-            "sessionName": info['session_name'], 
-            "offset": info.get("offset", ""), 
+    return {"repoUrl": info['repo_path'],
+            "sessionName": info['session_name'],
+            "offset": info.get("offset", ""),
             "revision": info['session_id'],
             "root": root}
-    
+
 
 def find_meta(path):
     meta = os.path.join(path, METADIR)
@@ -870,7 +870,7 @@ class ChecksumProgressPrinter:
 class DummyChecksumProgressPrinter:
     def update(self, total_files, remaining_files, total_bytes, remaining_bytes): pass
     def finished(self): pass
-        
+
 class ChecksumCache:
     def __init__(self, dbpath):
         assert dbpath == ":memory:" or os.path.isabs(dbpath)

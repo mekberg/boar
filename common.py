@@ -993,7 +993,13 @@ class TailBuffer:
         #print "Tail buffer is now virtually", (len(self)), "bytes, but only", len(self.buffer), "in reality"
 
     def __len__(self):
-        return int(self.shifted + len(self.buffer))
+        # __len__ must return an int, and the virtual size of the tail
+        # buffer can easily be more than can be represented on 32 bit
+        # systems.
+        assert False, "len() not supported for tail buffer"
+    
+    def virtual_size(self):
+        return self.shifted + len(self.buffer)
     
     def __getitem__(self, index):
         assert isinstance(index, slice)
