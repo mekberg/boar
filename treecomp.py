@@ -74,7 +74,7 @@ class TreeComparer:
                     for new_fn in newtree_by_hash[base_hash]:
                         # new_fn must be a truly new file, i.e. have no counterpart
                         # in basetree, and not been used as a rename target before.
-                        if new_fn not in basetree and new_fn not in newtree_covered:
+                        if new_fn not in self.basetree and new_fn not in newtree_covered:
                             self.renamed_files.add((base_fn, new_fn))
                             newtree_covered.add(new_fn)
                             break
