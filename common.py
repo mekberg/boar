@@ -498,7 +498,8 @@ def get_tree(root, skip = [], absolute_paths = False, progress_printer = None):
     all_files = []
     os.path.walk(root, visitor, all_files)
     progress_printer.finished()
-    return all_files
+    # The order of the returned files must be deterministic for tests to pass.
+    return sorted(all_files)
 
 class FileMutex:
     """ The purpose of this class is to protect a shared resource from

@@ -82,8 +82,8 @@ echo -- Testing redundant manifests with matching file
 cp Import/manifest-md5.txt Import/manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5 || exit 1
 echo "avocado" >Import/file.txt || exit 1
 cat >expected.txt <<EOF
-NOTICE: Using manifest file manifest-md5.txt
 NOTICE: Using manifest file manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
+NOTICE: Using manifest file manifest-md5.txt
 Sending manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
 Verifying and integrating commit
 Checked in session id 3
@@ -100,10 +100,10 @@ cat >Import/manifest-sha1.txt <<EOF || exit 1
 EOF
 
 cat >expected.txt <<EOF
+NOTICE: Using manifest file manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
+NOTICE: Using manifest file manifest-md5.txt
 WARNING: Found manifest file manifest-sha1.txt, but hash type 'sha1' is not
          supported yet. Ignoring.
-NOTICE: Using manifest file manifest-md5.txt
-NOTICE: Using manifest file manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
 Sending manifest-sha1.txt
 Verifying and integrating commit
 Checked in session id 4
@@ -133,10 +133,10 @@ echo "Wrong content" >offset/subdir/file.txt
 
 
 cat >expected.txt <<EOF
+NOTICE: Using manifest file subdir/manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
+NOTICE: Using manifest file subdir/manifest-md5.txt
 WARNING: Found manifest file subdir/manifest-sha1.txt, but hash type 'sha1' is
          not supported yet. Ignoring.
-NOTICE: Using manifest file subdir/manifest-md5.txt
-NOTICE: Using manifest file subdir/manifest-6f0d05d79c11595917d4ebe31a18fbb1.md5
 ERROR: File subdir/file.txt contents conflicts with manifest
 !Finished in .* seconds
 EOF
