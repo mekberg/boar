@@ -25,23 +25,90 @@ class TreeComparer:
         self.__compare()
 
     def __compare(self):
-        basefilenames = set(self.basetree.keys())
-        newfilenames = set(self.newtree.keys())
-        basepairs = set(self.basetree.items())
-        newpairs = set(self.newtree.items())
-        self.deleted_files = basefilenames.difference(newfilenames)
-        self.added_files = newfilenames.difference(basefilenames)
-        identical_pairs = basepairs.intersection(newpairs)
-        self.unchanged_files = set(dict(identical_pairs).keys())
-        self.modified_files = newfilenames.difference(self.added_files, self.unchanged_files)
+        """
+        Possible cases:
 
-        # renamed_files is a set or list of (old_filename, new_filename, hash) whose
-        # construction is to be implemented later.
-        # These 3-tuples will reduce the added_files and deleted_files lists accordingly.
-        # In order to keep the API and its results unchanged below so that the calling
-        # code never notices any difference, in the methods below the added and deleted
-        # files lists are augmented on the fly accordingly.
-        self.renamed_files = []
+            basetree                 newtree
+            ===================      ===================
+            deleted.txt    del   --
+            modified.txt   mod1  --  modified.txt   mod2
+            unchanged.txt  unch  --  unchanged.txt  unch
+                                 --  added.txt      add
+            old_name.txt   renm  --
+                                 --  new_name.txt   renm
+
+        Note that both sides can have additional files with hash "renm",
+        not shown in the table above, in any combination of file names.
+        """
+        def invert_dict(tree):
+            """ Turns {filename: hash} into {hash: [filenames]} """
+            by_hash = {}
+            for fn, h in tree.iteritems():
+                if h in by_hash:
+                    by_hash[h].append(fn)
+                else:
+                    by_hash[h] = [fn]
+            return by_hash
+
+        # Sets of filenames except for renamed_files, which keeps (old_name, new_name) tuples.
+        self.deleted_files = set()
+        self.modified_files = set()
+        self.unchanged_files = set()
+        self.added_files = set()
+        self.renamed_files = set()
+
+        newtree_by_hash = invert_dict(self.newtree)
+        newtree_covered = set()     # We need this info, but don't want to mutate newtree.
+
+        # This loop covers all possible cases except files that are truly new
+        # in newtree (moves/renames are covered).
+        for base_fn, base_hash in self.basetree.iteritems():
+            if base_fn in self.newtree:
+                if base_hash == self.newtree[base_fn]:
+                    self.unchanged_files.add(base_fn)
+                else:
+                    self.modified_files.add(base_fn)
+                newtree_covered.add(base_fn)
+            else:
+                if base_hash in newtree_by_hash:
+                    for new_fn in newtree_by_hash[base_hash]:
+                        # new_fn must be a truly new file, i.e. have no counterpart
+                        # in basetree, and not been used as a rename target before.
+                        if new_fn not in basetree and new_fn not in newtree_covered:
+                            self.renamed_files.add((base_fn, new_fn))
+                            newtree_covered.add(new_fn)
+                            break
+                    else:
+                        # No suitable rename target found above, base_fn is truly deleted.
+                        self.deleted_files.add(base_fn)
+                else:
+                    self.deleted_files.add(base_fn)
+
+        # Any files in newtree not covered above must be truly new files
+        # with no counterparts in basetree at all.
+        for new_fn, new_hash in self.newtree.iteritems():
+            if new_fn not in newtree_covered:
+                self.added_files.add(new_fn)
+
+        # Alternatively implementing the second loop immediately above
+        # symmetrically to the first loop is almost possible, but is made very
+        # difficult because it also had to reconstruct the rename pairs
+        # *exactly* as the first loop. ==> it is much better and easier as done above.
+        # for new_fn, new_hash in self.newtree.iteritems():
+        #     if new_fn not in self.basetree:
+        #         if new_hash in basetree_by_hash:
+        #             for base_fn in basetree_by_hash[new_hash]:
+        #                 # ...
+        #                 if base_fn not in newtree and base_fn not in xxxx:
+        #                     # ...
+        #                     pass
+        #         else:
+        #             self.added_files.add(new_fn)
+
+        assert(len(self.modified_files) + len(self.unchanged_files) +
+            len(self.renamed_files) + len(self.deleted_files) == len(self.basetree))
+        assert(len(self.modified_files) + len(self.unchanged_files) +
+            len(self.renamed_files) + len(self.added_files) == len(self.newtree))
 
     def __get_rename_deleted(self):
         """ Returns the filenames in the basetree that have been "deleted by rename". """
