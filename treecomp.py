@@ -35,24 +35,46 @@ class TreeComparer:
         self.unchanged_files = set(dict(identical_pairs).keys())
         self.modified_files = newfilenames.difference(self.added_files, self.unchanged_files)
 
+        # renamed_files is a set or list of (old_filename, new_filename, hash) whose
+        # construction is to be implemented later.
+        # These 3-tuples will reduce the added_files and deleted_files lists accordingly.
+        # In order to keep the API and its results unchanged below so that the calling
+        # code never notices any difference, in the methods below the added and deleted
+        # files lists are augmented on the fly accordingly.
+        self.renamed_files = []
+
+    def __get_rename_deleted(self):
+        """ Returns the filenames in the basetree that have been "deleted by rename". """
+        return {renamed[0] for renamed in self.renamed_files}
+
+    def __get_rename_added(self):
+        """ Returns the filenames in the newtree that have been "added by rename". """
+        return {renamed[1] for renamed in self.renamed_files}
+
     def as_tuple(self):
-        return tuple(self.unchanged_files), tuple(self.added_files), tuple(self.modified_files), tuple(self.deleted_files)
+        # This would later be reverted/changed again to have an extra return value, that is:
+        # return ...[as before], tuple(self.renamed_files)
+        return tuple(self.unchanged_files), tuple(self.added_files.union(self.__get_rename_added())), \
+            tuple(self.modified_files), tuple(self.deleted_files.union(self.__get_rename_deleted()))
 
     def all_filenames(self):
         return set(self.basetree.keys()).union(set(self.newtree.keys()))
 
     def all_changed_filenames(self):
-        return self.added_files.union(self.modified_files).union(self.deleted_files)
+        all_changed = self.added_files.union(self.__get_rename_added(),
+            self.modified_files, self.deleted_files, self.__get_rename_deleted())
+        assert(all_changed == self.all_filenames().difference(self.unchanged_files))   # Performance impact?
+        return all_changed
 
     def is_deleted(self, filename):
-        return filename in self.deleted_files
+        return filename in self.deleted_files or filename in self.__get_rename_deleted()
 
     def is_modified(self, filename):
         return filename in self.modified_files
 
     def is_new(self, filename):
-        return filename in self.added_files
-    
+        return filename in self.added_files or filename in self.__get_rename_added()
+
     def is_unchanged(self, filename):
         return filename in self.unchanged_files
 
