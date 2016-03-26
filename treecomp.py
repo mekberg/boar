@@ -118,11 +118,9 @@ class TreeComparer:
         """ Returns the filenames in the newtree that have been "added by rename". """
         return {renamed[1] for renamed in self.renamed_files}
 
-    def as_tuple(self):
-        # This would later be reverted/changed again to have an extra return value, that is:
-        # return ...[as before], tuple(self.renamed_files)
-        return tuple(self.unchanged_files), tuple(self.added_files.union(self.__get_rename_added())), \
-            tuple(self.modified_files), tuple(self.deleted_files.union(self.__get_rename_deleted()))
+    def as_sets(self):
+        # This method might as well be removed (or the self.*_files be declared "private")...
+        return self.unchanged_files, self.added_files, self.modified_files, self.deleted_files, self.renamed_files
 
     def all_filenames(self):
         return set(self.basetree.keys()).union(set(self.newtree.keys()))
