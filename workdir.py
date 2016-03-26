@@ -557,7 +557,7 @@ class Workdir:
         result = self.root + "/" + without_offset
         return result
 
-    def get_changes(self, revision = None, ignore_errors = False):
+    def get_changes_with_renames(self, revision = None, ignore_errors = False):
         """ Compares the work dir with given revision, or the latest
             revision if no revision is given. Returns a tuple of five
             lists: unchanged files, new files, modified files, deleted
@@ -668,16 +668,28 @@ class Workdir:
             assert not deleted_files, deleted_files
             assert not renamed_files
 
-        # Split/dissolve renamed_files into deleted_files and new_files.
-        # This is temporary only, so that callers never notice anything of renamed_files.
+        progress.finished()
+        return unchanged_files, new_files, modified_files, deleted_files, renamed_files, ignored_files
+
+    def get_changes(self, revision = None, ignore_errors = False):
+        """
+        This is a wrapper around get_changes_with_renames().
+        It is continued to be called by all old code for which renames
+        only exist in their implicit form "delete old file, add new file".
+        """
+        unchanged_files, new_files, modified_files, deleted_files, renamed_files, ignored_files = \
+            self.get_changes_with_renames(revision, ignore_errors)
+
+        # Split/dissolve renamed_files into deleted_files and new_files
+        # so that callers never learn anything about renamed_files.
         for old_name, new_name in renamed_files:
             deleted_files.add(old_name)
             new_files.add(new_name)
 
         result = tuple(unchanged_files), tuple(new_files), tuple(modified_files), tuple(deleted_files), ignored_files
-        progress.finished()
         self.last_get_changes = result # A little bit of a hack for update()... User experience trumps code beauty
         return result
+
 
 def fnmatch_multi(patterns, filename):
     for pattern in patterns:
