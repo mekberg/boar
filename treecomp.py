@@ -145,24 +145,32 @@ class TreeComparer:
 
 
 def __selftest():
+    # The rename_dup.txt files must never be used as counterparts for the
+    # old_name.txt or new_name.txt files, even though their contents is the same.
     oldlist = {"deleted.txt": "deleted content",
                "modified.txt": "modified content1",
                "unchanged.txt": "unchanged content",
+               "old_name.txt": "renamed content",
+               "rename_dup.txt": "renamed content",
                }
 
     newlist = {"modified.txt": "modified content2",
                "unchanged.txt": "unchanged content",
-               "added.txt": "new content"
+               "added.txt": "new content",
+               "new_name.txt": "renamed content",
+               "rename_dup.txt": "renamed content",
                }
 
     comp = TreeComparer(oldlist, newlist)
+
     assert comp.deleted_files == set(["deleted.txt"]), comp.deleted_files
-    assert comp.unchanged_files == set(["unchanged.txt"]), comp.unchanged_files
+    assert comp.unchanged_files == set(["unchanged.txt", "rename_dup.txt"]), comp.unchanged_files
     assert comp.added_files == set(["added.txt"]), comp.added_files
     assert comp.modified_files == set(["modified.txt"]), comp.modified_files
+    assert comp.renamed_files == set([("old_name.txt", "new_name.txt")]), comp.renamed_files
 
-    assert comp.all_filenames() == set(["deleted.txt", "modified.txt", "unchanged.txt", "added.txt"])
-    assert comp.all_changed_filenames() == set(["deleted.txt", "modified.txt", "added.txt"])
+    assert comp.all_filenames() == set(["deleted.txt", "modified.txt", "unchanged.txt", "added.txt", "rename_dup.txt", "old_name.txt", "new_name.txt"])
+    assert comp.all_changed_filenames() == set(["deleted.txt", "modified.txt", "added.txt", "old_name.txt", "new_name.txt"])
 
     assert comp.is_modified("modified.txt")
     assert not comp.is_deleted("modified.txt")
@@ -184,5 +192,19 @@ def __selftest():
     assert not comp.is_unchanged("added.txt")
     assert comp.is_new("added.txt")
 
+    assert not comp.is_modified("rename_dup.txt")
+    assert not comp.is_deleted("rename_dup.txt")
+    assert comp.is_unchanged("rename_dup.txt")
+    assert not comp.is_new("rename_dup.txt")
+
+    assert not comp.is_modified("old_name.txt")
+    assert comp.is_deleted("old_name.txt")
+    assert not comp.is_unchanged("old_name.txt")
+    assert not comp.is_new("old_name.txt")
+
+    assert not comp.is_modified("new_name.txt")
+    assert not comp.is_deleted("new_name.txt")
+    assert not comp.is_unchanged("new_name.txt")
+    assert comp.is_new("new_name.txt")
 
 __selftest()
