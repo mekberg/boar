@@ -112,11 +112,17 @@ class TreeComparer:
 
     def __get_rename_deleted(self):
         """ Returns the filenames in the basetree that have been "deleted by rename". """
-        return {renamed[0] for renamed in self.renamed_files}
+        ren_del_files = set()
+        for old_name, new_name in self.renamed_files:
+            ren_del_files.add(old_name)
+        return ren_del_files
 
     def __get_rename_added(self):
         """ Returns the filenames in the newtree that have been "added by rename". """
-        return {renamed[1] for renamed in self.renamed_files}
+        ren_add_files = set()
+        for old_name, new_name in self.renamed_files:
+            ren_add_files.add(new_name)
+        return ren_add_files
 
     def as_sets(self):
         # This method might as well be removed (or the self.*_files be declared "private")...
