@@ -113,6 +113,16 @@ def prefixprint(prefix, text, stream = None):
         stream.write(row)
         stream.write("\n")
 
+def invert_dict(d):
+    """ Turns {key: value} into {value: [keys]} """
+    inv_d = {}
+    for key, value in d.iteritems():
+        if value in inv_d:
+            inv_d[value].append(key)
+        else:
+            inv_d[value] = [key]
+    return inv_d
+
 def error(s, stream = None):
     prefixprint("ERROR: ", s, stream)
 

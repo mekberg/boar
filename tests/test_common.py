@@ -179,6 +179,18 @@ class TestMisc(unittest.TestCase):
         test("abc", "a", "")
         test("a", "abc", "")
 
+    def test_invert_dict(self):
+        inv_d = common.invert_dict({
+            "k1": "v1",
+            "kx": "v2",
+            "k2": "v2",
+            "k3": "v3",
+        })
+
+        self.assertEqual(sorted(inv_d.keys()), ["v1", "v2", "v3"])
+        self.assertEqual(inv_d["v1"], ["k1"])
+        self.assertEqual(set(inv_d["v2"]), set(["k2", "kx"]))
+        self.assertEqual(inv_d["v3"], ["k3"])
 
 
 if __name__ == '__main__':

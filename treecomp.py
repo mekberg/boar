@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from common import invert_dict
+
+
 class TreeComparer:
     def __init__(self, basetree, newtree):
         """ A tree is defined by a dict on the form
@@ -40,16 +43,6 @@ class TreeComparer:
         Note that both sides can have additional files with hash "renm",
         not shown in the table above, in any combination of file names.
         """
-        def invert_dict(tree):
-            """ Turns {filename: hash} into {hash: [filenames]} """
-            by_hash = {}
-            for fn, h in tree.iteritems():
-                if h in by_hash:
-                    by_hash[h].append(fn)
-                else:
-                    by_hash[h] = [fn]
-            return by_hash
-
         # Sets of filenames except for renamed_files, which keeps (old_name, new_name) tuples.
         self.deleted_files = set()
         self.modified_files = set()
