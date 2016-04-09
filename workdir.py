@@ -557,7 +557,7 @@ class Workdir:
         result = self.root + "/" + without_offset
         return result
 
-    def get_changes(self, revision = None, ignore_errors = False):
+    def get_changes_with_renames(self, revision = None, ignore_errors = False):
         """ Compares the work dir with given revision, or the latest
             revision if no revision is given. Returns a tuple of five
             lists: unchanged files, new files, modified files, deleted
@@ -634,31 +634,62 @@ class Workdir:
         for i in bloblist:
             if is_child_path(self.offset, i['filename']):
                 bloblist_dict[i['filename']] = i['md5sum']
+
         comp = TreeComparer(bloblist_dict, filelist)
-        unchanged_files, new_files, modified_files, deleted_files = comp.as_tuple()
+        unchanged_files, new_files, modified_files, deleted_files, renamed_files = comp.as_sets()
 
         ignore_patterns = front.get_session_ignore_list(self.sessionName)
         include_patterns = front.get_session_include_list(self.sessionName)
         ignored_files = ()
+
+        # Should this logic be moved straight into TreeComparer?
         if include_patterns: # optimization
             ignored_files += tuple([fn for fn in new_files if not fnmatch_multi(include_patterns, fn)])
             ignored_files += tuple([fn for fn in modified_files if not fnmatch_multi(include_patterns, fn)])
+            ignored_files += tuple([fn for old, fn in renamed_files if not fnmatch_multi(include_patterns, fn)])
         if ignore_patterns: # optimization
             ignored_files += tuple([fn for fn in new_files if fnmatch_multi(ignore_patterns, fn)])
             ignored_files += tuple([fn for fn in modified_files if fnmatch_multi(ignore_patterns, fn)])
+            ignored_files += tuple([fn for old, fn in renamed_files if fnmatch_multi(ignore_patterns, fn)])
         if ignored_files:
             new_files = tuple([fn for fn in new_files if fn not in ignored_files])
             modified_files = tuple([fn for fn in modified_files if fn not in ignored_files])
-
+            filtered_renamed = set()
+            for old_name, new_name in renamed_files:
+                if new_name in ignored_files:
+                    deleted_files.add(old_name)
+                else:
+                    filtered_renamed.add((old_name, new_name))
+            renamed_files = filtered_renamed
 
         if self.revision == None:
             assert not unchanged_files
             assert not modified_files
             assert not deleted_files, deleted_files
-        result = unchanged_files, new_files, modified_files, deleted_files, ignored_files
+            assert not renamed_files
+
         progress.finished()
+        return unchanged_files, new_files, modified_files, deleted_files, renamed_files, ignored_files
+
+    def get_changes(self, revision = None, ignore_errors = False):
+        """
+        This is a wrapper around get_changes_with_renames().
+        It is continued to be called by all old code for which renames
+        only exist in their implicit form "delete old file, add new file".
+        """
+        unchanged_files, new_files, modified_files, deleted_files, renamed_files, ignored_files = \
+            self.get_changes_with_renames(revision, ignore_errors)
+
+        # Split/dissolve renamed_files into deleted_files and new_files
+        # so that callers never learn anything about renamed_files.
+        for old_name, new_name in renamed_files:
+            deleted_files.add(old_name)
+            new_files.add(new_name)
+
+        result = tuple(unchanged_files), tuple(new_files), tuple(modified_files), tuple(deleted_files), ignored_files
         self.last_get_changes = result # A little bit of a hack for update()... User experience trumps code beauty
         return result
+
 
 def fnmatch_multi(patterns, filename):
     for pattern in patterns:

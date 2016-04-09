@@ -241,8 +241,8 @@ def cmd_status(args):
         raise UserError("The current snapshot has been deleted in the repository.")
 
     wd.use_progress_printer(not options.quiet)
-    unchanged_files, new_files, modified_files, deleted_files, ignored_files \
-        = wd.get_changes(wd.revision)
+    unchanged_files, new_files, modified_files, deleted_files, renamed_files, ignored_files \
+        = wd.get_changes_with_renames(wd.revision)
     filestats = {}
 
     for f in new_files:
@@ -251,6 +251,8 @@ def cmd_status(args):
         filestats[f] = "M"
     for f in deleted_files:
         filestats[f] = "D"
+    for old_name, new_name in renamed_files:
+        filestats[old_name + " => " + new_name] = "R"
     if options.verbose:
         for f in unchanged_files:
             filestats[f] = " "
@@ -333,18 +335,21 @@ class _ChangePrinter:
 
     def print_changes(self, sid):
         comparer = self.get_comparer(sid)
-        all_filenames = list(comparer.all_changed_filenames())
-        all_filenames.sort()
+        unchanged_files, added_files, modified_files, deleted_files, renamed_files = comparer.as_sets()
+        filestats = {}
+
+        for f in added_files:
+            filestats[f] = "A"
+        for f in modified_files:
+            filestats[f] = "M"
+        for f in deleted_files:
+            filestats[f] = "D"
+        for old_name, new_name in renamed_files:
+            filestats[old_name + " => " + new_name] = "R"
+
         print "Changed paths:"
-        for filename in all_filenames:
-            if comparer.is_unchanged(filename):
-                continue
-            elif comparer.is_new(filename):
-                print "A", filename
-            elif comparer.is_deleted(filename):
-                print "D", filename
-            elif comparer.is_modified(filename):
-                print "M", filename    
+        for f in sorted(filestats.keys()):
+            print filestats[f], f
 
     def is_affected(self, sid, path):
         comparer = self.get_comparer(sid)
