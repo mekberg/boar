@@ -113,6 +113,16 @@ def prefixprint(prefix, text, stream = None):
         stream.write(row)
         stream.write("\n")
 
+def invert_dict(d):
+    """ Turns {key: value} into {value: [keys]} """
+    inv_d = {}
+    for key, value in d.iteritems():
+        if value in inv_d:
+            inv_d[value].append(key)
+        else:
+            inv_d[value] = [key]
+    return inv_d
+
 def error(s, stream = None):
     prefixprint("ERROR: ", s, stream)
 
@@ -526,7 +536,8 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
 
     progress_printer.finished()
 
-    return all_files
+    # The order of the returned files must be deterministic for tests to pass.
+    return sorted(all_files)
 
 class FileMutex:
     """ The purpose of this class is to protect a shared resource from
