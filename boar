@@ -690,14 +690,16 @@ def cmd_update(args):
     if options.ignore_changes:
         wd.update_revision(options.revision)
     else:
-        wd.update(old_revision = old_revision, new_revision = new_revision, ignore_errors = options.ignore_errors)
+        have_added_or_modified = wd.update(
+            old_revision = old_revision, new_revision = new_revision, ignore_errors = options.ignore_errors)
 
-    if deleted_old_revision:
-        unchanged_files, new_files, modified_files, deleted_files, ignored_files = wd.last_get_changes
-        if new_files or modified_files:
-            warn("Because the old workdir revision was deleted, the update command was unable "+
-                 "to detect changes accurately. Make sure the workdir does not contain out of "+
-                 "date data before you commit.", sys.stdout) # warn to stdout to make sure it comes after "update" messages
+        if have_added_or_modified and deleted_old_revision:
+            warn("The old revision that you are updating to was deleted from the repository. " +
+                 "It had additional files that are not in your current working directory or " +
+                 "files whose contents has changed since then. These files cannot be restored. " +
+                 "Make sure the workdir does not contain out of date data before you commit.",
+                 sys.stdout)  # warn to stdout to make sure it comes after "update" messages
+
     print "Workdir now at revision", wd.revision
 
 def cmd_ci(args):
