@@ -65,14 +65,13 @@ class Test(unittest.TestCase):
         shutil.rmtree(tmpdir, ignore_errors = True)
 
     def testApplyDelta(self):
-        bloblist = [
-            {'filename': 'unchanged.txt',
-             'md5sum': "00000000000000000000000000000000"},
-            {'filename': 'modified.txt',
-             'md5sum': "00000000000000000000000000000001"},
-            {'filename': 'deleted.txt',
-             'md5sum': "00000000000000000000000000000002"}]
-        original_bloblist_repr = repr(bloblist)
+        bloblist = boar_common.bloblist_to_dict([
+                {'filename': 'unchanged.txt',
+                 'md5sum': "00000000000000000000000000000000"},
+                {'filename': 'modified.txt',
+                 'md5sum': "00000000000000000000000000000001"},
+                {'filename': 'deleted.txt',
+                 'md5sum': "00000000000000000000000000000002"}])
         delta = [ 
             {'filename': 'new.txt',
              'md5sum': "00000000000000000000000000000003"},
@@ -90,31 +89,8 @@ class Test(unittest.TestCase):
              'md5sum': "00000000000000000000000000000003"}
             ]
 
-        new_bloblist = boar_common.apply_delta(bloblist, delta)
-        
-        # Make sure the original bloblist is unchanged
-        self.assertEquals(original_bloblist_repr, repr(bloblist))
-
-        self.assertEquals(new_bloblist, expected_new_bloblist)
-
-    def testApplyDelta2(self):
-        bloblist = [
-            {'filename': 'unchanged.txt',
-             'md5sum': "00000000000000000000000000000000"}]
-        delta = [ 
-            {'filename': 'unchanged.txt',
-             'md5sum': "00000000000000000000000000000000"}]
-        original_bloblist_repr = repr(bloblist)
-        expected_new_bloblist = [
-            {'filename': 'unchanged.txt',
-             'md5sum': "00000000000000000000000000000000"}]
-
-        new_bloblist = boar_common.apply_delta(bloblist, delta)
-        
-        # Make sure the original bloblist is unchanged
-        self.assertEquals(original_bloblist_repr, repr(bloblist))
-
-        self.assertEquals(new_bloblist, expected_new_bloblist)
+        boar_common.apply_delta(bloblist, delta)        
+        self.assertEquals(sorted(bloblist.values()), sorted(expected_new_bloblist))
 
 
     def testBloblistDelta(self):

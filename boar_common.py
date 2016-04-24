@@ -85,31 +85,19 @@ def bloblist_delta(from_bloblist, to_bloblist):
             delta.append(to_dict[fn])
     return delta
 
-def apply_delta(bloblist, delta):
-    """ Apply a delta bloblist to a original bloblist, yielding a
-    resulting bloblist."""
-    for b in bloblist:
-        assert "action" not in b
-    for d in delta:
-        assert d.get("action", None) in (None, "remove")
-    fns_to_delete = set([b['filename'] 
-                         for b in delta
-                         if b.get("action", None) == "remove"])
-    new_and_modified_dict = bloblist_to_dict([b 
-                                              for b in delta
-                                              if "action" not in b])
-    result = []
-    for b in bloblist:
-        if b['filename'] in fns_to_delete:
-            continue
-        elif b['filename'] in new_and_modified_dict:
-            result.append(new_and_modified_dict[b['filename']])
-            del new_and_modified_dict[b['filename']]
+def apply_delta(bloblist_as_dict, delta):
+    """ Apply a delta bloblist to a a bloblist in "filename ->
+    blobinfo" format, modifying the given dictionary."""
+    assert type(bloblist_as_dict) == type({})
+    assert type(delta) == type([])
+    for b in delta:
+        if b.get('action', None) == "remove":
+            try:
+                del bloblist_as_dict[b['filename']]
+            except KeyError:
+                pass # "Cannot happen", but let's be lenient
         else:
-            result.append(b)
-    new_files = new_and_modified_dict.values()
-    result += new_files
-    return result
+            bloblist_as_dict[b['filename']] = b
 
 def invert_bloblist(bloblist):
     """ Returns a dictionary on the form md5sum -> [blobinfo,

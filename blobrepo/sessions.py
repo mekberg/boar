@@ -587,7 +587,7 @@ class SessionReader:
                 raise CorruptionError("Required base snapshot %s is missing" % base_session_id)
             all_session_objs.insert(0, session_obj)
         self.load_stats = { "add_count": 0, "remove_count": 0, "total_count": 0 }
-        bloblist = []
+        bloblist = {}
         for session_obj in all_session_objs:
             rawbloblist = session_obj.get_raw_bloblist()
             for blobinfo in rawbloblist:
@@ -595,8 +595,8 @@ class SessionReader:
                     self.load_stats['remove_count'] += 1
                 else:
                     self.load_stats['add_count'] += 1
-            bloblist = apply_delta(bloblist, rawbloblist)
+            apply_delta(bloblist, rawbloblist)
         self.load_stats['total_count'] = len(bloblist)
-        return bloblist
+        return bloblist.values()
 
 
