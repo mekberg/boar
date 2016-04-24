@@ -70,9 +70,11 @@ cat >expected_update_output.txt <<EOF
 Skipping update of modified file repo_modified.txt
 Updating: wd_deleted.txt
 Skipping update of modified file wd_modified.txt
-WARNING: Because the old workdir revision was deleted, the update command was
-         unable to detect changes accurately. Make sure the workdir does not
-         contain out of date data before you commit.
+WARNING: The old revision that you are updating to was deleted from the
+         repository. It had additional files that are not in your current
+         working directory or files whose contents has changed since then. These
+         files cannot be restored. Make sure the workdir does not contain out of
+         date data before you commit.
 Workdir now at revision 4
 !Finished in .* seconds
 EOF

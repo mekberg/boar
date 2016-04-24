@@ -294,6 +294,7 @@ class Workdir:
         self.tree = None
         self.write_metadata()
         self.__set_workdir_version(CURRENT_VERSION)
+        return bool(new_files or modified_files)
 
     def checkin(self, write_meta = True, force_primary_session = False, \
                     fail_on_modifications = False, add_only = False, dry_run = False, \
@@ -688,9 +689,7 @@ class Workdir:
             deleted_files.add(old_name)
             new_files.add(new_name)
 
-        result = tuple(unchanged_files), tuple(new_files), tuple(modified_files), tuple(deleted_files), ignored_files
-        self.last_get_changes = result # A little bit of a hack for update()... User experience trumps code beauty
-        return result
+        return tuple(unchanged_files), tuple(new_files), tuple(modified_files), tuple(deleted_files), ignored_files
 
 
 def fnmatch_multi(patterns, filename):
