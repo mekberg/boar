@@ -1484,11 +1484,15 @@ if __name__ == "__main__":
     sys.argv = map(tounicode, sys.argv)
     global ucwd
     ucwd = tounicode(os.getcwd())
-    #cProfile.run('main()', "prof.txt")
-    #import pstats
-    #p = pstats.Stats('prof.txt')
-    #p.sort_stats('cum').print_stats(10)
-    #sys.exit(0)
+
+    if 'BOAR_PROF' in os.environ:
+       print "PROFILING ENABLED"
+       cProfile.run('main()', "prof.txt")
+       import pstats
+       p = pstats.Stats('prof.txt')
+       p.sort_stats('cum').print_stats(20)
+       sys.exit(0)
+
     try:
         return_code = main()
     except KeyboardInterrupt:
