@@ -72,6 +72,7 @@ class Test(unittest.TestCase):
              'md5sum': "00000000000000000000000000000001"},
             {'filename': 'deleted.txt',
              'md5sum': "00000000000000000000000000000002"}]
+        original_bloblist_repr = repr(bloblist)
         delta = [ 
             {'filename': 'new.txt',
              'md5sum': "00000000000000000000000000000003"},
@@ -80,7 +81,6 @@ class Test(unittest.TestCase):
             {'filename': 'modified.txt',
              'md5sum': "00000000000000000000000000000004"}
             ]
-        original_bloblist_repr = repr(bloblist)
         expected_new_bloblist = [
             {'filename': 'unchanged.txt',
              'md5sum': "00000000000000000000000000000000"},
@@ -92,10 +92,30 @@ class Test(unittest.TestCase):
 
         new_bloblist = boar_common.apply_delta(bloblist, delta)
         
-        self.assertEquals(new_bloblist, expected_new_bloblist)
-
         # Make sure the original bloblist is unchanged
         self.assertEquals(original_bloblist_repr, repr(bloblist))
+
+        self.assertEquals(new_bloblist, expected_new_bloblist)
+
+    def testApplyDelta2(self):
+        bloblist = [
+            {'filename': 'unchanged.txt',
+             'md5sum': "00000000000000000000000000000000"}]
+        delta = [ 
+            {'filename': 'unchanged.txt',
+             'md5sum': "00000000000000000000000000000000"}]
+        original_bloblist_repr = repr(bloblist)
+        expected_new_bloblist = [
+            {'filename': 'unchanged.txt',
+             'md5sum': "00000000000000000000000000000000"}]
+
+        new_bloblist = boar_common.apply_delta(bloblist, delta)
+        
+        # Make sure the original bloblist is unchanged
+        self.assertEquals(original_bloblist_repr, repr(bloblist))
+
+        self.assertEquals(new_bloblist, expected_new_bloblist)
+
 
     def testBloblistDelta(self):
         bloblist1 = [

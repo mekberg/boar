@@ -107,7 +107,8 @@ def apply_delta(bloblist, delta):
             del new_and_modified_dict[b['filename']]
         else:
             result.append(b)
-    result += new_and_modified_dict.values()
+    new_files = new_and_modified_dict.values()
+    result += new_files
     return result
 
 def invert_bloblist(bloblist):

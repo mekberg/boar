@@ -585,25 +585,17 @@ class SessionReader:
             except MisuseError:
                 # Missing session here means repo corruption
                 raise CorruptionError("Required base snapshot %s is missing" % base_session_id)
-            all_session_objs.append(session_obj)
+            all_session_objs.insert(0, session_obj)
         self.load_stats = { "add_count": 0, "remove_count": 0, "total_count": 0 }
         bloblist = []
-        seen = set()
         for session_obj in all_session_objs:
             rawbloblist = session_obj.get_raw_bloblist()
             for blobinfo in rawbloblist:
-
                 if blobinfo.get("action", None) == "remove":
                     self.load_stats['remove_count'] += 1
                 else:
                     self.load_stats['add_count'] += 1
-
-                if blobinfo['filename'] in seen:
-                    continue
-                seen.add(blobinfo['filename'])
-                if blobinfo.get("action", None) == "remove":
-                    continue
-                bloblist.append(dict(blobinfo))
+            bloblist = apply_delta(bloblist, rawbloblist)
         self.load_stats['total_count'] = len(bloblist)
         return bloblist
 
