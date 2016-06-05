@@ -533,11 +533,7 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
             # rooted at "e:\", rec_tree() tries to recurse into the system directories as well,
             # triggering a WindowsError because the access has been denied.
             # For consistency, skip access errors under other platforms as well.
-            if e.errno == errno.EACCES:
-                # if verbose_output:
-                #     notice(str(e))
-                pass
-            else:
+            if e.errno != errno.EACCES:
                 raise
         finally:
             os.chdir(old_cwd)
