@@ -23,6 +23,7 @@ import sys
 import platform
 import locale
 import codecs
+import errno
 import time
 import textwrap
 
@@ -526,12 +527,18 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
                 else:
                     all_files.append(path + name)
             progress_printer.update(new_value=len(all_files))
-        except WindowsError:
+        except OSError as e:
             # Windows may automatically create hidden system directories in a drive's topmost
             # directory, e.g. "e:\System Volume Information". Thus, if a Boar repository is
             # rooted at "e:\", rec_tree() tries to recurse into the system directories as well,
             # triggering a WindowsError because the access has been denied.
-            pass
+            # For consistency, skip access errors under other platforms as well.
+            if e.errno == errno.EACCES:
+                # if verbose_output:
+                #     notice(str(e))
+                pass
+            else:
+                raise
         finally:
             os.chdir(old_cwd)
 
