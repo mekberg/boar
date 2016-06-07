@@ -80,7 +80,7 @@ class RandTree:
         return filename
 
     def add_dirs(self, number_of_dirs):
-        for n in xrange(number_of_dirs):            
+        for n in xrange(number_of_dirs):
             new_dir = self.find_unused_filename(prefix = "dir_")
             assert len(new_dir) <= self.max_path_length
             self.dirs.append(new_dir)

@@ -35,7 +35,7 @@ def call(cmd, check=True, cwd=None):
     stdout = p.communicate()[0]
     returncode = p.poll()
     if check and returncode != 0:
-        raise Exception("Call failed with errorcode %s: %s" % (returncode, stdout))  
+        raise Exception("Call failed with errorcode %s: %s" % (returncode, stdout))
     return stdout, returncode
 
 BOAR_HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -90,7 +90,7 @@ class TestRandomTree(unittest.TestCase):
         self.assertEqual(r.fingerprint(), expected_fingerprint)
         # Verify that the workdir contents matches the randtree instance
         self._assertWorkdirEqualsTree(workdir, r)
-            
+
         # Remove the tree and check it out
         shutil.rmtree(workdir)
         assert not os.path.exists(workdir)

@@ -67,7 +67,7 @@ class WorkdirHelper:
         with open(filepath, "w") as f:
             f.write(content)
         return md5
-    
+
     def rmWorkdirFile(self, path):
         assert not os.path.isabs(path)
         filepath = os.path.join(self.workdir, path)
@@ -84,4 +84,4 @@ class WorkdirHelper:
             file_contents = f.read()
             self.assertEquals(file_contents, expected_contents)
 
-    
+

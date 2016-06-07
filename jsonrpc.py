@@ -70,7 +70,7 @@ ERROR_MESSAGE = {
     PERMISSION_DENIED   : "Permission denied.",
     INVALID_PARAM_VALUES: "Invalid parameter values."
     }
- 
+
 #----------------------
 # exceptions
 
@@ -79,7 +79,7 @@ class RPCError(Exception):
 
 class RPCFault(RPCError):
     """RPC error/fault package received.
-    
+
     This exception can also be used as a class, to generate a
     RPC-error/fault message.
 
@@ -168,12 +168,12 @@ class DataSource:
     def __init__(self):
         # Don't use this
         raise NotImplementedError()
-    
+
     def bytes_left(self):
         """Return the number of bytes that remains to be read from
         this data source."""
         raise NotImplementedError()
-    
+
     def read(self, n = None):
         """Reads and returns a number of bytes. May return fewer bytes
         than specified if there are no more bytes to read."""
@@ -359,7 +359,7 @@ class JsonRpc20:
 
             error_data = data["error"]["data"]
             message = data["error"]["message"]
-            
+
             if   data["error"]["code"] == PARSE_ERROR:
                 raise RPCParseError(message,error_data)
             elif data["error"]["code"] == INVALID_REQUEST:
@@ -445,7 +445,7 @@ def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 
     assert type(has_binary_payload) == bool
     assert type(progress_packet) == bool
     if progress_packet:
-        assert binary_payload_size == 0 and not has_binary_payload        
+        assert binary_payload_size == 0 and not has_binary_payload
     header_str = struct.pack("!III?Q?", HEADER_MAGIC, HEADER_VERSION, payload_size,\
                                  has_binary_payload, long(binary_payload_size), progress_packet)
     assert len(header_str) == HEADER_SIZE
@@ -473,7 +473,7 @@ def read_header(stream):
     if is_progress_packet:
         if binary_payload_size != 0 or has_binary_payload:
             raise ConnectionLost("Connection closed due to malformed progress packet")
-    
+
     if not has_binary_payload:
         assert binary_payload_size == 0
         binary_payload_size = None
@@ -490,7 +490,7 @@ class BoarMessageClient:
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
-        self.progress_callback = lambda x: None 
+        self.progress_callback = lambda x: None
 
     def set_progress_callback(self, cb):
         self.progress_callback = cb
@@ -504,7 +504,7 @@ class BoarMessageClient:
 
     def __repr__(self):
         return "<JsonrpcClient, %s, %s>" % (self.s_in, self.s_out)
-    
+
     def __send( self, string, datasource = None ):
         #print "CLIENT sending", string, datasource
         bin_length = 0
@@ -523,7 +523,7 @@ class BoarMessageClient:
                     assert not incoming_data, "No incoming data allowed during send"
                 self.s_out.write(datasource.read(2**14))
         self.s_out.flush()
-        
+
     def __recv( self ):
         while True:
             datasize, binary_data_size, is_progress_packet = read_header(self.s_in)
@@ -533,7 +533,7 @@ class BoarMessageClient:
             f = json.loads(data)
             self.progress_callback(f)
 
-        if binary_data_size != None:            
+        if binary_data_size != None:
             return data, StreamDataSource(self.s_in, binary_data_size)
         else:
             return data, None
@@ -549,7 +549,7 @@ class BoarMessageServer:
     opaque message strings and streamed data. It is the responsibility
     of the given 'handler' object to make sense of the received
     messages and compose suitable replies.
-    
+
     The 'handler' object must have a method named "handle" accepting
     two parameters. The first is the received message as a string, the
     other is a DataSource instance. The DataSource instance is only
@@ -573,10 +573,10 @@ class BoarMessageServer:
 
     def __repr__(self):
         return "<BoarMessageServer, %s, %s>" % (self.s_in, self.s_out)
-    
+
     def init_server(self):
         pass
-    
+
     def __send_result(self, result):
         assert result != None
         if isinstance(result, DataSource):
@@ -676,7 +676,7 @@ class ServerProxy:
 
     def __req( self, methodname, args=None, kwargs=None, id=0, progress_callback=None):
         # JSON-RPC 2.0: only args OR kwargs allowed!
-        
+
         if self.active_upload_datasource:
             assert self.active_upload_datasource.bytes_left() == 0, \
                 "Client tried to make a RPC call during data upload."
@@ -770,7 +770,7 @@ class RpcHandler:
 
     def register_instance(self, myinst, name=None):
         """Add all functions of a class-instance to the RPC-services.
-        
+
         All entries of the instance which do not begin with '_' are added.
 
         :Parameters:
@@ -790,7 +790,7 @@ class RpcHandler:
                     self.register_function( getattr(myinst, e), name="%s.%s" % (name, e) )
     def register_function(self, function, name=None):
         """Add a function to the RPC-services.
-        
+
         :Parameters:
             - function: function to add
             - name:     RPC-name for the function. If omitted/None, the original
@@ -823,7 +823,7 @@ class RpcHandler:
             self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id=None )
-        
+
         if method not in self.funcs:
             self.dead = True
             return JsonRpc20.dumps_error( RPCFault(METHOD_NOT_FOUND, ERROR_MESSAGE[METHOD_NOT_FOUND], method), id )

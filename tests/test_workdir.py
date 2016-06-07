@@ -26,7 +26,7 @@ DATA1_MD5 = "5558e0551622725a5fa380caffa94c5d"
 DATA2 = "tjosan hejsan"
 DATA2_MD5 = "923574a1a36aebc7e1f586b7d363005e"
 
-""" 
+"""
 note: to execute a single test, do something like:
 python tests/test_workdir.py TestWorkdir.testGetChangesMissingFile
 """
@@ -54,7 +54,7 @@ class TestFront(unittest.TestCase, WorkdirHelper):
         self.front = self.wd.front
         id = self.wd.get_front().mksession(u"TestSession")
         assert id == 1
-        
+
     def testGetIgnoreDefault(self):
         got_list = self.front.get_session_ignore_list(u"TestSession")
         self.assertEquals(got_list, [])
@@ -75,11 +75,11 @@ class TestFront(unittest.TestCase, WorkdirHelper):
         expected_exception = AssertionError
         if os.getenv("BOAR_TEST_REMOTE_REPO") == "1":
             expected_exception = Exception
-        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list,
                           u"TestSession", "string must not be accepted")
-        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list,
                           u"TestSession", 19) # no numbers allowed
-        self.assertRaises(expected_exception, self.front.set_session_ignore_list, 
+        self.assertRaises(expected_exception, self.front.set_session_ignore_list,
                           u"TestSession", None) # None not allowed
 
     def tearDown(self):
@@ -127,13 +127,13 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         changes = self.wd.get_changes()
         self.assertEqual(changes, ((), ("tjosan.txt",), (), (), ()))
 
-    def testGetChangesUnchangedFile(self):        
+    def testGetChangesUnchangedFile(self):
         self.addWorkdirFile("tjosan.txt", "tjosanhejsan")
         self.wd.checkin()
         changes = self.wd.get_changes()
         self.assertEqual(changes, (("tjosan.txt",), (), (), (), ()))
 
-    def testGetChangesUnchangedFileWithFunkyName(self):        
+    def testGetChangesUnchangedFileWithFunkyName(self):
         name = u"Tjosan_räk smörgås.txt"
         self.addWorkdirFile(name, "tjosanhejsan")
         self.wd.checkin()
@@ -197,7 +197,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkout()
         subtree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEqual(subtree, {'subdirfile1.txt': 'fc2',
-                                   'newfile.txt': 'nf'})        
+                                   'newfile.txt': 'nf'})
 
     def testAddOnlyCommit(self):
         """ Add-only commits should ignore modifications and
@@ -216,7 +216,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEqual(newtree, {'modified.txt': 'mod1',
                                    'deleted.txt': 'del',
                                    'new.txt': 'new'})
-        
+
     def testOverwriteImport(self):
         tree1 = {'file.txt': 'file.txt contents'}
         tree2 = {'file.txt': 'file.txt other contents'}
@@ -241,15 +241,15 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                     'file2.txt': 'fc2'})
 
     def testUpdate(self):
-        wd = self.createWorkdir(self.repoUrl, 
+        wd = self.createWorkdir(self.repoUrl,
                                 {'file2.txt': 'f2'})
         rev1 = wd.checkin()
         wd = self.createWorkdir(self.repoUrl,
                                 {'file2.txt': 'f2 mod2', # modified file
                                  'file3.txt': 'f3'}) # new file
         rev2 = wd.checkin()
-        wd_update = self.createWorkdir(self.repoUrl, 
-                                       {'file2.txt': 'f2 mod1'}, 
+        wd_update = self.createWorkdir(self.repoUrl,
+                                       {'file2.txt': 'f2 mod1'},
                                        revision = rev1)
         wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
@@ -259,7 +259,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def testUpdateResume(self):
         """ Test the case that some parts of the workdir are already
         up to date (like after an aborted update)."""
-        wd = self.createWorkdir(self.repoUrl, 
+        wd = self.createWorkdir(self.repoUrl,
                                 {'file1.txt': 'f1 v1',
                                  'file2.txt': 'f2 v1',
                                  'file3.txt': 'f3 v1'})
@@ -269,7 +269,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                  'file2.txt': 'f2 v2',
                                  'file3.txt': 'f3 v2'})
         rev2 = wd.checkin()
-        wd_update = self.createWorkdir(self.repoUrl, 
+        wd_update = self.createWorkdir(self.repoUrl,
                                        {'file1.txt': 'f1 v2',  # unexpected v2
                                         'file2.txt': 'f2 v1',  # normal v1
                                         'file3.txt': 'f3 mod'},# normal modification, but not v2
@@ -281,15 +281,15 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
                                          'file3.txt': 'f3 mod'})
 
     def testUpdateWithOffset(self):
-        wd = self.createWorkdir(self.repoUrl, 
+        wd = self.createWorkdir(self.repoUrl,
                                 {'subdir/d/file2.txt': 'f2'})
         rev1 = wd.checkin()
         wd = self.createWorkdir(self.repoUrl,
                                 {'subdir/d/file2.txt': 'f2 mod2', # modified file
                                  'subdir/d/file3.txt': 'f3'}) # new file
         rev2 = wd.checkin()
-        wd_update = self.createWorkdir(self.repoUrl, 
-                                       {'d/file2.txt': 'f2 mod1'}, 
+        wd_update = self.createWorkdir(self.repoUrl,
+                                       {'d/file2.txt': 'f2 mod1'},
                                        revision = rev1,
                                        offset = u"subdir")
         wd_update.update_to_latest()
@@ -300,17 +300,17 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def testUpdateDeletion(self):
         """ Only file3.txt should be deleted by the update, since it
         is unchanged. The other two should remain untouched."""
-        wd = self.createWorkdir(self.repoUrl, 
-                                {'file1.txt': 'f1', 
-                                 'file2.txt': 'f2', 
+        wd = self.createWorkdir(self.repoUrl,
+                                {'file1.txt': 'f1',
+                                 'file2.txt': 'f2',
                                  'file3.txt': 'f3'})
         rev1 = wd.checkin()
         wd = self.createWorkdir(self.repoUrl, {})
         rev2 = wd.checkin()
-        wd_update = self.createWorkdir(self.repoUrl, 
+        wd_update = self.createWorkdir(self.repoUrl,
                                        {'file1.txt': 'f1 mod',
                                         'file2.txt': 'f2 mod',
-                                        'file3.txt': 'f3'}, 
+                                        'file3.txt': 'f3'},
                                        revision = rev1)
         wd_update.update_to_latest()
         updated_tree = read_tree(wd_update.root, skiplist = boar_dirs)
@@ -320,17 +320,17 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
     def testUpdateDeletionWithOffset(self):
         """ Only file3.txt should be deleted by the update, since it
         is unchanged. The other two should remain untouched."""
-        wd = self.createWorkdir(self.repoUrl, 
-                                {'subdir/d/file1.txt': 'f1', 
-                                 'subdir/d/file2.txt': 'f2', 
+        wd = self.createWorkdir(self.repoUrl,
+                                {'subdir/d/file1.txt': 'f1',
+                                 'subdir/d/file2.txt': 'f2',
                                  'subdir/d/file3.txt': 'f3'})
         rev1 = wd.checkin()
         wd = self.createWorkdir(self.repoUrl, {})
         rev2 = wd.checkin()
-        wd_update = self.createWorkdir(self.repoUrl, 
+        wd_update = self.createWorkdir(self.repoUrl,
                                        {'d/file1.txt': 'f1 mod',
                                         'd/file2.txt': 'f2 mod',
-                                        'd/file3.txt': 'f3'}, 
+                                        'd/file3.txt': 'f3'},
                                        revision = rev1,
                                        offset = u"subdir")
         wd_update.update_to_latest()
@@ -397,7 +397,7 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.checkin()
         id = wd.checkin(allow_empty = True)
         # Need to change this test if we make non-changing commits become NOPs.
-        self.assertEquals(id, 5) 
+        self.assertEquals(id, 5)
         wd = self.createWorkdir(self.repoUrl)
         wd.checkout()
         co_tree = read_tree(wd.root, skiplist = boar_dirs)
@@ -462,8 +462,8 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         wd.update_to_latest()
         wd.get_changes()
         full_tree_filenames = set(read_tree(wd.root).keys())
-        expected_filenames = set([u'file.txt', 
-                                  u'.boar/info', 
+        expected_filenames = set([u'file.txt',
+                                  u'.boar/info',
                                   u'.boar/wd_version.txt'])
 
         self.assertEquals(expected_filenames, full_tree_filenames)
@@ -492,14 +492,14 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         never requested since there is no file with that md5 in the
         repo. At the second, it is generated and returned. At the
         third, it is not generated, only loaded from storage."""
-        wd = self.createWorkdir(self.repoUrl, 
+        wd = self.createWorkdir(self.repoUrl,
                                 {'file1.txt': "data"})
         wd.checkin()
         write_tree(wd.root, {'subdir/file2.txt': "data"}, False)
         wd.checkin()
         write_tree(wd.root, {'subdir/file3.txt': "data"}, False)
         wd.checkin()
-                   
+
 
     def testWdSessionpathSimple(self):
         wd = self.createWorkdir(self.repoUrl, offset = u"")
@@ -592,7 +592,7 @@ class TestConcurrency(unittest.TestCase, WorkdirHelper):
 
         write_file(self.workdir1, "aaa2.txt", "aaa")
         self.wd1.checkin()
-        
+
         wd2_commit(u"TestSession2", None) # Resume the commit
 
 

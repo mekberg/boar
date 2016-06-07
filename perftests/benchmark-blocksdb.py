@@ -34,8 +34,8 @@ def main1():
         db.begin()
         #for n in range(0, random.randrange(20000)):
         for n in range(0, 10000):
-            db.add_block(blob = str(c).zfill(32), 
-                         offset = n*blocksize, 
+            db.add_block(blob = str(c).zfill(32),
+                         offset = n*blocksize,
                          md5 = str(random.randrange(2**64)).zfill(32))
             db.add_rolling(random.randrange(2**64))
         db.commit()

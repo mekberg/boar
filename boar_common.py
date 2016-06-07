@@ -101,7 +101,7 @@ def apply_delta(bloblist_as_dict, delta):
 
 def invert_bloblist(bloblist):
     """ Returns a dictionary on the form md5sum -> [blobinfo,
-    blobinfo, ...] """    
+    blobinfo, ...] """
     result = {}
     for bi in bloblist:
         if bi['md5sum'] not in result:

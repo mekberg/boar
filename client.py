@@ -48,7 +48,7 @@ def connect(repourl):
         # Force boar to use the remote communication mechanism even for local repos.
         repourl = localize(repourl)
     elif os.getenv("BOAR_TEST_REMOTE_REPO") == "2":
-        # Force boar to use the remote communication mechanism over ssh 
+        # Force boar to use the remote communication mechanism over ssh
         repourl = ssh_localize(repourl)
 
     m = re.match(BOAR_URL_PATTERN, repourl)
@@ -65,7 +65,7 @@ def connect(repourl):
     else:
         raise UserError("No such transporter: '%s'" % transporter)
     assert front
-    return front    
+    return front
 
 def user_friendly_open_local_repository(path):
     # This won't catch invalid/nonexisting repos. Let the repo constructor do that
@@ -108,11 +108,11 @@ def _connect_tcp(host, port):
     return server.front
 
 def _connect_cmd(cmd):
-    p = subprocess.Popen(cmd, 
-                         shell = True, 
-                         stdout = subprocess.PIPE, 
-                         stdin = subprocess.PIPE, 
-                         stderr = None)    
+    p = subprocess.Popen(cmd,
+                         shell = True,
+                         stdout = subprocess.PIPE,
+                         stdin = subprocess.PIPE,
+                         stderr = None)
     if p.poll():
         raise UserError("Transport command failed with error code %s" % (p.returncode))
     server = create_boar_proxy(p.stdout, p.stdin)

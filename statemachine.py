@@ -6,11 +6,11 @@ class GenericStateMachine:
         self.events = set()
 
         # (state, event) -> state
-        self.transitions = {} 
+        self.transitions = {}
 
         # ((state, event) -> handler
         self.transition_handlers = {}
-        
+
         # state -> [callable, ...]
         self.enter_handlers = {}
 
@@ -27,7 +27,7 @@ class GenericStateMachine:
         self.started = True
         assert state in self.states
         self.state = state
-        
+
     def add_event(self, event):
         assert not self.started
         assert event not in self.events
@@ -55,7 +55,7 @@ class GenericStateMachine:
         assert self.transitions[key] == to_state
         if key not in self.transition_handlers:
             self.transition_handlers[key] = []
-        self.transition_handlers[key].append(handler)        
+        self.transition_handlers[key].append(handler)
 
     def add_enter_handler(self, state, handler):
         assert not self.started
@@ -69,8 +69,8 @@ class GenericStateMachine:
         assert callable(handler)
         if state not in self.exit_handlers:
             self.exit_handlers[state] = []
-        self.exit_handlers[state].append(handler)    
- 
+        self.exit_handlers[state].append(handler)
+
     def dispatch(self, event, **kwargs):
         assert self.started
         assert event in self.events
@@ -113,17 +113,17 @@ def main():
     gsm.add_transition("a", "EV", "b")
     gsm.add_transition_handler("a", "EV", "b", lambda args: say("Transition to b"))
     gsm.add_enter_handler("b", lambda args: say("Enter b"))
-    
+
     gsm.start("a")
     gsm.dispatch("EV")
     gsm.dispatch("EV")
     gsm.execute_once()
     gsm.execute_until_idle()
     print gsm.state
-    
+
 if __name__ == "__main__":
     main()
 
 
-        
-        
+
+

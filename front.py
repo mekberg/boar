@@ -100,10 +100,10 @@ def __clone(from_front, to_front):
     self_max_rev = to_front.get_highest_used_revision()
     self = to_front
     other_repo = from_front
-    assert other_max_rev >= self_max_rev 
+    assert other_max_rev >= self_max_rev
     sessions_to_clone = range(self_max_rev + 1, other_max_rev + 1)
     count = 0
-    
+
     all_deleted_snapshots = from_front.get_deleted_snapshots()
     snapshots_to_delete = find_snapshots_to_delete(from_front, to_front)
 
@@ -133,7 +133,7 @@ def __clone(from_front, to_front):
                 to_front.erase_snapshots(snapshots_to_delete)
                 snapshots_to_delete = None
             __clone_single_snapshot(from_front, to_front, session_id)
-            self.commit_raw(session_name = session_name, log_message = session_info.get("log_message", None), 
+            self.commit_raw(session_name = session_name, log_message = session_info.get("log_message", None),
                             timestamp = session_info.get('timestamp', None), date = session_info['date'])
 
     if self.allows_permanent_erase():
@@ -156,8 +156,8 @@ def find_snapshots_to_delete(from_front, to_front):
         assert session_info['name'] == deleted_name
         assert to_front.get_session_fingerprint(rev) == deleted_fingerprint
         snapshots_to_delete.append(rev)
-    return snapshots_to_delete    
-        
+    return snapshots_to_delete
+
 def __clone_single_snapshot(from_front, to_front, session_id):
     """ This function requires that a new snapshot is underway in
     to_front. It does not commit that snapshot. """
@@ -169,9 +169,9 @@ def __clone_single_snapshot(from_front, to_front, session_id):
         if not action:
             md5sum = blobinfo['md5sum']
             if not (to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum)):
-                pp = SimpleProgressPrinter(sys.stdout, 
-                                           label="Sending blob %s of %s (%s MB)" % 
-                                           (n+1, len(other_raw_bloblist), 
+                pp = SimpleProgressPrinter(sys.stdout,
+                                           label="Sending blob %s of %s (%s MB)" %
+                                           (n+1, len(other_raw_bloblist),
                                             round(blobinfo['size'] / (1.0 * 2**20), 3)))
                 sw = StopWatch(enabled=False, name="front.clone")
                 to_front.init_new_blob(md5sum, blobinfo['size'])
@@ -179,7 +179,7 @@ def __clone_single_snapshot(from_front, to_front, session_id):
                 datasource = from_front.get_blob(md5sum)
                 pp.update(0.0)
                 datasource.set_progress_callback(pp.update)
-                to_front.add_blob_data_streamed(blob_md5 = md5sum, 
+                to_front.add_blob_data_streamed(blob_md5 = md5sum,
                                                 datasource = datasource)
                 pp.finished()
                 sw.mark("front.add_blob_data_streamed()")
@@ -329,8 +329,8 @@ class Front:
     def set_session_ignore_list(self, session_name, new_list):
         assert isinstance(new_list, (tuple, list)), new_list
         self.__set_session_property(session_name, "ignore", new_list)
-        
-    def get_session_ignore_list(self, session_name):        
+
+    def get_session_ignore_list(self, session_name):
         value = self.__get_session_property(session_name, "ignore")
         if value == None:
             return []
@@ -339,8 +339,8 @@ class Front:
     def set_session_include_list(self, session_name, new_list):
         assert isinstance(new_list, (tuple, list)), new_list
         self.__set_session_property(session_name, "include", new_list)
-        
-    def get_session_include_list(self, session_name):        
+
+    def get_session_include_list(self, session_name):
         value = self.__get_session_property(session_name, "include")
         if value == None:
             return []
@@ -355,7 +355,7 @@ class Front:
         return properties['client_data']
 
     def get_base_id(self, id):
-        session_reader = self.repo.get_session(id)        
+        session_reader = self.repo.get_session(id)
         baseid = session_reader.get_base_id()
         return baseid
 
@@ -372,7 +372,7 @@ class Front:
         return ids[pos - 1]
 
     def get_session_fingerprint(self, id):
-        session_reader = self.repo.get_session(id)        
+        session_reader = self.repo.get_session(id)
         properties = session_reader.get_properties()
         assert "fingerprint" in properties
         return properties["fingerprint"]
@@ -406,7 +406,7 @@ class Front:
         completed()."""
         assert isinstance(session_name, basestring), session_name
         assert not self.new_session, "There already exists an active new snapshot"
-        self.new_session = self.repo.create_snapshot(session_name = session_name, 
+        self.new_session = self.repo.create_snapshot(session_name = session_name,
                                                      base_session = base_session,
                                                      force_base_snapshot = force_base_snapshot)
 
@@ -486,7 +486,7 @@ class Front:
         total = datasource.bytes_left()
         while datasource.bytes_left() > 0:
             # repository.DEDUP_BLOCK_SIZE is a reasonable size - no other reason
-            block = datasource.read(repository.DEDUP_BLOCK_SIZE) 
+            block = datasource.read(repository.DEDUP_BLOCK_SIZE)
             summer.update(block)
             self.new_session.add_blob_data(blob_md5, block)
         if summer.hexdigest() != blob_md5:
@@ -503,7 +503,7 @@ class Front:
 
     def remove(self, filename):
         """Mark the given file as deleted in the snapshot currently
-        under construction.""" 
+        under construction."""
         assert self.new_session
         self.new_session.remove(filename)
 
@@ -618,7 +618,7 @@ class Front:
 
     def repo_get_highest_used_revision(self):
         return self.repo.get_highest_used_revision()
-    
+
     def repo_verify_snapshot(self, rev):
         return self.repo.verify_snapshot(rev)
 

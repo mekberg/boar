@@ -29,7 +29,7 @@ def main():
     if len(args) == 0:
         args = ["--help"]
     parser = OptionParser(usage="usage: treecheck.py [-f <md5file>] <path>")
-    parser.add_option("-f", "--filename", action="store", dest = "filename", type="string", 
+    parser.add_option("-f", "--filename", action="store", dest = "filename", type="string",
                       help="A file describing the expected directory contents (md5sum.exe file format)")
     (options, args) = parser.parse_args(args)
     path = tounicode(args[0])
