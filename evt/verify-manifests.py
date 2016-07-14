@@ -67,7 +67,7 @@ def find_checksum(s):
     md5 = m.group(1).lower() if m else None
     return md5
 
-def verify_manifest(extrepo, manifest_contents, manifest_md5):    
+def verify_manifest(extrepo, manifest_contents, manifest_md5):
     assert is_md5sum(manifest_md5) or manifest_md5 == None
     if manifest_md5:
         md5summer = hashlib.md5()
@@ -119,12 +119,12 @@ def verify_manifest_in_file(extrepo, file_path):
 def is_manifest(filename):
     """Returns True if a filename looks like a manifest file that this
     program will understand."""
-    m = re.match("(^|.*/)(manifest-md5\.txt|manifest-[a-z0-9]{32}\.md5)", 
+    m = re.match("(^|.*/)(manifest-md5\.txt|manifest-[a-z0-9]{32}\.md5)",
                  filename, flags=re.IGNORECASE)
     return m != None
 
 def main():
-    parser = OptionParser(usage="""Usage: 
+    parser = OptionParser(usage="""Usage:
   verify-manifests.py <repository> <flags> [<manifest specifier>, ...]
 
   This tool verifies md5sum-style manifests against a boar
@@ -141,14 +141,14 @@ def main():
   specifiers (or sent on stdin, if --stdin is used). The specifiers
   can be on different forms depending on the chosen source.
 
-Examples: 
+Examples:
   If there is a repository in "/var/repo" with a session named
   "MySession" with a manifest under the path "pictures/manifest.md5"
   with the blob id (md5sum) d41d8cd98f00b204e9800998ecf8427e, we could
   verify this manifest by any of the following commands:
 
     verify-manifests.py /var/repo -B d41d8cd98f00b204e9800998ecf8427e
-    verify-manifests.py /var/repo -S "MySession/pictures/manifest.md5" 
+    verify-manifests.py /var/repo -S "MySession/pictures/manifest.md5"
 
   If we have a manifest file stored in /home/me/pics-2012.md5, we can
   verify it with this line:
@@ -180,7 +180,7 @@ Examples:
 
     if options.stdin:
         assert len(args) == 1, "--stdin cannot be combined with any other manifest specifiers"
-        manifest_ids = [line.rstrip('\r\n') for line in sys.stdin.readlines()]        
+        manifest_ids = [line.rstrip('\r\n') for line in sys.stdin.readlines()]
     else:
         manifest_ids = args[1:]
 
@@ -195,7 +195,7 @@ Examples:
         verifier = verify_manifest_in_file
     elif options.spath_specs:
         verifier = verify_manifest_by_spath
-        
+
     try:
         for manifest_id in manifest_ids:
             verifier(extrepo, manifest_id)

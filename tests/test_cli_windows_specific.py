@@ -35,7 +35,7 @@ def call(cmd, check=True, cwd=None):
     stdout = p.communicate()[0]
     returncode = p.poll()
     if check and returncode != 0:
-        raise Exception("Call failed with errorcode %s: %s" % (returncode, stdout))  
+        raise Exception("Call failed with errorcode %s: %s" % (returncode, stdout))
     return stdout, returncode
 
 BOAR_HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -88,7 +88,7 @@ class TestCliWindowsSpecific(unittest.TestCase):
     def setUp(self):
         self.testdir = tempfile.mkdtemp(prefix="boar_test_cli_windows_")
         os.chdir(self.testdir)
-    
+
     def tearDown(self):
         os.chdir(BOAR_HOME)
         shutil.rmtree(self.testdir)

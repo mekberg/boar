@@ -34,11 +34,11 @@ def create_file(directory, filename, data = ""):
 class Test(unittest.TestCase):
     def setUp(self):
         pass
-        
+
     def testSafeDelete(self):
         tmpdir = tempfile.mkdtemp(prefix='testboarcommon_', dir=TMPDIR)
         data = "some data"
-        
+
         # This is a normal file, should be deleted
         path = create_file(tmpdir, "deleteme.txt", data)
         self.assertTrue(os.path.exists(path))
@@ -72,7 +72,7 @@ class Test(unittest.TestCase):
                  'md5sum': "00000000000000000000000000000001"},
                 {'filename': 'deleted.txt',
                  'md5sum': "00000000000000000000000000000002"}])
-        delta = [ 
+        delta = [
             {'filename': 'new.txt',
              'md5sum': "00000000000000000000000000000003"},
             {'filename': 'deleted.txt',
@@ -89,7 +89,7 @@ class Test(unittest.TestCase):
              'md5sum': "00000000000000000000000000000003"}
             ]
 
-        boar_common.apply_delta(bloblist, delta)        
+        boar_common.apply_delta(bloblist, delta)
         self.assertEquals(sorted(bloblist.values()), sorted(expected_new_bloblist))
 
 
@@ -109,7 +109,7 @@ class Test(unittest.TestCase):
             {'filename': 'new.txt',
              'md5sum': "00000000000000000000000000000003"}
             ]
-        expected_delta = boar_common.sorted_bloblist([ 
+        expected_delta = boar_common.sorted_bloblist([
                 {'filename': 'new.txt',
                  'md5sum': "00000000000000000000000000000003"},
                 {'filename': 'deleted.txt',
@@ -120,7 +120,7 @@ class Test(unittest.TestCase):
         original_bloblist1_repr = repr(bloblist1)
         original_bloblist2_repr = repr(bloblist2)
         delta = boar_common.sorted_bloblist(boar_common.bloblist_delta(bloblist1, bloblist2))
-        
+
         self.assertEquals(delta, expected_delta)
 
         # Make sure the original bloblists are unchanged
@@ -142,8 +142,8 @@ class Test(unittest.TestCase):
         self.assertEquals(sorted_bloblist, expected_sorted_bloblist)
         # Make sure the original is untouched
         self.assertEquals(repr(unsorted_bloblist), unsorted_bloblist_repr)
-        
-        
+
+
 if __name__ == '__main__':
     unittest.main()
 

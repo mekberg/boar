@@ -33,7 +33,7 @@ class PipedBoarServer:
     def __init__(self, repopath, from_client, to_client):
         self.repopath = repopath
         self.handler = jsonrpc.RpcHandler()
-        self.handler.register_function(ping, "ping")        
+        self.handler.register_function(ping, "ping")
         self.handler.register_function(self.initialize, "initialize")
         self.server = jsonrpc.BoarMessageServer(from_client, to_client, self.handler)
 
@@ -51,7 +51,7 @@ class PipedBoarServer:
     def _cleanup(self):
         if self.repo.repo_mutex.is_locked():
             self.repo.repo_mutex.release()
-        
+
 def init_stdio_server(repopath):
     """This creates a boar server that uses sys.stdin/sys.stdout to
     communicate with the client. The function also hides the real
@@ -84,4 +84,4 @@ def run_socketserver(repopath, address, port):
     if ip == "0.0.0.0":
         ip = socket.gethostname()
     print "Serving repository %s as boar://%s:%s/" % (repopath, ip, port)
-    server.serve_forever()        
+    server.serve_forever()

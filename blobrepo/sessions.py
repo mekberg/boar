@@ -36,7 +36,7 @@ import deduplication
 
 """
 The SessionWriter and SessionReader are together with Repository the
-only classes that directly accesses the repository. 
+only classes that directly accesses the repository.
 
 A session consists of a set of blobs and a set of metadatas. The
 metadatas are dictionaries. Some keywords are reserved by the
@@ -45,7 +45,7 @@ keys/values not specified here are stored and provided as they are.
 
 md5sum:   Set/overwritten by the session.
 filename: Required by the session, set by the client.
-change:   Required by the session when creating a derived session. Can 
+change:   Required by the session when creating a derived session. Can
           be one of the following: add, remove, replace
 
 The sessioninfo object also is mostly filled by the client, but a few
@@ -114,7 +114,7 @@ class _NaiveSessionWriter:
     def set_fingerprint(self, fingerprint):
         assert is_md5sum(fingerprint)
         self.fingerprint = fingerprint
-    
+
     def add_blobinfo(self, blobinfo):
         assert type(blobinfo) == type({})
         #assert "size" in blobinfo
@@ -165,7 +165,7 @@ class _NaiveSessionWriter:
         sessioninfo['client_data'] = self.client_data
         if self.deleted_session_name:
             sessioninfo['deleted_name'] = self.deleted_session_name
-        if self.deleted_fingerprint:            
+        if self.deleted_fingerprint:
             sessioninfo['deleted_fingerprint'] = self.deleted_fingerprint
         bloblist_filename = os.path.join(self.session_path, "bloblist.json")
         write_json(bloblist_filename, self.blobinfos)
@@ -177,7 +177,7 @@ class _NaiveSessionWriter:
         with open(md5_filename, "wb") as f:
             f.write(md5sum_file(bloblist_filename) + " *bloblist.json\n")
             f.write(md5sum_file(session_filename) + " *session.json\n")
-        
+
         fingerprint_marker = os.path.join(self.session_path, self.fingerprint + ".fingerprint")
         with open(fingerprint_marker, "wb") as f:
             pass
@@ -209,7 +209,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         assert index >= 0
         assert self.current_index == None
         assert index not in self.blockifiers
-        
+
         self.blockifiers[index] = self.BlockifierClass(self.block_size)
         self.piece_start_offsets[index] = self.offset
         self.current_index = index
@@ -255,7 +255,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
     def get_piece_address(self, index):
         assert self.fileobj == None
         return self.final_md5, self.piece_start_offsets[index]
-        
+
 class SessionWriter:
     def __init__(self, repo, session_name, base_session = None, session_id = None, force_base_snapshot = False):
         assert session_name and isinstance(session_name, unicode)
@@ -283,7 +283,7 @@ class SessionWriter:
         currentmask = os.umask(0o777)
         os.umask(currentmask)
         self.session_path = tempfile.mkdtemp( \
-            prefix = "tmp_", 
+            prefix = "tmp_",
             dir = os.path.join(self.repo.repopath, repository.TMP_DIR))
         os.chmod(self.session_path, currentmask ^ 0o777)
         if self.force_base_snapshot:
@@ -323,8 +323,8 @@ class SessionWriter:
         assert is_md5sum(blob_md5)
         # It is ok for a blob to already exist in the repo
         # here. Possibly some other session is uploading, or has
-        # uploaded this blob, before we get here. But that is ok. 
-        assert not self.dead  
+        # uploaded this blob, before we get here. But that is ok.
+        assert not self.dead
         if self.repo.deduplication_enabled():
             assert deduplication.dedup_available, "Deduplication module not available"
             rollingchecksumclass = deduplication.RollingChecksum
@@ -345,7 +345,7 @@ class SessionWriter:
                                                     BlockifierClass = blockifierclass),
                                        tmpdir = self.repo.get_tmpdir(),
                                        RollingChecksumClass = rollingchecksumclass)
-        
+
 
     def add_blob_data(self, blob_md5, fragment):
         """ Adds the given fragment to the end of the new blob with the given checksum."""
@@ -361,7 +361,7 @@ class SessionWriter:
             self.rolling_set.add(block[2])
             self.tmpblocksdb.add_tmp_block(md5 = block[3], blob = block[0], offset = block[1])
             self.found_uncommitted_blocks.append(block)
-            
+
         sw.mark(1)
         recipe = self.blob_deduplicator[blob_md5].get_recipe()
         assert len(recipe['pieces']) > 0
@@ -378,7 +378,7 @@ class SessionWriter:
                     recipe_file.write(recipe_json)
         sw.mark(3)
         del self.blob_deduplicator[blob_md5]
-                
+
     def has_blob(self, csum):
         assert is_md5sum(csum)
         fname = os.path.join(self.session_path, csum)
@@ -464,13 +464,13 @@ class SessionWriter:
         blocks_fname = os.path.join(self.session_path, "blocks.json")
         write_json(blocks_fname, self.found_uncommitted_blocks)
 
-        # This is a fail-safe to reduce the risk of lockfile problems going undetected. 
+        # This is a fail-safe to reduce the risk of lockfile problems going undetected.
         # It is not meant to be 100% safe. That responsibility lies with the lockfile.
         assert self.latest_snapshot == self.repo.find_last_revision(self.session_name), \
             "Session has been updated concurrently (Should not happen. Lockfile problems?) Commit aborted."
         session_id = self.repo.consolidate_snapshot(self.session_path, self.forced_session_id, progress_callback = progress_callback)
         return session_id
-    
+
     def __del__(self):
         if self.session_mutex.is_locked():
             self.session_mutex.release()
@@ -496,7 +496,7 @@ class SessionReader:
             raise CorruptionError("Session data for snapshot %s is mangled" % self.dirname)
         self.fingerprint_file = os.path.join(self.path, self.get_fingerprint() + ".fingerprint")
         self.quick_verify()
-        self.load_stats = None 
+        self.load_stats = None
 
     def get_properties(self):
         """Returns a copy of the session properties."""

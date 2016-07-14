@@ -44,7 +44,7 @@ def call(cmd, check=True, cwd=None):
     stdout = p.communicate()[0]
     returncode = p.poll()
     if check and returncode != 0:
-        raise Exception("Call failed with errorcode %s: %s" % (returncode, stdout))  
+        raise Exception("Call failed with errorcode %s: %s" % (returncode, stdout))
     return stdout, returncode
 
 BOAR_HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -134,10 +134,10 @@ class TestCli(unittest.TestCase):
         os.unlink(os.path.join(WORKDIR, file_deleted))
         write_file(os.path.join(WORKDIR, file_new), "new")
         write_file(os.path.join(WORKDIR, file_notincluded), "not included")
-        
+
         output, returncode = call([BOAR, "ci", file_new, file_modified, file_deleted], cwd=WORKDIR)
         assert "Checked in session id 3" in output
-        output, returncode = call([BOAR,  "--repo", REPO, 
+        output, returncode = call([BOAR,  "--repo", REPO,
                                    "contents", "-r", "3", SESSION])
         self.assertEqual(sorted(json.loads(output)['files']),
                               sorted([{"filename": "file_unchanged.txt",
@@ -175,13 +175,13 @@ class TestCli(unittest.TestCase):
         os.unlink(os.path.join(subdir2, file_deleted))
         write_file(os.path.join(subdir2, file_new), "new")
         write_file(os.path.join(subdir2, file_notincluded), "not included")
-        
-        output, returncode = call([BOAR, "ci", 
-                                   os.path.join("subdir2", file_new), 
-                                   os.path.join("subdir2", file_modified), 
+
+        output, returncode = call([BOAR, "ci",
+                                   os.path.join("subdir2", file_new),
+                                   os.path.join("subdir2", file_modified),
                                    os.path.join("subdir2", file_deleted)], cwd=WORKDIR)
         assert "Checked in session id 3" in output
-        output, returncode = call([BOAR,  "--repo", REPO, 
+        output, returncode = call([BOAR,  "--repo", REPO,
                                    "contents", "-r", "3", SESSION])
         self.assertEqual(sorted(json.loads(output)['files']),
                               sorted([{"filename": "subdir1/subdir2/file_unchanged.txt",

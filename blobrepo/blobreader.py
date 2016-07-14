@@ -194,7 +194,7 @@ def simple_test():
              "offset": 3,
              "size": 3,
              "repeat": 3
-             } 
+             }
             ]
               }
     reader = RecipeReader(recipe, FakeRepo())

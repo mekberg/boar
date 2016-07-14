@@ -73,7 +73,7 @@ class FakeIntegerSet:
 
     def add_all(self, integers):
         pass
-    
+
     def contains(self, n):
         return False
 
@@ -142,8 +142,8 @@ class FakeBlocksDB:
     def get_block_size(self):
         return self.block_size
 
-    
-    
+
+
 
 class BlockChecksum:
     def __init__(self, window_size):
@@ -189,7 +189,7 @@ class UniformBlobGetter:
             local_path = os.path.join(self.local_blob_dir, blob_name)
             if os.path.exists(local_path):
                 fo = safe_open(local_path, "rb")
-                fo.seek(offset)                
+                fo.seek(offset)
                 return FileDataSource(fo, size)
         return self.repo.get_blob_reader(blob_name, offset, size)
 
@@ -199,7 +199,7 @@ class OriginalPieceHandler:
 
     def add_piece_data(self, index, data):
         pass
-    
+
     def end_piece(self, index):
         pass
 
@@ -264,22 +264,22 @@ class RecipeFinder(GenericStateMachine):
         self.add_exit_handler(START_STATE, assert_offset_ok)
         self.add_exit_handler(ORIGINAL_STATE, assert_offset_ok)
         self.add_exit_handler(DEDUP_STATE, assert_offset_ok)
-        
-        self.add_transition_handler(START_STATE, ORIGINAL_DATA_FOUND_EVENT, ORIGINAL_STATE, 
+
+        self.add_transition_handler(START_STATE, ORIGINAL_DATA_FOUND_EVENT, ORIGINAL_STATE,
                                     self.__on_original_data_start)
-        self.add_transition_handler(DEDUP_STATE, ORIGINAL_DATA_FOUND_EVENT, ORIGINAL_STATE, 
+        self.add_transition_handler(DEDUP_STATE, ORIGINAL_DATA_FOUND_EVENT, ORIGINAL_STATE,
                                     self.__on_original_data_start)
-        self.add_transition_handler(ORIGINAL_STATE, EOF_EVENT, END_STATE, 
+        self.add_transition_handler(ORIGINAL_STATE, EOF_EVENT, END_STATE,
                                     self.__on_original_data_end)
-        self.add_transition_handler(ORIGINAL_STATE, DEDUP_BLOCK_FOUND_EVENT, DEDUP_STATE, 
+        self.add_transition_handler(ORIGINAL_STATE, DEDUP_BLOCK_FOUND_EVENT, DEDUP_STATE,
                                     self.__on_original_data_end)
-        self.add_transition_handler(START_STATE, DEDUP_BLOCK_FOUND_EVENT, DEDUP_STATE, 
+        self.add_transition_handler(START_STATE, DEDUP_BLOCK_FOUND_EVENT, DEDUP_STATE,
                                     self.__on_dedup_data_start)
-        self.add_transition_handler(ORIGINAL_STATE, DEDUP_BLOCK_FOUND_EVENT, DEDUP_STATE, 
+        self.add_transition_handler(ORIGINAL_STATE, DEDUP_BLOCK_FOUND_EVENT, DEDUP_STATE,
                                     self.__on_dedup_data_start)
-        self.add_transition_handler(DEDUP_STATE, ORIGINAL_DATA_FOUND_EVENT, ORIGINAL_STATE, 
+        self.add_transition_handler(DEDUP_STATE, ORIGINAL_DATA_FOUND_EVENT, ORIGINAL_STATE,
                                     self.__on_dedup_data_end)
-        self.add_transition_handler(DEDUP_STATE, EOF_EVENT, END_STATE, 
+        self.add_transition_handler(DEDUP_STATE, EOF_EVENT, END_STATE,
                                     self.__on_dedup_data_end)
         self.add_transition_handler(START_STATE, EOF_EVENT, END_STATE,
                                     self.__on_original_data_start)
@@ -392,7 +392,7 @@ class RecipeFinder(GenericStateMachine):
 
     def close(self):
         #print "Closing"
-        
+
         # TODO: This stuff should be moved to on_file_end()
         assert not self.closed
         self.closed = True
@@ -411,17 +411,17 @@ class RecipeFinder(GenericStateMachine):
             restored_size += piece['size'] * piece['repeat']
         assert restored_size == self.feed_byte_count, "Restored is %s, feeded is %s" % (restored_size, self.feed_byte_count)
         del self.rs
-        
+
 
     def __seq2rec(self):
         restored_size = 0
 
         def get_dict(source, offset, size, original):
             #assert is_md5sum(source)
-            assert offset >= 0 
+            assert offset >= 0
             assert size >= 0
             assert type(original) == bool
-            
+
             return OrderedDict([("source", source),
                                 ("offset", offset),
                                 ("size", size),
@@ -477,7 +477,7 @@ class RecipeFinder(GenericStateMachine):
             return
         # We can extend!
         pieces[-2]['size'] += pieces[-1]['size']
-        del pieces[-1]  
+        del pieces[-1]
 
     def __polish_recipe_repeats(self):
         assert self.recipe
@@ -496,7 +496,7 @@ class RecipeFinder(GenericStateMachine):
                 new_pieces[-1]['repeat'] += 1
             else:
                 new_pieces.append(piece)
-        self.recipe['pieces'] = new_pieces            
+        self.recipe['pieces'] = new_pieces
 
     def get_recipe(self):
         assert self.closed

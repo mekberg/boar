@@ -45,7 +45,7 @@ class FakePieceHandler:
     def end_piece(self, index): pass
     def close(self): pass
     def get_piece_address(self, index): return ("FAKEBLOB", 0)
-    
+
 
 class TestRecipeFinder(unittest.TestCase, WorkdirHelper):
     def setUp(self):
@@ -60,7 +60,7 @@ class TestRecipeFinder(unittest.TestCase, WorkdirHelper):
         recipe_finder = RecipeFinder(self.blocksdb, 3, self.integer_set, None, original_piece_handler = self.piece_handler)
         self.blocksdb.begin()
         self.blocksdb.add_block("47bce5c74f589f4867dbd57e9ca9f808", 0, "47bce5c74f589f4867dbd57e9ca9f808")
-        self.blocksdb.commit() 
+        self.blocksdb.commit()
         recipe_finder.feed("XX")
         recipe_finder.feed("Xa")
         recipe_finder.feed("aa")
@@ -147,11 +147,11 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
 
         # Is deduplicated to aaa + bbb
         write_file(self.workdir1, "b.txt", "aaabbb")
-        self.wd1.checkin() 
+        self.wd1.checkin()
 
         # Is deduplicated to aaa + bbb + ccc
         write_file(self.workdir1, "b.txt", "aaabbbccc")
-        self.wd1.checkin() 
+        self.wd1.checkin()
 
         wd2_commit(u"TestSession2", None) # Resume the commit
         self.assertEquals(set(), self.wd1.front.repo.get_orphan_blobs())
@@ -184,7 +184,7 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
         # Is deduplicated to bbbccc + X
         # If bbbccc is stored in the blocksdb, the commit will fail
         write_file(self.workdir1, "b.txt", "bbbcccX")
-        self.wd1.checkin() 
+        self.wd1.checkin()
 
         self.assertEquals(set(), self.wd1.front.repo.get_orphan_blobs())
 
@@ -209,8 +209,8 @@ class TestConcurrentCommit(unittest.TestCase, WorkdirHelper):
         verify_repo(self.wd1.get_front())
         for d in self.remove_at_teardown:
             shutil.rmtree(d, ignore_errors = True)
-        
-        
+
+
 class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
     def setUp(self):
         self.remove_at_teardown = []
@@ -278,10 +278,10 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         recipe = self.repo.get_recipe(blob)
         self.assertEquals(len(recipe['pieces']), 2)
         self.assertEquals(recipe['pieces'][0], {
-                'source': '02129bb861061d1a052c592e2dc6b383', 
+                'source': '02129bb861061d1a052c592e2dc6b383',
                 'repeat': 1, 'original': True, 'offset': 0, 'size': 1})
         self.assertEquals(recipe['pieces'][1], {
-                'source': '00312b74e44d0712882387b8e0f0a57e', 
+                'source': '00312b74e44d0712882387b8e0f0a57e',
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 27})
         rebuilt_content = self.wd.front.get_blob(blob).read()
         self.assertEquals(md5sum(rebuilt_content), "407badd3ba116d47c556d1366343048c")
@@ -295,7 +295,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         #print_recipe(recipe)
         self.assertEquals(len(recipe['pieces']), 1)
         self.assertEquals(recipe['pieces'][0], {
-                'source': first_blob, 
+                'source': first_blob,
                 'repeat': 1, 'original': False, 'offset': 18, 'size': 9})
         rebuilt_content = self.wd.front.get_blob(blob).read()
         self.assertEquals(md5sum(rebuilt_content), "d1aaf4767a3c10a473407a4e47b02da6")
@@ -310,10 +310,10 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         #print_recipe(recipe)
         self.assertEquals(len(recipe['pieces']), 2)
         self.assertEquals(recipe['pieces'][0], {
-                'source': a_blob, 
+                'source': a_blob,
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         self.assertEquals(recipe['pieces'][1], {
-                'source': b_blob, 
+                'source': b_blob,
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         rebuilt_content = self.wd.front.get_blob(c_blob).read()
         self.assertEquals(md5sum(rebuilt_content), "6547436690a26a399603a7096e876a2d")
@@ -325,7 +325,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         self.wd.checkin()
 
         # Should now exist due to concatenation of original parts in previous commit
-        self.assertTrue(md5sum("bbbXccc") in self.wd.get_front().get_all_raw_blobs())        
+        self.assertTrue(md5sum("bbbXccc") in self.wd.get_front().get_all_raw_blobs())
 
         self.addWorkdirFile("a.txt", "cccbbb")
         self.wd.checkin()
@@ -350,19 +350,19 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         #print_recipe(recipe)
         self.assertEquals(len(recipe['pieces']), 5)
         self.assertEquals(recipe['pieces'][0], {
-                'source': xxx_blob, 
+                'source': xxx_blob,
                 'repeat': 1, 'original': True, 'offset': 0, 'size': 1})
         self.assertEquals(recipe['pieces'][1], {
-                'source': a_blob, 
+                'source': a_blob,
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         self.assertEquals(recipe['pieces'][2], {
-                'source': xxx_blob, 
+                'source': xxx_blob,
                 'repeat': 1, 'original': True, 'offset': 1, 'size': 1})
         self.assertEquals(recipe['pieces'][3], {
-                'source': a_blob, 
+                'source': a_blob,
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         self.assertEquals(recipe['pieces'][4], {
-                'source': xxx_blob, 
+                'source': xxx_blob,
                 'repeat': 1, 'original': True, 'offset': 2, 'size': 1})
         rebuilt_content = self.wd.front.get_blob(b_blob).read()
         self.assertEquals(md5sum(rebuilt_content), "e18585992d1ea79a30a34e015c49719e")
@@ -377,13 +377,13 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         #print_recipe(recipe)
         self.assertEquals(len(recipe['pieces']), 3)
         self.assertEquals(recipe['pieces'][0], {
-                'source': a_blob, 
+                'source': a_blob,
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         self.assertEquals(recipe['pieces'][1], {
-                'source': x_blob, 
+                'source': x_blob,
                 'repeat': 1, 'original': True, 'offset': 0, 'size': 1})
         self.assertEquals(recipe['pieces'][2], {
-                'source': a_blob, 
+                'source': a_blob,
                 'repeat': 1, 'original': False, 'offset': 0, 'size': 3})
         rebuilt_content = self.wd.front.get_blob(b_blob).read()
         self.assertEquals(md5sum(rebuilt_content), "78c011eeafaad0783eb1d90392e08b46")
@@ -401,7 +401,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         rebuilt_content = self.wd.front.get_blob(b_blob).read()
         self.assertEquals(rebuilt_content, "aaa")
         #print_recipe(recipe)
- 
+
     def testRepeatedHit(self):
         a_blob = self.addWorkdirFile("a.txt", "aaa")
         self.wd.checkin()
@@ -480,7 +480,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         for cc in "Ya", "aa", "Za", "aa":
             self.assertEquals(cc, reader.read(2))
         self.assertEquals(reader.read(2), "");
-            
+
 
 
     def tearDown(self):
@@ -550,11 +550,11 @@ class TestBlockLocationsDB(unittest.TestCase, WorkdirHelper):
 
     def testOffsetLimits(self):
         self.db.begin()
-        self.assertRaises(OverflowError, self.db.add_block, 
+        self.assertRaises(OverflowError, self.db.add_block,
                           "d41d8cd98f00b204e9800998ecf8427e", -1, "00000000000000000000000000000002")
-        self.assertRaises(OverflowError, self.db.add_block, 
+        self.assertRaises(OverflowError, self.db.add_block,
                           "d41d8cd98f00b204e9800998ecf8427e", 2**64, "00000000000000000000000000000002")
-        
+
 
     def testBlockSimple(self):
         # blob, offset, md5

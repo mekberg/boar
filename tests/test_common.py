@@ -34,7 +34,7 @@ class TestGetTree(unittest.TestCase):
         # Ensure that this directory contains at least one file, so
         # that we notice if the scan erronously includes this
         # directory.
-        open(os.path.join(self.tmpdir, u"NOT_INCLUDED_IN_TEST.MARKER"), "w") 
+        open(os.path.join(self.tmpdir, u"NOT_INCLUDED_IN_TEST.MARKER"), "w")
 
         self.old_cwd = os.getcwd()
         os.chdir(self.tmpdir)
@@ -80,8 +80,8 @@ class TestGetTree(unittest.TestCase):
         self.addFile(u'räksmörgåsar/räksmörgås.txt')
 
         tree = common.get_tree(self.testdir)
-        self.assertTreeEquals(tree, [u'test1.txt', 
-                                     u'subdir' + os.sep + 'test2.txt', 
+        self.assertTreeEquals(tree, [u'test1.txt',
+                                     u'subdir' + os.sep + 'test2.txt',
                                      u'räksmörgåsar' + os.sep + u'räksmörgås.txt'])
         self.assertTreeExists(tree, root=self.testdir)
 
@@ -91,7 +91,7 @@ class TestGetTree(unittest.TestCase):
         self.addFile(u'räksmörgåsar/räksmörgås.txt')
 
         tree = common.get_tree(self.testdir, skip=['subdir'])
-        self.assertTreeEquals(tree, [u'test1.txt', 
+        self.assertTreeEquals(tree, [u'test1.txt',
                                      u'räksmörgåsar' + os.sep + u'räksmörgås.txt'])
 
         tree = common.get_tree(self.testdir, skip=['test2.txt', u'räksmörgåsar'])
@@ -104,8 +104,8 @@ class TestGetTree(unittest.TestCase):
 
         self.assertTrue(os.path.exists(u'testdirÅÄÖ'))
         tree = common.get_tree(u'testdirÅÄÖ')
-        self.assertTreeEquals(tree, [u'test1.txt', 
-                                     u'subdir' + os.sep + 'test2.txt', 
+        self.assertTreeEquals(tree, [u'test1.txt',
+                                     u'subdir' + os.sep + 'test2.txt',
                                      u'räksmörgåsar' + os.sep + u'räksmörgås.txt'])
         self.assertTreeExists(tree, root=self.testdir)
 
@@ -116,7 +116,7 @@ class TestGetTree(unittest.TestCase):
 
         tree = common.get_tree(self.testdir, absolute_paths = True)
         self.assertTreeEquals(tree, [self.fullpath(u'test1.txt'),
-                                     self.fullpath(u'subdir' + os.sep + 'test2.txt'), 
+                                     self.fullpath(u'subdir' + os.sep + 'test2.txt'),
                                      self.fullpath(u'räksmörgåsar' + os.sep + u'räksmörgås.txt')])
         self.assertTreeExists(tree)
 
@@ -127,7 +127,7 @@ class TestGetTree(unittest.TestCase):
 
         tree = common.get_tree(u'testdirÅÄÖ', absolute_paths = True)
         self.assertTreeEquals(tree, [self.fullpath(u'test1.txt'),
-                                     self.fullpath(u'subdir' + os.sep + 'test2.txt'), 
+                                     self.fullpath(u'subdir' + os.sep + 'test2.txt'),
                                      self.fullpath(u'räksmörgåsar' + os.sep + u'räksmörgås.txt')])
         self.assertTreeExists(tree)
 

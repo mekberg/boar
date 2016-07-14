@@ -35,7 +35,7 @@ def match_line(pattern, text, magic_string):
         return (re.match("^" + repattern + "$", text) != None)
     else:
         return (pattern == text)
-    
+
 
 def txtmatch(pattern_lines, text_lines, magic_string = None):
     def print_error(pattern_lines, text_lines):

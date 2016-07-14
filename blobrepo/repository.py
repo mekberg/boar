@@ -87,7 +87,7 @@ The repository contains files that are not useful for extracting
 data. These are the "tmp", "derived", and "queue" folders. They can be
 ignored for this purpose.
 
-== The blobs == 
+== The blobs ==
 
 All files are stored verbatim in the "blobs" directory, named after
 their md5 checksum, and sorted in sub directories based on the start
@@ -95,9 +95,9 @@ of their names. For instance, if a file "testimage.jpg" has the
 checksum bc7b0fb8c2e096693acacbd6cb070f16, it will be stored in
 blobs/bc/bc7b0fb8c2e096693acacbd6cb070f16 since the checksum starts
 with the letters "bc". The filename "testimage.jpg" is discarded. Such
-an anonymized file is called a "blob" in this document. 
+an anonymized file is called a "blob" in this document.
 
-== The sessions== 
+== The sessions==
 
 All data files are in the JSON file format. It is quite simple, but if
 you need details, see RFC4627.
@@ -120,7 +120,7 @@ snapshot with that revision id must be extracted before the current
 snapshot is extracted on top of it. This may repeat recursively until
 a snapshot is found that does not have the base_session value set. In
 other words, extraction must begin from the bottom of this
-"base_session" chain. 
+"base_session" chain.
 
 Every snapshot with a "base_session" value describes the changes that
 needs to be applied to transform the base snapshot into the current
@@ -243,7 +243,7 @@ class Repo:
         assert LATEST_REPO_FORMAT == 5 # Check below must be updated when repo format changes
         for directory in REPO_DIRS_V5:
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
-        integrity_assert(os.path.exists(os.path.join(self.repopath, REPOID_FILE)), 
+        integrity_assert(os.path.exists(os.path.join(self.repopath, REPOID_FILE)),
                          "Repository at %s does not have an identity file." % self.repopath)
 
     def allows_permanent_erase(self):
@@ -283,10 +283,10 @@ class Repo:
             raise
 
     def __upgrade_repo_v0(self):
-        """ This upgrade will upgrade a repository from before strict 
-        version numbering (v0), to a v1 format repository. It does this by 
+        """ This upgrade will upgrade a repository from before strict
+        version numbering (v0), to a v1 format repository. It does this by
         performing the following actions:
-        
+
         * Create directory "derived"
         * Create directory "derived/sha256"
         * Update "recovery.txt"
@@ -443,7 +443,7 @@ class Repo:
         identifier = lines[0].strip()
         assert re.match("^[a-zA-Z0-9_-]+$", identifier), "illegal characters in repo identifier '%s'" % identifier
         return identifier
-        
+
     def __get_repo_version(self):
         version_file = os.path.join(self.repopath, VERSION_FILE)
         if os.path.exists(version_file):
@@ -452,7 +452,7 @@ class Repo:
         # Repo is from before repo format numbering started.
         # Make sure it is a valid one and return v0
         for directory in REPO_DIRS_V0:
-            integrity_assert(dir_exists(os.path.join(self.repopath, directory)), 
+            integrity_assert(dir_exists(os.path.join(self.repopath, directory)),
                              "The repo at %s does not look like a repository (missing %s)" % (self.repopath, directory))
         return 0
 
@@ -547,7 +547,7 @@ class Repo:
     def get_session_path(self, session_id):
         assert isinstance(session_id, int)
         return os.path.join(self.repopath, SESSIONS_DIR, str(session_id))
-        
+
     def get_all_sessions(self):
         return get_all_ids_in_directory(self.get_path(SESSIONS_DIR))
 
@@ -598,8 +598,8 @@ class Repo:
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
         assert isinstance(force_base_snapshot, bool)
-        return sessions.SessionWriter(self, session_name = session_name, 
-                                      base_session = base_session, 
+        return sessions.SessionWriter(self, session_name = session_name,
+                                      base_session = base_session,
                                       session_id = session_id,
                                       force_base_snapshot = force_base_snapshot)
 
@@ -631,7 +631,7 @@ class Repo:
                 matches.add(m.group(1))
         return list(matches)
 
-    
+
     def get_recipe_names(self):
         recipepattern = re.compile("([0-9a-f]{32})([.]recipe)$")
         assert recipepattern.search("b5fb453aeaaef8343353cc1b641644f9.recipe")
@@ -654,7 +654,7 @@ class Repo:
         result.append(('virtual_size', virtual_size))
         result.append(('actual_size', actual_size))
         try:
-            result.append(('dedup_removed_percentage', 
+            result.append(('dedup_removed_percentage',
                            round((1.0 - 1.0 * actual_size / virtual_size) * 100, 2)))
         except ZeroDivisionError:
             result.append(('dedup_removed_percentage', None))
@@ -710,7 +710,7 @@ class Repo:
             if recipe:
                 for piece in recipe['pieces']:
                     used_blobs.add(piece['source'])
-        
+
         orphans = set()
         orphans.update(self.get_raw_blob_names())
         orphans.update(self.get_recipe_names())
@@ -733,7 +733,7 @@ class Repo:
                 md5_summer.update(block)
             md5 = md5_summer.hexdigest()
             verified_ok = (sum == md5)
-        return verified_ok 
+        return verified_ok
 
     def find_redundant_raw_blobs(self):
         all_blobs = self.get_raw_blob_names()
@@ -811,7 +811,7 @@ class Repo:
                 raise
 
     def __erase_snapshot(self, rev, trashdir):
-        # Carefully here... We must allow for a resumed operation 
+        # Carefully here... We must allow for a resumed operation
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         misuse_assert(not self.readonly, "Cannot erase snapshots from a write protected repo")
@@ -827,7 +827,7 @@ class Repo:
             shutil.copytree(session_path, tmpcopy)
             os.rename(tmpcopy, delete_copy)
 
-        session_data = read_json(os.path.join(delete_copy, "session.json"))        
+        session_data = read_json(os.path.join(delete_copy, "session.json"))
 
         for filename in "session.json", "bloblist.json", "session.md5", session_data['fingerprint'] + ".fingerprint":
             full_path = os.path.join(session_path, filename)
@@ -852,7 +852,7 @@ class Repo:
 
         self.blocksdb.begin()
         self.blocksdb.delete_blocks([blob for blob in orphan_blobs if self.has_raw_blob(blob)])
-        self.blocksdb.commit()            
+        self.blocksdb.commit()
 
         for blob in orphan_blobs:
             if self.has_recipe_blob(blob):
@@ -892,7 +892,7 @@ class Repo:
         blob_ratio   = 0.8 * calculate_progress(number_of_blobs + number_of_recipes, number_of_blobs)
         recipe_ratio = 0.8 * calculate_progress(number_of_blobs + number_of_recipes, number_of_recipes)
         ph = ProgressHelper(start_f = .10, progress_callback = progress_callback)
-        
+
         transaction.verify_blobs(ph.partial_progress(blob_ratio))
         sw.mark("Verify blobs")
 
@@ -905,7 +905,7 @@ class Repo:
         # Everything seems OK, move the blobs and consolidate the session
         transaction.integrate_files()
         sw.mark("Files integrated")
-        
+
         transaction.integrate_deletions()
         sw.mark("Deletions integrated")
 
@@ -931,7 +931,7 @@ class Repo:
 
 
 class Transaction:
-    
+
     def __init__(self, repo, transaction_dir):
         self.repo = repo
         self.path = transaction_dir
@@ -988,7 +988,7 @@ class Transaction:
                 blocksdb.add_rolling(rolling)
         blocksdb.commit()
         safe_delete_file(blocks_fname)
-        
+
 
     def get_raw_blobs(self):
         """Returns a list of all raw blobs that are present in the transaction directory"""
@@ -1003,13 +1003,13 @@ class Transaction:
         """Returns the full path to a filename in this transaction directory."""
         assert os.path.dirname(filename) == ""
         return os.path.join(self.path, filename)
-    
+
     def get_recipe_path(self, md5):
         """Returns the full path to a recipe in this transaction directory."""
         assert is_md5sum(md5)
         return self.get_path(md5 + ".recipe")
 
-    def verify_blobs(self, progress_callback = lambda x: None): 
+    def verify_blobs(self, progress_callback = lambda x: None):
         """Read and checksum all raw blobs in the transaction. An
         assertion error is raised if any errors are found."""
         raw_blobs = self.get_raw_blobs()
@@ -1017,15 +1017,15 @@ class Transaction:
             full_path = self.get_path(blob)
             pp = PartialProgress(float(n) / float(len(raw_blobs)), float(n+1) / float(len(raw_blobs)), progress_callback)
             size = os.path.getsize(full_path)
-            assert blob == md5sum_file(full_path, 
-                                       end=size, 
+            assert blob == md5sum_file(full_path,
+                                       end=size,
                                        progress_callback=pp), "Invalid blob found in queue dir:" + full_path
             assert os.path.getsize(full_path) == size
             #progress_callback((1.0*n+1)/len(raw_blobs))
 
     def verify_recipes(self, progress_callback = lambda x: None):
         """Read and checksum all recipes in the transaction. An
-        assertion error is raised if any errors are found."""        
+        assertion error is raised if any errors are found."""
         for recipe_blob in self.get_recipes():
             full_path = self.get_recipe_path(recipe_blob)
             md5summer = hashlib.md5()
@@ -1036,7 +1036,7 @@ class Transaction:
                 # a recipe will be chunked suchwise.
                 md5summer.update(reader.read(DEDUP_BLOCK_SIZE))
             assert recipe_blob == md5summer.hexdigest(), "Invalid recipe found in queue dir:" + full_path
-        
+
 
     def verify_meta(self):
         """Check the existence of all required files in the
@@ -1053,7 +1053,7 @@ class Transaction:
         # Check that there are no unexpected files in the snapshot,
         # and perform a simple test for json well-formedness
         for filename in contents:
-            if is_md5sum(filename): 
+            if is_md5sum(filename):
                 has_blobs = True
                 continue # Blob
             if filename == meta_info['fingerprint']+".fingerprint":
@@ -1094,12 +1094,12 @@ class Transaction:
                 used_blobs.add(blobinfo['md5sum'])
 
         for recipe_blob in self.get_recipes():
-            assert recipe_blob in used_blobs            
+            assert recipe_blob in used_blobs
             if self.repo.has_recipe_blob(recipe_blob) or self.repo.has_raw_blob(recipe_blob):
                 safe_delete_recipe(self.get_recipe_path(recipe_blob))
             else:
                 used_blobs.update(get_recipe_blobs(self.get_recipe_path(recipe_blob)))
-        
+
         for blob in self.get_raw_blobs():
             if self.repo.has_blob(blob) or blob not in used_blobs:
                 safe_delete_blob(self.get_path(blob))

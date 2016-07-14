@@ -61,16 +61,16 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_empty_commit(self):
         writer = self.repo.create_snapshot(SESSION_NAME)
-        id = writer.commit()        
-        self.assertEqual(1, id, "Session ids starts from 1") 
-        self.assertEqual(self.repo.get_all_sessions(), [1], 
+        id = writer.commit()
+        self.assertEqual(1, id, "Session ids starts from 1")
+        self.assertEqual(self.repo.get_all_sessions(), [1],
                          "There should be exactly one session")
 
     def test_double_commit(self):
         writer = self.repo.create_snapshot(SESSION_NAME)
-        writer.commit()        
-        self.assertRaises(Exception, writer.commit)        
-        
+        writer.commit()
+        self.assertRaises(Exception, writer.commit)
+
     def test_session_info(self):
         committed_info = copy(self.sessioninfo1)
         writer = self.repo.create_snapshot(SESSION_NAME)
@@ -128,7 +128,7 @@ class TestBlobRepo(unittest.TestCase):
 
     def test_remove_nonexisting(self):
         writer1 = self.repo.create_snapshot(SESSION_NAME)
-        self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")        
+        self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")
 
     def test_find_orphan_blobs(self):
         committed_info = copy(self.fileinfo1)

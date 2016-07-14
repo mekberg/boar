@@ -17,7 +17,7 @@
 
 """
 This module contains some tools that can be helpful when writing a
-program that needs to access a boar repository. 
+program that needs to access a boar repository.
 
 This module takes care not to import any boar code. It only uses the
 boar cli tool API. This makes this module useful even for verifying
@@ -44,10 +44,10 @@ class IntegrityError(Exception):
 
 def is_md5sum(s):
     try:
-        return re.match("^[a-f0-9]{32}$", s) != None    
+        return re.match("^[a-f0-9]{32}$", s) != None
     except TypeError:
         return False
-    
+
 def run_command(*cmdlist):
     """Execute a shell command and return the output. Raises an
     exception if the command failed for any reason."""
@@ -66,7 +66,7 @@ def run_command_streamed(*cmdlist):
         yield data
     status = process.wait()
     if status != 0:
-        raise RunCommandException("Command '%s' failed with error %s" % 
+        raise RunCommandException("Command '%s' failed with error %s" %
                                   (cmdlist, status))
 
 def load_blob(reader):

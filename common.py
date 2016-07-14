@@ -87,13 +87,13 @@ specific for any project """
 
 def is_md5sum(str):
     try:
-        return re.match("^[a-f0-9]{32}$", str) != None    
+        return re.match("^[a-f0-9]{32}$", str) != None
     except TypeError:
         return False
 
 def is_sha256(str):
     try:
-        return re.match("^[a-f0-9]{64}$", str) != None    
+        return re.match("^[a-f0-9]{64}$", str) != None
     except TypeError:
         return False
 
@@ -317,7 +317,7 @@ def split_file(source, dest_dir, cut_positions, want_piece = None):
     return added_blobs
 
 def convert_win_path_to_unix(path):
-    """ Converts "C:\\dir\\file.txt" to "/dir/file.txt". 
+    """ Converts "C:\\dir\\file.txt" to "/dir/file.txt".
         Has no effect on unix style paths. """
     assert isinstance(path, unicode)
     nodrive = os.path.splitdrive(path)[1]
@@ -369,7 +369,7 @@ def strip_path_offset(offset, path, separator="/"):
     assert __add_path_offset(offset, result, separator) == path
     return result
 
-def is_child_path(parent, child, separator="/"):    
+def is_child_path(parent, child, separator="/"):
     # We don't want any implicit conversions to unicode. That might
     # cause decoding errors.
     assert type(parent) == type(child)
@@ -451,7 +451,7 @@ class UndecodableFilenameException(Exception):
         assert type(path) == unicode, "Tried to raise UndecodableFilenameException with non-unicode path"
         self.human_readable_name = "%s%s%s" % (
             path.encode(sys.getfilesystemencoding()).encode("string_escape"), os.sep, filename.encode("string_escape"))
-        Exception.__init__(self, "Path '%s' can not be decoded with the default system encoding (%s)" % 
+        Exception.__init__(self, "Path '%s' can not be decoded with the default system encoding (%s)" %
                            (self.human_readable_name, sys.getfilesystemencoding()))
         self.path = path
         self.filename = filename
@@ -493,11 +493,11 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
         assert os.sep == "\\", "Windows (UNC) paths are not valid on this system"
         assert "/" not in root, "Forward slashes not allowed in windows-style (UNC) paths"
     else:
-        if sep == "\\": 
+        if sep == "\\":
             root = root.replace("/", "\\")
-        elif sep == "/": 
+        elif sep == "/":
             root = root.replace("\\", "/")
-        else: 
+        else:
             assert False
 
     absolute_root = uabspath(root)
@@ -574,7 +574,7 @@ class FileMutex:
         self.owner_id = md5sum(str(time.time()) + str(os.getpid())) + "-" + str(os.getpid())
         self.mutex_owner_file = os.path.join(self.mutex_file, self.owner_id)
         self.lock_levels = 0
-    
+
     def lock(self):
         """ Lock the mutex. Throws a FileMutex.MutexLocked exception
         if the lock is already locked by another process. If the lock
@@ -613,7 +613,7 @@ class FileMutex:
             try:
                 self.lock()
                 break
-            except FileMutex.MutexLocked:                
+            except FileMutex.MutexLocked:
                 if time.time() - t0 > timeout:
                     break
                 time.sleep(1)
@@ -623,7 +623,7 @@ class FileMutex:
     def is_locked(self):
         """ Returns True iff the lock is acquired by the current process. """
         return self.lock_levels > 0
-    
+
     def release(self):
         """ Releases the lock. Actual mutex release will happen only
         when all users in the current process has released their
@@ -694,7 +694,7 @@ def printable(s):
         return s.encode(locale.getpreferredencoding(), "backslashreplace")
     else:
         raise ValueError("Argument must be a string or unicode")
-    
+
 
 class StreamEncoder:
     """ Wraps an output stream (typically sys.stdout) and encodes all
@@ -708,7 +708,7 @@ class StreamEncoder:
         self.errors = errors
         self.bytecount = 0
         self.stream = stream
-        
+
         if os.name == "nt":
             self.codec_name = "cp437"
         else:
@@ -797,10 +797,10 @@ class FileAsString:
         self.fo = fo
         self.fo.seek(0, 2)
         self.size = self.fo.tell()
-        
+
     def __len__(self):
         return self.size
-    
+
     def __getitem__(self, index):
         if isinstance(index, slice):
             start, stop, step = index.start, index.stop, index.step
@@ -813,13 +813,13 @@ class FileAsString:
         assert 0 <= start <= stop <= self.size, (start, stop, step, self.size)
         self.fo.seek(start)
         return self.fo.read(stop - start)
-    
+
     def append(self, s):
         self.fo.seek(0, 2)
         self.fo.write(s)
         self.fo.seek(0, 2)
         self.size = self.fo.tell()
-        
+
 
 class RateLimiter:
     """This class makes it easy to perform some action only when a
@@ -830,7 +830,7 @@ class RateLimiter:
     def __init__(self, hz):
         self.min_period = 1.0 / hz
         self.last_trig = 0.0
-    
+
     def ready(self):
         now = time.time()
         if now - self.last_trig >= self.min_period:
@@ -877,7 +877,7 @@ class StrictFileWriter:
     too much data is written.
 
     A sparse file with the given size will be created, which will
-    reduce fragmentation on some platforms (NTFS). 
+    reduce fragmentation on some platforms (NTFS).
     """
     def __init__(self, filename, md5, size, overwrite = False):
         assert is_md5sum(md5)
@@ -908,7 +908,7 @@ class StrictFileWriter:
                 raise ContentViolation("Violation of file contract (checksum) detected: "+str(self.filename))
         self.f.write(buf)
         self.written_bytes += len(buf)
-    
+
     def close(self):
         if self.is_closed():
             return
@@ -926,10 +926,10 @@ class StrictFileWriter:
 
     def is_closed(self):
         return self.f == None
-        
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, type, value, traceback):
         if type:
             # An exception has occured within the "with" clause. Let's
@@ -937,7 +937,7 @@ class StrictFileWriter:
             self.__close()
         else:
             self.close()
- 
+
 def common_tail(s1, s2):
     s1r = s1[::-1]
     s2r = s2[::-1]
@@ -950,13 +950,13 @@ def common_tail(s1, s2):
     if n == 0:
         return ""
     return s1[-n:]
-        
+
 class Struct:
-    def __init__(self, **entries): 
+    def __init__(self, **entries):
         self.__dict__.update(entries)
 
     def __repr__(self):
-        return "<Struct: %s>" % repr(self.__dict__) 
+        return "<Struct: %s>" % repr(self.__dict__)
 
 
 import time
@@ -992,7 +992,7 @@ class TailBuffer:
     def __init__(self):
         self.buffer = array.array("c")
         self.shifted = 0
-        
+
     def append(self, s):
         self.buffer.fromstring(s)
 
@@ -1008,15 +1008,15 @@ class TailBuffer:
         # buffer can easily be more than can be represented on 32 bit
         # systems.
         assert False, "len() not supported for tail buffer"
-    
+
     def virtual_size(self):
         return self.shifted + len(self.buffer)
-    
+
     def __getitem__(self, index):
         assert isinstance(index, slice)
         assert index.step == None, index
         assert index.start >= self.shifted and index.stop >= self.shifted, \
-            "Requested slice %s overlaps with the released part of the buffer (up to %s)" % (index, self.shifted) 
+            "Requested slice %s overlaps with the released part of the buffer (up to %s)" % (index, self.shifted)
         index2 = slice(index.start - self.shifted, index.stop - self.shifted)
         #print index, "->", index2
         return self.buffer.__getitem__(index2).tostring()
@@ -1029,7 +1029,7 @@ def PartialProgress(f1, f2, progress_callback):
     sent upwards.
 
     Like so:
-    
+
     def LongRunningTask(progress_callback):
         DoSomeStuff(PartialProgress(0.0, 0.5, progress_callback))
         DoSomeMoreStuff(PartialProgress(0.5, 1.0, progress_callback))
@@ -1076,7 +1076,7 @@ class ProgressHelper:
         assert 0.0 <= start_f <= 1.0
         self.current_progress = start_f
         self.progress_callback = progress_callback
-    
+
     def partial_progress(self, f):
         pp = PartialProgress(self.current_progress, self.current_progress + f, self.progress_callback)
         self.current_progress += f
