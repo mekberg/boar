@@ -18,7 +18,7 @@ For more on the project, check out the [FAQ](https://bitbucket.org/mats_ekberg/b
 Boar is written in Python and tested on Windows and Linux. The Windows installer is self-contained. On Linux, you will need python 2.6 or higher. Also, you should know that boar is (so far) a command line tool and will require some basic command line skills.
 
 #Sounds great! How do I get started?
-First, download boar from the [downloads page](https://bitbucket.org/mats_ekberg/boar/downloads).Then the [Quickstart guide](https://bitbucket.org/mats_ekberg/boar/wiki/Quickstart) and the [Command Reference](https://bitbucket.org/mats_ekberg/boar/CommandReference) should get you going. You might also want to check out the [FAQ](https://bitbucket.org/mats_ekberg/boar/wiki/FAQ).
+First, download boar from the [downloads page](https://bitbucket.org/mats_ekberg/boar/downloads).Then the [Quickstart guide](https://bitbucket.org/mats_ekberg/boar/wiki/Quickstart) and the [Command Reference](https://bitbucket.org/mats_ekberg/boar/wiki/CommandReference) should get you going. You might also want to check out the [FAQ](https://bitbucket.org/mats_ekberg/boar/wiki/FAQ).
 
 #Contact and contributions
 More questions, or ready to help out? Check out the [Google Groups BoarVCS](https://groups.google.com/forum/#!forum/boarvcs). Patches and suggestions are more than welcome. You can also reach the author directly at ekberg@gmail.com. The permanent address of this project is http://www.boarvcs.org, although it just redirects to the google project page currently.
