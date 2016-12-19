@@ -360,6 +360,25 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         co_tree = read_tree(wd.root, skiplist = boar_dirs)
         self.assertEquals({'file.txt': 'f1'}, co_tree)
 
+    def testIgnoreWithRename(self):
+        tree = {'file.txt': 'f1'}
+        wd = self.createWorkdir(self.repoUrl, tree)
+        wd.front.set_session_ignore_list(u"TestSession", ["*.ignore"])
+        wd.checkout()
+        wd.checkin()
+
+        tree = {'file-renamed.txt': 'f1',
+                'file.ignore': 'f2'}
+        wd = self.createWorkdir(self.repoUrl, tree)
+        wd.checkin()
+        
+        wd = self.createWorkdir(self.repoUrl)
+        wd.checkout()
+        co_tree = read_tree(wd.root, skiplist = boar_dirs)
+        self.assertEquals({'file-renamed.txt': 'f1'}, co_tree)
+
+        
+
     def testInclude(self):
         tree = {'file.txt': 'f1',
                 'file.ignore': 'f2'}
