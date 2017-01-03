@@ -655,8 +655,8 @@ class Workdir:
             ignored_files += tuple([fn for fn in modified_files if fnmatch_multi(ignore_patterns, fn)])
             ignored_files += tuple([fn for old, fn in renamed_files if fnmatch_multi(ignore_patterns, fn)])
         if ignored_files:
-            new_files = tuple([fn for fn in new_files if fn not in ignored_files])
-            modified_files = tuple([fn for fn in modified_files if fn not in ignored_files])
+            new_files -= set(ignored_files)
+            modified_files -= set(ignored_files)
             filtered_renamed = set()
             for old_name, new_name in renamed_files:
                 if new_name in ignored_files:
