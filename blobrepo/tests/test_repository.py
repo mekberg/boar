@@ -94,6 +94,26 @@ class TestBlobRepo(unittest.TestCase):
         blobinfos = list(reader.get_all_blob_infos())
         self.assertEqual(blobinfos, [self.fileinfo1])
 
+    def test_large_blob(self):
+        # 2621440000 bytes of zeroes == 2500M == 2**20*2500
+        # md5 f749878a7974cf018b5ae2e10c7d8358
+        megabyte_of_zeroes = "\0" * (2**20)
+        committed_info = {"filename": u"largefile.bin",
+                          "md5sum": "f749878a7974cf018b5ae2e10c7d8358"}
+        writer = self.repo.create_snapshot(SESSION_NAME)
+        writer.init_new_blob("f749878a7974cf018b5ae2e10c7d8358", 2621440000)
+        for n in  range(2500):
+            writer.add_blob_data("f749878a7974cf018b5ae2e10c7d8358", megabyte_of_zeroes)
+        writer.blob_finished("f749878a7974cf018b5ae2e10c7d8358")
+        writer.add(committed_info)
+        #self.assertEqual(committed_info, self.fileinfo1)
+        id = writer.commit()
+        reader = self.repo.get_blob_reader("f749878a7974cf018b5ae2e10c7d8358")
+        for n in  range(2500):
+            self.assertEqual(reader.read(2**20), megabyte_of_zeroes)
+        self.assertEqual(reader.read(2**20), "")
+        
+
     def test_secondary_session(self):
         writer1 = self.repo.create_snapshot(SESSION_NAME)
         writer1.init_new_blob(DATA1_MD5, len(DATA1))
