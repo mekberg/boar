@@ -319,7 +319,7 @@ class RecipeFinder(GenericStateMachine):
         #print args
         #print "Releasing ", self.last_flush_end
         self.tail_buffer.release(self.last_flush_end)
-        data = self.tail_buffer[self.last_flush_end : args['offset']]
+        data = self.tail_buffer.__getitem__(slice(self.last_flush_end, args['offset']))
         self.last_flush_end = args['offset']
         self.end_of_last_hit = args['offset']
         self.original_piece_handler.add_piece_data(self.seq_number, data)
