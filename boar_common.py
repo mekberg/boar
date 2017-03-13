@@ -151,7 +151,7 @@ class SimpleProgressPrinter:
         self.active = False
         self.last_string = ""
         self.label = printable(label); del label
-        self.symbols = list('-\\|/')
+        self.symbols = list(r"-\|/")
         self.output = output
         self.updatecounter = 0
 
@@ -170,10 +170,15 @@ class SimpleProgressPrinter:
         self.active = True
         self.updatecounter += 1
         now = time.time()
-        symbol = self.symbols.pop(0)
-        self.symbols.append(symbol)
+        too_fast = now - self.last_t < 0.2
+        symbol = self.symbols[0]
+        if not too_fast:
+            # Spinner symbols should only update on actual print
+            self.symbols.append(self.symbols.pop(0))
         eraser = (" " * len(self.last_string)) + "\r"
         self.last_string = self.label + ": %s%% [%s]" % (round(100.0 * f, 1), symbol)
+        if too_fast:
+            return
         self._say(eraser + self.last_string + "\r")
         #print self.last_string
         self.last_t = now
