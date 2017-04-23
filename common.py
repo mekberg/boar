@@ -521,7 +521,13 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
                     raise UndecodableFilenameException(root, name)
                 if name in skip:
                     continue
-                stat = os.stat(name)
+                try:
+                    stat = os.stat(name)
+                except OSError, e:
+                    if e.errno == 2 and os.path.islink(name):
+                        print "Warning: ignoring broken symbolic link: ", path + name
+                        continue
+                    raise
                 if os.path.stat.S_ISDIR(stat.st_mode):
                     rec_tree(name, path + name + sep)
                 else:
