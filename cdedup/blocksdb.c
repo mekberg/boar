@@ -96,8 +96,10 @@ static inline void assert(int c, const char* msg){
 
 static void blocksdb_log(const char* msg ) { 
   static FILE* log = NULL;
+  char logfile[] = "/tmp/boar-blocksdb-log.txt";
   if(log == NULL)
-    log = fopen("/tmp/log.txt", "a");
+    log = fopen(logfile, "a");
+  assert(log, "Couldn't open log file");
   struct timeval tv;
   gettimeofday(&tv, NULL);
   const long long time_in_mill = 
