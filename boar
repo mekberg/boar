@@ -842,7 +842,9 @@ def cmd_contents(args):
     for bi in front.get_session_bloblist(sessionId):
         entries.append(OrderedDict([('filename', bi['filename']),
                                     ('size', bi['size']),
-                                    ('md5', bi['md5sum'])]))
+                                    ('md5', bi['md5sum']),
+                                    ('mtime', bi['mtime'])
+        ]))
         dump['files'] = entries
 
     if options.md5sum:
