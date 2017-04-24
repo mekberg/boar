@@ -139,8 +139,11 @@ class TestCli(unittest.TestCase):
         assert "Checked in session id 3" in output
         output, returncode = call([BOAR,  "--repo", REPO,
                                    "contents", "-r", "3", SESSION])
-        self.assertEqual(sorted(json.loads(output)['files']),
-                              sorted([{"filename": "file_unchanged.txt",
+        parsed_output = sorted(json.loads(output)['files'])
+        for o in parsed_output:
+            del o['mtime']
+        self.assertEqual(parsed_output,
+                         sorted([{"filename": "file_unchanged.txt",
                                 "size": 18,
                                 "md5": "eeefefca582568aabfbca7f5fce6a20a"
                                 },
@@ -183,7 +186,10 @@ class TestCli(unittest.TestCase):
         assert "Checked in session id 3" in output
         output, returncode = call([BOAR,  "--repo", REPO,
                                    "contents", "-r", "3", SESSION])
-        self.assertEqual(sorted(json.loads(output)['files']),
+        parsed_output = sorted(json.loads(output)['files'])
+        for o in parsed_output:
+            del o['mtime']
+        self.assertEqual(parsed_output,
                               sorted([{"filename": "subdir1/subdir2/file_unchanged.txt",
                                 "size": 18,
                                 "md5": "eeefefca582568aabfbca7f5fce6a20a"
