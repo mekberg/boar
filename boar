@@ -1050,6 +1050,9 @@ def cmd_co(args):
     parser = OptionParser(usage="usage: boar co [options] <session name>[/path/] [workdir name]")
     parser.add_option("-r", "--revision", action="store", dest = "revision", type="int", 
                       help="The revision to check out (default is latest)")
+    parser.add_option("-l", "--symlink", dest = "symlink", action="store_true",
+                      help="Create symlinks to the repository instead of copying the data. (DANGEROUS)")
+
     (options, args) = parser.parse_args(args)
     if not args:
         raise UserError("You must specify a session name with an optional subpath (i.e 'MyPictures/summer2010')")    
@@ -1072,6 +1075,14 @@ def cmd_co(args):
     repourl = get_repo_url()
     front = connect_to_repo(repourl)
 
+    if options.symlink:
+        if os.name == "nt":
+            raise UserError("Symlinks can not be used on windows")
+        if not (repourl.startswith("/") or repourl.startswith("file://")):
+            raise UserError("Symlinks can only be used with a local repository specification")
+        if front.deduplication_enabled():
+            raise UserError("Symlinks can not be used with deduplicated repositories")
+
     latest_sid = front.find_last_revision(session_name)
     if not latest_sid:
         raise UserError("No such session found: %s" % (session_name))
@@ -1087,7 +1098,7 @@ def cmd_co(args):
 
     os.mkdir(workdir_path)
     wd = workdir.Workdir(repourl, session_name, offset, sid, workdir_path, front = front)
-    wd.checkout()
+    wd.checkout(symlink=options.symlink)
 
 def cmd_setprop(args):
     parser = OptionParser(usage="usage: boar setprop [options] <session name> <property> [new value]")
