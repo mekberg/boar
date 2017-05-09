@@ -22,6 +22,7 @@ import time
 import cProfile
 import posixpath
 import errno
+import shutil
 
 from optparse import OptionParser, SUPPRESS_HELP
 from blobrepo import repository
@@ -223,6 +224,51 @@ def cmd_scanblocks(args):
     filename, = args
     recipe = deduplication.recepify(front, filename)
     print json.dumps(recipe, indent=2)
+    
+@beta
+def cmd_exportrev(args):
+    """This command will export revision metadata and the blobs introduced
+    by each revision. This might be useful e.g. when you need to make
+    incremental backups of a repository.
+    """
+    parser = OptionParser(usage="usage: boar exportrev [<start rev>]:[<end rev>] > <destination path>")
+    (options, args) = parser.parse_args(args)
+    assert len(args) == 2, "Too few arguments"
+    front = connect_to_repo(get_repo_url())
+    arg = args[0]
+    dest = os.path.abspath(args[1])
+    assert os.path.exists(dest) and os.path.isdir(dest)
+    if ":" in arg:
+        a, b = arg.split(":")
+        if a == "":
+            a = 1
+        if b == "":
+            b = front.repo.get_highest_used_revision()
+        start_index = int(a)
+        last_index = int(b)
+    else:
+        start_index = last_index = int(arg)
+
+    revspec = "s %d to %d" % (start_index, last_index) if start_index != last_index else " " + str(start_index)
+    print "Exporting revision%s to %s" % (revspec, dest)
+    assert start_index <= last_index
+
+    for i in range(start_index, last_index+1):
+        if os.path.exists(os.path.join(dest, str(i))):
+            raise UserError("Path already exists: %s"% os.path.join(dest, str(i)))
+
+    all_session_ids = front.get_session_ids()
+    for i in range(start_index, last_index+1):
+        if i not in all_session_ids:
+            raise UserError("Revision %d does not exist in the repository" % i)
+        
+    blobs_by_rev = front.repo.get_introduced_blobs()        
+    for i in range(start_index, last_index+1):
+        print "Exporting", i
+        src = front.repo.get_session_path(i)
+        shutil.copytree(src, os.path.join(dest, str(i)))
+        for md5 in blobs_by_rev[i]:
+            shutil.copy(front.repo.get_blob_path(md5), os.path.join(dest, str(i), md5))        
 
 def cmd_status(args):
     parser = OptionParser(usage="usage: boar status [options]")
@@ -1472,6 +1518,8 @@ def main():
         return cmd_scanblocks(args[1:])
     elif args[0] == "export":
         return cmd_export(args[1:])
+    elif args[0] == "exportrev":
+        return cmd_exportrev(args[1:])
     elif args[0] == "findlost":
         return cmd_findlost(args[1:])
     else:

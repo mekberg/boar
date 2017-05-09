@@ -789,6 +789,16 @@ class Repo:
                 result.append(rev)
         return result
 
+    def get_introduced_blobs(self):
+        seen_blobs = set()
+        max_rev = self.get_highest_used_revision()
+        blobs_by_rev = {}
+        for n in range(1, max_rev+1):
+            diff = set([bo['md5sum'] for bo in self.get_session(n).get_raw_bloblist() if bo.get('action', None) != "remove"]) - seen_blobs
+            blobs_by_rev[n] = diff
+            seen_blobs |= diff
+        return blobs_by_rev
+    
     def _erase_snapshots(self, snapshot_ids):
         assert self.repo_mutex.is_locked()
         if not snapshot_ids:
