@@ -1,0 +1,7 @@
+*~
+*.so
+*.o
+*.pyc
+cdedup/cdedup.c
+cdedup/sqlite3.c
+cdedup/sqlite3.h
