@@ -12,7 +12,7 @@ test -e cdedup.so || { echo "ERROR: dedup module unavailable"; exit 1; }
 
 for unittest in tests/test_*.py blobrepo/tests/test_*.py; do
     echo "Excuting $unittest (cachedir $BOAR_CACHEDIR)"
-    python $unittest || { echo "Unittest $unittest failed"; exit 1; }
+    BOAR_TEST_REMOTE_REPO=0 python $unittest || { echo "Unittest $unittest failed"; exit 1; }
 done
 
 
