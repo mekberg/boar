@@ -80,17 +80,20 @@ class Test(unittest.TestCase):
             {'filename': 'modified.txt',
              'md5sum': "00000000000000000000000000000004"}
             ]
-        expected_new_bloblist = [
+        expected_new_blobdict = {
+            'unchanged.txt':
             {'filename': 'unchanged.txt',
              'md5sum': "00000000000000000000000000000000"},
+            'modified.txt':
             {'filename': 'modified.txt',
              'md5sum': "00000000000000000000000000000004"},
+            'new.txt':
             {'filename': 'new.txt',
              'md5sum': "00000000000000000000000000000003"}
-            ]
+            }
 
         boar_common.apply_delta(bloblist, delta)
-        self.assertEquals(sorted(bloblist.values()), sorted(expected_new_bloblist))
+        self.assertEqual(bloblist, expected_new_blobdict)
 
 
     def testBloblistDelta(self):
@@ -121,11 +124,11 @@ class Test(unittest.TestCase):
         original_bloblist2_repr = repr(bloblist2)
         delta = boar_common.sorted_bloblist(boar_common.bloblist_delta(bloblist1, bloblist2))
 
-        self.assertEquals(delta, expected_delta)
+        self.assertEqual(delta, expected_delta)
 
         # Make sure the original bloblists are unchanged
-        self.assertEquals(original_bloblist1_repr, repr(bloblist1))
-        self.assertEquals(original_bloblist2_repr, repr(bloblist2))
+        self.assertEqual(original_bloblist1_repr, repr(bloblist1))
+        self.assertEqual(original_bloblist2_repr, repr(bloblist2))
 
 
     def testSortedBloblist(self):
@@ -139,9 +142,9 @@ class Test(unittest.TestCase):
         unsorted_bloblist_repr = repr(unsorted_bloblist)
         expected_sorted_bloblist = [a, b, c]
         sorted_bloblist = boar_common.sorted_bloblist(unsorted_bloblist)
-        self.assertEquals(sorted_bloblist, expected_sorted_bloblist)
+        self.assertEqual(sorted_bloblist, expected_sorted_bloblist)
         # Make sure the original is untouched
-        self.assertEquals(repr(unsorted_bloblist), unsorted_bloblist_repr)
+        self.assertEqual(repr(unsorted_bloblist), unsorted_bloblist_repr)
 
 
 if __name__ == '__main__':

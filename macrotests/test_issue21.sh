@@ -21,11 +21,11 @@ cat >make_unreadable_at_commit.py <<"EOF"
 def modify_fn(fn):
     def newfn(*args, **kwargs):
         import os
-        os.chmod("workdir/file_unreadable.txt", 0000)
+        os.chmod("workdir/file_unreadable.txt", 0o000)
         try:
             return fn(*args, **kwargs)
         finally:
-            os.chmod("workdir/file_unreadable.txt", 0744)
+            os.chmod("workdir/file_unreadable.txt", 0o744)
     return newfn
 
 workdir.check_in_file = modify_fn(workdir.check_in_file)

@@ -35,8 +35,8 @@ grep "ERROR: Session names must not begin or end with whitespace" output.txt || 
 
 cat >expected_ls_output.txt <<EOF
 #Räk smörgås (1 revs)
-_Sim_ple_ (1 revs)
 SimpleSession (1 revs)
+_Sim_ple_ (1 revs)
 !Finished in .* seconds
 EOF
 

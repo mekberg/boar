@@ -1,3 +1,8 @@
+from __future__ import print_function
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
 from deduplication import BlocksDB
 import tempfile
 import random
@@ -39,17 +44,17 @@ def main1():
                          md5 = str(random.randrange(2**64)).zfill(32))
             db.add_rolling(random.randrange(2**64))
         db.commit()
-        print c, round(time() - t0, 2), os.path.getsize(filename)
+        print(c, round(time() - t0, 2), os.path.getsize(filename))
 
 
 def main2():
-    import cPickle
+    import pickle
     count = 0
-    pickler = cPickle.Pickler(open("/gigant/tmp/largedb.pickle", "wb"))
+    pickler = pickle.Pickler(open("/gigant/tmp/largedb.pickle", "wb"))
     for row in db.get_all_blocks():
         pickler.dump(row)
         if count % 100000 == 0:
-            print count
+            print(count)
             pickler.clear_memo()
         count += 1
     #s = set(db.get_all_blocks())
@@ -61,7 +66,7 @@ def main3():
     for row in db.get_all_blocks():
         sh[str(row[2])] = row
         if count % 100000 == 0:
-            print count
+            print(count)
         count += 1
     #s = set(db.get_all_blocks())
 

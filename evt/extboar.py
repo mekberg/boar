@@ -24,6 +24,7 @@ boar cli tool API. This makes this module useful even for verifying
 the behaviour of boar itself.
 """
 
+from builtins import object
 import json
 import re
 import sys
@@ -76,13 +77,13 @@ def load_blob(reader):
     RAM."""
     return "".join(reader)
 
-class ExtRepo:
+class ExtRepo(object):
     def __init__(self, repourl):
         self.repourl = repourl
 
         try:
             run_command(boar_cmd, "--version")
-        except OSError, e:
+        except OSError as e:
             if e.errno == 2:
                 raise Exception("Couldn't execute boar. Did you forget to add it to your path?")
             raise

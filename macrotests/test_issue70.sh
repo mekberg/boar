@@ -18,8 +18,8 @@ def modify_fn(fn):
             to make sure this only happens once."""
         import os, signal
         open("../pid.txt", "w").write(str(os.getpid()))
-	fn(*args, **kwargs)
-	os.kill(os.getpid(), signal.SIGSTOP)
+        fn(*args, **kwargs)
+        os.kill(os.getpid(), signal.SIGSTOP)
         workdir.check_in_file = fn
     return newfn
 

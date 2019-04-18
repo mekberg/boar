@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3.7
 # -*- coding: utf-8 -*-
 
 # Copyright 2010 Mats Ekberg
@@ -16,6 +16,14 @@
 # limitations under the License.
 
 from __future__ import with_statement
+from __future__ import division
+from __future__ import print_function
+from past.builtins import execfile
+from builtins import map
+from builtins import str
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import sys
 import os
 import time
@@ -45,14 +53,14 @@ json = get_json_module()
 def beta(f):
     assert f.__name__.startswith("cmd_")
     def beta_warning(*args, **kwargs):
-        print "WARNING: The '%s' command should be considered beta, meaning that there may be bugs\n         and usage details will probably change in the future." % f.__name__[4:]
+        print("WARNING: The '%s' command should be considered beta, meaning that there may be bugs\n         and usage details will probably change in the future." % f.__name__[4:])
         f(*args, **kwargs)
     return beta_warning
 
 BOAR_VERSION = "boar-devel.16-Nov-2012"
 
 def print_help():
-    print """Boar version %s
+    print("""Boar version %s
 Usage: boar <command> 
 
 Commands:
@@ -78,7 +86,7 @@ verify    Verify the integrity of the repository
 For most commands, you can type "boar <command> --help" to get more
 information. The full command reference is available online at
 http://code.google.com/p/boar/wiki/CommandReference
-"""  % BOAR_VERSION
+"""  % BOAR_VERSION)
 
 not_a_workdir_msg = "This directory is not a boar workdir"
 
@@ -90,8 +98,8 @@ def list_sessions(front, show_meta = False, verbose = False):
         if not show_meta and name.startswith("__"):
             continue
         sessions_count[name] = sessions_count.get(name, 0) + 1
-    for name in sessions_count:
-        print name, "(" + str(sessions_count[name]) + " revs)"
+    for name in sorted(sessions_count.keys()):
+        print(name, "(" + str(sessions_count[name]) + " revs)")
 
 def list_revisions(front, session_name):
     sids = front.get_session_ids(session_name)
@@ -105,8 +113,8 @@ def list_revisions(front, session_name):
             is_base = "(delta)"
         else:
             is_base = "(standalone)"
-        print "Revision id", str(sid), "(" + session_info['date'] + "),", \
-            len(bloblist), "files,", is_base, "Log: %s" % (log_message)
+        print("Revision id", str(sid), "(" + session_info['date'] + "),", \
+            len(bloblist), "files,", is_base, "Log: %s" % (log_message))
 
 def dump_all_revisions(front):
     sids = front.get_session_ids()
@@ -119,7 +127,7 @@ def dump_all_revisions(front):
         deleted = sid in deleted_sids
         #bloblist = front.get_session_bloblist(sid)
         #print json.dumps((sid, base, name, front.get_session_fingerprint(sid), log_message, deleted)), front.get_session_load_stats(sid)
-        print json.dumps((sid, base, name, front.get_session_fingerprint(sid), log_message, deleted))
+        print(json.dumps((sid, base, name, front.get_session_fingerprint(sid), log_message, deleted)))
 
 def list_files(front, session_name, revision):
     try:
@@ -130,13 +138,13 @@ def list_files(front, session_name, revision):
     if session_info == None or session_info.get("name") != session_name:
         raise UserError("There is no such session/revision")
     for info in front.get_session_bloblist(revision):
-        print info['filename'], str(info['size']/1024+1) + "k"
+        print(info['filename'], str(old_div(info['size'],1024)+1) + "k")
 
 def verify_manifests(front, sid, verbose = False, required_manifests = []):
     assert type(verbose) == bool
     bloblist = front.get_session_bloblist(sid)
     blobdict = bloblist_to_dict(bloblist)
-    manifests = [ f for f in blobdict.keys() if parse_manifest_name(f)[0]]
+    manifests = [ f for f in list(blobdict.keys()) if parse_manifest_name(f)[0]]
     manifests.sort()
     result = True
     remaining_required_manifests = set(required_manifests)
@@ -154,11 +162,11 @@ def verify_manifests(front, sid, verbose = False, required_manifests = []):
         if expected_manifest_hash:
             calculated_manifest_md5 = md5sum(manifest_raw)             
             if expected_manifest_hash != calculated_manifest_md5:
-                print "%s CORRUPTED MANIFEST" % manifest_filename
+                print("%s CORRUPTED MANIFEST" % manifest_filename)
                 result = False
                 continue
             else:
-                print "%s is valid" % manifest_filename
+                print("%s is valid" % manifest_filename)
             if calculated_manifest_md5 in remaining_required_manifests:
                 del remaining_required_manifests[calculated_manifest_md5]
 
@@ -166,16 +174,16 @@ def verify_manifests(front, sid, verbose = False, required_manifests = []):
         for md5, filename in md5data:
             session_path = posixpath.join(manifest_basedir, filename)
             if session_path in blobdict and blobdict[session_path]['md5sum'] == md5:
-                if verbose: print manifest_filename, filename, "OK"
+                if verbose: print(manifest_filename, filename, "OK")
             else:
                 result = False
                 manifest_result = "ERROR"
-                print manifest_filename, filename, "ERROR"
-        print manifest_filename, manifests_result
+                print(manifest_filename, filename, "ERROR")
+        print(manifest_filename, manifests_result)
 
     if remaining_required_manifests:
         result = False
-        print "Missing manifests:", remaining_required_manifests
+        print("Missing manifests:", remaining_required_manifests)
     return result
 
 def cmd_locate(args):
@@ -206,16 +214,16 @@ def cmd_locate(args):
             tree = [root]
         for f in tree:
             csum = md5sum_file(f)
-            blobinfos = map(dict, inverted_bloblist.get(csum, []))
+            blobinfos = list(map(dict, inverted_bloblist.get(csum, [])))
             if not blobinfos:
-                print "Missing:", f
+                print("Missing:", f)
                 missing.append(f)
             else:
-                print "OK:", f
+                print("OK:", f)
                 found += 1
                 for bi in blobinfos:
-                    print "   " + bi['filename']
-    print "%s files exists in the given session, %s do not." % (found, len(missing))
+                    print("   " + bi['filename'])
+    print("%s files exists in the given session, %s do not." % (found, len(missing)))
 
 @beta
 def cmd_scanblocks(args):
@@ -223,7 +231,7 @@ def cmd_scanblocks(args):
     front = connect_to_repo(get_repo_url())
     filename, = args
     recipe = deduplication.recepify(front, filename)
-    print json.dumps(recipe, indent=2)
+    print(json.dumps(recipe, indent=2))
     
 @beta
 def cmd_exportrev(args):
@@ -250,7 +258,7 @@ def cmd_exportrev(args):
         start_index = last_index = int(arg)
 
     revspec = "s %d to %d" % (start_index, last_index) if start_index != last_index else " " + str(start_index)
-    print "Exporting revision%s to %s" % (revspec, dest)
+    print("Exporting revision%s to %s" % (revspec, dest))
     assert start_index <= last_index
 
     for i in range(start_index, last_index+1):
@@ -264,7 +272,7 @@ def cmd_exportrev(args):
         
     blobs_by_rev = front.repo.get_introduced_blobs()        
     for i in range(start_index, last_index+1):
-        print "Exporting", i
+        print("Exporting", i)
         src = front.repo.get_session_path(i)
         shutil.copytree(src, os.path.join(dest, str(i)))
         for md5 in blobs_by_rev[i]:
@@ -304,10 +312,10 @@ def cmd_status(args):
             filestats[f] = " "
         for f in ignored_files:
             filestats[f] = "i"
-    filenames = filestats.keys()
+    filenames = list(filestats.keys())
     filenames.sort()
     for f in filenames:
-        print filestats[f], f
+        print(filestats[f], f)
 
 def cmd_info(args):
     parser = OptionParser(usage="usage: boar info")
@@ -324,10 +332,10 @@ def cmd_info(args):
         offset = "/" + wd["offset"]
 
     if wd:
-        print "Repository:", wd["repoUrl"]
-        print "Session / Path:", wd["sessionName"] + offset
-        print "Snapshot id:", wd["revision"]
-        print "Workdir root:", wd["root"]
+        print("Repository:", wd["repoUrl"])
+        print("Session / Path:", wd["sessionName"] + offset)
+        print("Snapshot id:", wd["revision"])
+        print("Workdir root:", wd["root"])
         
 def cmd_mkrepo(args):
     if len(args) == 0:
@@ -366,7 +374,7 @@ def cmd_list(args):
     else:
         raise UserError("Too many arguments")
 
-class _ChangePrinter:
+class _ChangePrinter(object):
     def __init__(self, front):
         self.front = front
         self.bloblists = {}
@@ -393,9 +401,9 @@ class _ChangePrinter:
         for old_name, new_name in renamed_files:
             filestats[old_name + " => " + new_name] = "R"
 
-        print "Changed paths:"
+        print("Changed paths:")
         for f in sorted(filestats.keys()):
-            print filestats[f], f
+            print(filestats[f], f)
 
     def is_affected(self, sid, path):
         comparer = self.get_comparer(sid)
@@ -478,16 +486,16 @@ def cmd_log(args):
         log_message = session_info.get("log_message", "")
         linecount = len(log_message.splitlines())
         line_s = "lines" if linecount != 1 else "line"
-        print "-" * 80
-        print "r%s | %s | %s | %s log %s" % (sid, session_info['name'], 
-                                             session_info.get('date', "<no date>"), linecount, line_s)
+        print("-" * 80)
+        print("r%s | %s | %s | %s log %s" % (sid, session_info['name'], 
+                                             session_info.get('date', "<no date>"), linecount, line_s))
         if options.verbose:
             change_printer.print_changes(sid)
-        print
+        print()
         if log_message != "":
-            print log_message
+            print(log_message)
     if anything_printed:
-        print "-" * 80
+        print("-" * 80)
 
 def cmd_ls(args):
     parser = OptionParser(usage="usage: boar ls <session name>[/path]")
@@ -529,12 +537,12 @@ def cmd_ls(args):
         if "/" in subpath:
             dirname, rest = split_path_from_start(subpath)
             if dirname not in subdirs:
-                print dirname + "/"
+                print(dirname + "/")
                 subdirs.add(dirname)
         elif options.verbose:
-            print subpath, str(info['size']/1024+1) + "kB"
+            print(subpath, str(old_div(info['size'],1024)+1) + "kB")
         else:
-            print subpath
+            print(subpath)
 
     subdirs = set()
     anything_printed = False
@@ -567,7 +575,7 @@ def cmd_stats(args):
         raise UserError("Too many arguments")
     front = connect_to_repo(get_repo_url())
     for name, value in front.get_stats():
-        print "%-30s %s" % (name, value)
+        print("%-30s %s" % (name, value))
 
 @beta
 def cmd_manifests(args):
@@ -610,23 +618,23 @@ def cmd_repair(args):
     else:
         try:
             front = connect_to_repo(get_repo_url())
-            print "Verifying repo before repair..."
+            print("Verifying repo before repair...")
             clean = verify_repo(front)
-        except repository.SoftCorruptionError, e:
-            print "Repairable error found:", e
-        except Exception, e:
-            print "Possible hard error found (repairing may not help):", e
+        except repository.SoftCorruptionError as e:
+            print("Repairable error found:", e)
+        except Exception as e:
+            print("Possible hard error found (repairing may not help):", e)
     if clean:
-        print "No errors found. Not repairing anything."
+        print("No errors found. Not repairing anything.")
         return
     
     repo = front.repo
     if repo.deduplication_enabled():
-        print "Repairing blocks database"
+        print("Repairing blocks database")
         blobs = repo.get_raw_blob_names()
         repo.blocksdb.begin()
         for blob in blobs:
-            print blob
+            print(blob)
             reader = repo.get_blob_reader(blob)
             bc = deduplication.BlockChecksum(repository.DEDUP_BLOCK_SIZE)
             while reader.bytes_left():
@@ -636,7 +644,7 @@ def cmd_repair(args):
                 repo.blocksdb.add_rolling(rolling)
         repo.blocksdb.commit()
     else:
-        print "Nothing to do"
+        print("Nothing to do")
 
 
 def cmd_import(args):
@@ -689,7 +697,7 @@ def cmd_import(args):
     if not front.find_last_revision(session_name):
         raise UserError("No session with the name '%s' exists." % (session_name))
     wd = workdir.Workdir(repourl, session_name, session_offset, None, path_to_ci)
-    wd.setLogOutput(sys.stdout)
+    wd.setLogOutput(sys.stdout, close_when_done=False)
     wd.use_progress_printer(not options.quiet)
     log_message = None
     if options.message:
@@ -699,7 +707,7 @@ def cmd_import(args):
                             log_message = log_message, ignore_errors = options.ignore_errors, 
                             allow_empty = options.allow_empty)
     if session_id:
-        print "Checked in session id", session_id
+        print("Checked in session id", session_id)
     else:
         notice("Nothing was imported.", sys.stdout)
 
@@ -746,7 +754,7 @@ def cmd_update(args):
                  "Make sure the workdir does not contain out of date data before you commit.",
                  sys.stdout)  # warn to stdout to make sure it comes after "update" messages
 
-    print "Workdir now at revision", wd.revision
+    print("Workdir now at revision", wd.revision)
 
 def cmd_ci(args):
     parser = OptionParser(usage="usage: boar ci [options] [files]")
@@ -789,7 +797,7 @@ def cmd_ci(args):
                             allow_empty = options.allow_empty, 
                             include=included_files)
     if session_id != None:
-        print "Checked in session id", session_id
+        print("Checked in session id", session_id)
     else:
         notice("Didn't find any changes to check in.", sys.stdout)
 
@@ -806,7 +814,7 @@ def cmd_relocate(args):
     metadata = read_json(metafile)
     metadata['repo_path'] = repourl
     replace_file(metafile, dumps_json(metadata))
-    print "New location is %s" % repourl
+    print("New location is %s" % repourl)
 
 def cmd_sessions(args):
     parser = OptionParser(usage="usage: boar sessions [options]")
@@ -835,7 +843,7 @@ def cmd_revisions(args):
     if len(args) != 1:
         raise UserError("Wrong number of arguments")
     session_name = args.pop(0)
-    assert isinstance(session_name, unicode)
+    assert isinstance(session_name, str)
     stdout = dedicated_stdout()
     globals()["suppress_finishmessage"] = True
     front = connect_to_repo(get_repo_url())
@@ -920,7 +928,7 @@ def cmd_mksession(args):
     if front.find_last_revision(session_name) != None:
         raise UserError("There already exists a session named '%s'" % (session_name))
     front.mksession(session_name)
-    print "New session '%s' was created successfully" % (session_name)
+    print("New session '%s' was created successfully" % (session_name))
 
 @beta
 def cmd_mkstandalone(args):
@@ -933,7 +941,7 @@ def cmd_mkstandalone(args):
     session_name, = args
     front = connect_to_repo(get_repo_url())
     sid = front.create_base_snapshot(session_name)
-    print "New standalone snapshot %s created for session %s" % (sid, session_name)
+    print("New standalone snapshot %s created for session %s" % (sid, session_name))
 
 def cmd_serve(args):
     parser = OptionParser(usage=
@@ -959,7 +967,7 @@ def cmd_serve(args):
     elif len(args) > 1:
         raise UserError("Too many arguments.")
 
-    repopath = unicode(os.path.abspath(args.pop()))
+    repopath = str(os.path.abspath(args.pop()))
     if options.use_stdio and (options.port != None or options.address != None):
         raise UserError("Stdio server (-S) does not accept --port or --address options.")
 
@@ -983,7 +991,7 @@ def cmd_truncate(args):
     if not front.find_last_revision(session_name):
         raise UserError("There is no session with the name '%s'" % session_name)
     sid = front.truncate(session_name)
-    print "Session %s has been truncated to revision %s" % (session_name, sid)    
+    print("Session %s has been truncated to revision %s" % (session_name, sid))    
 
 def parse_sessionpath(s):
     s = tounicode(s)
@@ -992,8 +1000,8 @@ def parse_sessionpath(s):
         raise UserError("Session path must not start with a slash")
     session_name, throwaway, offset = s.partition("/")
     offset = offset.rstrip("/")
-    assert isinstance(session_name, unicode)
-    assert isinstance(offset, unicode)
+    assert isinstance(session_name, str)
+    assert isinstance(offset, str)
     return session_name, offset
 
 def cmd_cat(args): 
@@ -1033,7 +1041,7 @@ def cmd_cat(args):
         for blobid in blobids:
             datasource = front.get_blob(blobid)
             while datasource.bytes_left():
-                stdout.write(datasource.read(4096))
+                stdout.buffer.write(datasource.read(4096))
 
     else:
         blob_parts = []
@@ -1060,7 +1068,7 @@ def cmd_cat(args):
             blobid, offset, size = blob_part
             datasource = front.get_blob(blobid, offset, size)
             while datasource.bytes_left():
-                stdout.write(datasource.read(4096))
+                stdout.buffer.write(datasource.read(4096))
 
 def cmd_export(args): 
     parser = OptionParser(usage="usage: boar export [options] [<blobid>:<destination filename>] ...")
@@ -1144,7 +1152,7 @@ def cmd_co(args):
     else:
         sid = latest_sid
 
-    print "Checking out to workdir", workdir_path
+    print("Checking out to workdir", workdir_path)
 
     os.mkdir(workdir_path)
     wd = workdir.Workdir(repourl, session_name, offset, sid, workdir_path, front = front)
@@ -1171,7 +1179,7 @@ def cmd_setprop(args):
         try:        
             with safe_open(options.file, "rb") as f:
                 new_value = f.read().decode("utf-8")
-        except Exception, e:
+        except Exception as e:
             raise UserError("Problems reading file %s: %s" % (options.file, e))
     else:
         session_name, property_name, new_value = args
@@ -1210,10 +1218,10 @@ def cmd_getprop(args):
         try:        
             with open(options.file, "w") as f:
                 f.write(property_value)
-        except Exception, e:
+        except Exception as e:
             raise UserError("Problems writing file %s: %s" % (options.file, e))
     else:
-        print property_value
+        print(property_value)
 
 
 def cmd_find(front, args):
@@ -1221,7 +1229,7 @@ def cmd_find(front, args):
     sessionId = front.find_last_revision(sessionName)
     for bi in front.get_session_bloblist(sessionId):
         if bi['md5sum'] == cs:
-            print bi['filename']
+            print(bi['filename'])
 
 @beta
 def cmd_lostfiles(args):
@@ -1231,43 +1239,43 @@ def cmd_lostfiles(args):
         raise UserError(not_a_workdir_msg)    
     for bi in wd.get_bloblist(wd.revision):
         if not wd.exists_in_workdir(bi['md5sum']):
-            print "Missing:", bi['filename'], bi['md5sum']
+            print("Missing:", bi['filename'], bi['md5sum'])
             if restore_missing:
                 wd.fetch_file(bi['filename'], bi['md5sum'], overwrite = False)
 
 def __clone_once(source_front, target_front, skip_verify=False):
     if front.is_identical(source_front, target_front):
-        print "Repositories are already identical"
+        print("Repositories are already identical")
         return
 
     if not skip_verify:
-        print "Quick verifying source repo"
+        print("Quick verifying source repo")
         verify_repo(source_front, verify_blobs = False)
-        print "Quick verifying destination repo"
+        print("Quick verifying destination repo")
         verify_repo(target_front, verify_blobs = False)
 
     front.clone(source_front, target_front)
 
     if not skip_verify:
-        print "Performing full verify on cloned repo"
+        print("Performing full verify on cloned repo")
         verify_repo(target_front, verify_blobs = True)
-    print "Repos are in sync."
+    print("Repos are in sync.")
 
 def __clone_replicate(source_front, target_front, skip_verify = False):
     if not skip_verify:
-        print "Quick verifying source repo"
+        print("Quick verifying source repo")
         verify_repo(source_front, verify_blobs = False)
-        print "Quick verifying destination repo"
+        print("Quick verifying destination repo")
         verify_repo(target_front, verify_blobs = False)
-    print "Entering continous replication mode."
-    print "Will replicate all incoming changes on %s to %s" % (source_front, target_front)
+    print("Entering continous replication mode.")
+    print("Will replicate all incoming changes on %s to %s" % (source_front, target_front))
     while True:
         if front.is_identical(source_front, target_front):
             time.sleep(10)
             continue
-        print "Incoming changes found. Cloning..."
+        print("Incoming changes found. Cloning...")
         __clone_once(source_front, target_front, skip_verify=True)
-        print "Waiting for incoming changes..."
+        print("Waiting for incoming changes...")
 
 def cmd_clone(args):
     if len(args) == 0:
@@ -1309,10 +1317,10 @@ def cmd_diffrepo(args):
     repo2 = Front(client.user_friendly_open_local_repository(repopath2))
     if front.is_identical(repo1, repo2):
         assert front.is_identical(repo2, repo1)
-        print "Repositories are identical"
+        print("Repositories are identical")
         return_code = 0
     else:
-        print "Repositories differ"
+        print("Repositories differ")
         return_code = 1
     return return_code
 
@@ -1331,7 +1339,7 @@ def cmd_findlost(args):
     for n, rev in enumerate(all_revisions):
         progress.update(1.0 * n / len(all_revisions))
         current_revision_blobs = invert_bloblist(front.get_session_bloblist(rev))
-        for blobid, blobinfos in current_revision_blobs.items():
+        for blobid, blobinfos in list(current_revision_blobs.items()):
             if blobid in all_blobs:
                 all_blobs[blobid].extend(blobinfos)
             else:
@@ -1341,18 +1349,18 @@ def cmd_findlost(args):
     lost_blobids = set(all_blobs.keys()) - set(last_revision_blobs.keys())
     progress.update(1.0)
     progress.finished()
-    print len(lost_blobids), "lost"
+    print(len(lost_blobids), "lost")
     tocopy = []
     for blobid in lost_blobids:
         filenames = set([blobinfo['filename'] for blobinfo in all_blobs[blobid]])
         for filename in sorted(filenames):
-            print blobid.ljust(32), filename
+            print(blobid.ljust(32), filename)
             tocopy.append((blobid, filename))
             #blobid = ""
 
     for blobid, filename in tocopy:
         output_path = os.path.join(outputDir, filename)
-        print "Writing", blobid, output_path
+        print("Writing", blobid, output_path)
         dirname = os.path.dirname(output_path)
         if not os.path.exists(dirname):
             os.makedirs(dirname)
@@ -1378,7 +1386,7 @@ def get_repo_url_commandline():
     url = cmdline_repo
     if not client.is_boar_url(url):
         url = os.path.abspath(url)
-    assert isinstance(url, unicode)
+    assert isinstance(url, str)
     return url
 
 def get_repo_url_env():
@@ -1387,7 +1395,7 @@ def get_repo_url_env():
         return None
     if not client.is_boar_url(url):
         return os.path.abspath(url)
-    assert isinstance(url, unicode)
+    assert isinstance(url, str)
     return url
 
 def get_repo_url():
@@ -1422,13 +1430,13 @@ def main():
     if "--version" in args:
         if len(args) != 1:
             raise UserError("The --version option can not be combined with other options")
-        print "Boar, version %s" % BOAR_VERSION
+        print("Boar, version %s" % BOAR_VERSION)
         if not deduplication.cdedup_version:
-            print "Deduplication module not installed"
+            print("Deduplication module not installed")
         else:
-            print "Deduplication module v%s" % deduplication.cdedup_version
-        print "Copyright (C) 2010-2012 Mats Ekberg."
-        print "Licensed under the Apache License, Version 2.0"
+            print("Deduplication module v%s" % deduplication.cdedup_version)
+        print("Copyright (C) 2010-2012 Mats Ekberg.")
+        print("Licensed under the Apache License, Version 2.0")
         return 0
 
     for i in range(0, len(args)):
@@ -1542,16 +1550,12 @@ if __name__ == "__main__":
         msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
         msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
         
-    # The StreamEncoder affects what happens when we write unicode objects to
-    # the stream. Ordinary strings are unaffected.
-    sys.stdout = StreamEncoder(sys.stdout)
-    sys.stderr = StreamEncoder(sys.stderr)
-    sys.argv = map(tounicode, sys.argv)
+    sys.argv = list(map(tounicode, sys.argv))
     global ucwd
     ucwd = tounicode(os.getcwd())
 
     if 'BOAR_PROF' in os.environ:
-       print "PROFILING ENABLED"
+       print("PROFILING ENABLED")
        cProfile.run('main()', "prof.txt")
        import pstats
        p = pstats.Stats('prof.txt')
@@ -1561,31 +1565,31 @@ if __name__ == "__main__":
     try:
         return_code = main()
     except KeyboardInterrupt:
-        print
-        print "ERROR: Operation cancelled by user"
+        print()
+        print("ERROR: Operation cancelled by user")
         return_code = 1
     except UserError as e:
         #import traceback
         #print "-"*60
         #traceback.print_exc(file=sys.stdout)
         #print "-"*60
-        print "ERROR:", unicode(e)
+        print("ERROR:", str(e))
         return_code = 1
     except repository.MisuseError as e:
-        print "REPO USAGE ERROR:", unicode(e)
+        print("REPO USAGE ERROR:", str(e))
         return_code = 1
     except repository.CorruptionError as e:
-        print "REPO CORRUPTION:", unicode(e)
+        print("REPO CORRUPTION:", str(e))
         return_code = 13
     except repository.SoftCorruptionError as e:
-        print "SOFT REPO CORRUPTION:", unicode(e)
-        print "No need to panic. This means that there are problems in some non-vital cache files in the repository."
-        print "Execute a 'repair' command on the repository to fix this problem."
+        print("SOFT REPO CORRUPTION:", str(e))
+        print("No need to panic. This means that there are problems in some non-vital cache files in the repository.")
+        print("Execute a 'repair' command on the repository to fix this problem.")
         return_code = 7
  
     t2 = time.time()
     if not globals().get("suppress_finishmessage", False):
-        print "Finished in", round(t2-t1, 2), "seconds"
+        print("Finished in", round(t2-t1, 2), "seconds")
     #import common
     #print "Processed", common._file_reader_sum, "bytes"
     sys.exit(return_code)

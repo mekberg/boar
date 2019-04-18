@@ -33,6 +33,7 @@ detect deviations from the file structure described in the
 manifest. As long as the files are intact, the file structure can
 always be reconstructed by using the manifest.
 """
+from __future__ import print_function
 
 # It would easy to import a lot of boar modules here, but the whole
 # point of an _external_ verification tool is that it should not rely
@@ -74,18 +75,18 @@ def verify_manifest(extrepo, manifest_contents, manifest_md5):
         md5summer.update(manifest_contents)
         if manifest_md5 != md5summer.hexdigest():
             raise IntegrityError("Manifest checksum didn't match contents")
-        print "Manifest integrity OK"
+        print("Manifest integrity OK")
     manifest_contents = manifest_contents.decode("utf-8-sig")
 
     for line in manifest_contents.splitlines():
         md5, filename = line[0:32], line[34:]
         extrepo.verify_blob(md5)
-        print filename, "OK"
+        print(filename, "OK")
 
 def verify_manifest_by_md5(extrepo, manifest_md5):
     """This function will load the given manifest and then verify the
     checksum of every file specified within."""
-    print "Verifying manifest with md5", manifest_md5
+    print("Verifying manifest with md5", manifest_md5)
     try:
         manifest_contents = load_blob(extrepo.get_blob(manifest_md5))
     except IntegrityError:
@@ -102,7 +103,7 @@ def verify_manifest_by_spath(extrepo, session_path):
     a md5 checksum in its filename, the manifest file itself will be
     verified against that checksum."""
 
-    print "Verifying manifest", session_path
+    print("Verifying manifest", session_path)
     session_name, manifest_path = session_path.split("/", 1)
     try:
         manifest_contents = load_blob(extrepo.get_blob_by_path(session_name, manifest_path))
@@ -199,9 +200,9 @@ Examples:
     try:
         for manifest_id in manifest_ids:
             verifier(extrepo, manifest_id)
-    except IntegrityError, e:
-        print e
-        print "ERROR WHILE VERIFYING MANIFEST %s" % manifest_id
+    except IntegrityError as e:
+        print(e)
+        print("ERROR WHILE VERIFYING MANIFEST %s" % manifest_id)
         sys.exit(1)
 
 

@@ -14,9 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
+from future import standard_library
+standard_library.install_aliases()
+from builtins import object
 from blobrepo import repository
 import os
-import SocketServer
+import socketserver
 import front
 import sys
 import socket
@@ -29,7 +33,7 @@ import jsonrpc
 def ping():
     return "pong"
 
-class PipedBoarServer:
+class PipedBoarServer(object):
     def __init__(self, repopath, from_client, to_client):
         self.repopath = repopath
         self.handler = jsonrpc.RpcHandler()
@@ -63,12 +67,12 @@ def init_stdio_server(repopath):
     sys.stdout = sys.stderr
     return server
 
-class ForkingTCPServer(SocketServer.ForkingMixIn, SocketServer.TCPServer):
+class ForkingTCPServer(socketserver.ForkingMixIn, socketserver.TCPServer):
     pass
 
 def run_socketserver(repopath, address, port):
     repository.Repo(repopath) # Just check if the repo path is valid
-    class BoarTCPHandler(SocketServer.BaseRequestHandler):
+    class BoarTCPHandler(socketserver.BaseRequestHandler):
         def handle(self):
             to_client = self.request.makefile(mode="wb")
             from_client = self.request.makefile(mode="rb")
@@ -76,12 +80,12 @@ def run_socketserver(repopath, address, port):
 
     if "fork" not in dir(os):
         warn("Your operating system does not support the 'fork()' system call. This server will only be able to handle one client at a time. Please see the manual on how to set up a server on your operating system to handle multiple clients.")
-        server = SocketServer.TCPServer((address, port), BoarTCPHandler)
+        server = socketserver.TCPServer((address, port), BoarTCPHandler)
     else:
         server = ForkingTCPServer((address, port), BoarTCPHandler)
 
     ip = server.socket.getsockname()[0]
     if ip == "0.0.0.0":
         ip = socket.gethostname()
-    print "Serving repository %s as boar://%s:%s/" % (repopath, ip, port)
+    print("Serving repository %s as boar://%s:%s/" % (repopath, ip, port))
     server.serve_forever()

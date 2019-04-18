@@ -24,6 +24,8 @@ unset REPO_PATH # Don't harm any innocent repos
 export BOAR="$TESTDIR/../boar"
 export BOARMOUNT="$TESTDIR/../boarmount"
 export BOARTESTHOME=`pwd`
+export BOAR_SERVER_CLI="$BOARTESTHOME/../boar"
+export PYTHON_BINARY=$(head -n1 $BOAR_SERVER_CLI|cut -d ' ' -f2)
 
 export PATH="$BOARTESTHOME:$PATH"
 
@@ -39,7 +41,7 @@ for testcase in $testcases; do
     OUTPUT="${TMPDIR}.log"
     export BOAR_CACHEDIR="$TMPDIR/cache"
     export BOAR_HIDE_PROGRESS=1
-    ( cd $TMPDIR && bash $BOARTESTHOME/${testcase} >$OUTPUT 2>&1 ) ||
+    ( cd $TMPDIR && touch $OUTPUT && bash $BOARTESTHOME/${testcase} ) ||
 	{
 	    echo
 	    cat $OUTPUT

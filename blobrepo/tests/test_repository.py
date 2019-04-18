@@ -14,15 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from builtins import range
 import sys, os, unittest, tempfile, shutil
 from copy import copy
 
-DATA1 = "tjosan"
+DATA1 = b"tjosan"
 DATA1_MD5 = "5558e0551622725a5fa380caffa94c5d"
-DATA2 = "tjosan hejsan"
+DATA2 = b"tjosan hejsan"
 DATA2_MD5 = "923574a1a36aebc7e1f586b7d363005e"
 
-DATA3 = "tjosan hejsan tjosan hejsan hejsan"
+DATA3 = b"tjosan hejsan tjosan hejsan hejsan"
 DATA3_MD5 = "cafa2ed1e085869b3bfe9e43b60e7a5a"
 
 TMPDIR=tempfile.gettempdir()
@@ -97,7 +98,7 @@ class TestBlobRepo(unittest.TestCase):
     def test_large_blob(self):
         # 2621440000 bytes of zeroes == 2500M == 2**20*2500
         # md5 f749878a7974cf018b5ae2e10c7d8358
-        megabyte_of_zeroes = "\0" * (2**20)
+        megabyte_of_zeroes = b"\0" * (2**20)
         committed_info = {"filename": u"largefile.bin",
                           "md5sum": "f749878a7974cf018b5ae2e10c7d8358"}
         writer = self.repo.create_snapshot(SESSION_NAME)

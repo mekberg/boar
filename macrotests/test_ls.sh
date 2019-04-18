@@ -33,8 +33,8 @@ $BOAR mksession --repo=TESTREPO EmptySession || exit 1
 
 cat >expected.txt <<EOF
 AnotherTestSession (3 revs)
-TestSession (4 revs)
 EmptySession (1 revs)
+TestSession (4 revs)
 !Finished in .* seconds
 EOF
 $BOAR --repo=TESTREPO ls >output.txt 2>&1 || { 

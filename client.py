@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from builtins import str
 import jsonrpc
 import base64
 import re
@@ -82,7 +83,7 @@ def create_boar_proxy(from_server, to_server):
     allowed_exceptions = []
     import exceptions, boar_exceptions, common
     for module in exceptions, boar_exceptions, common:
-        for obj in module.__dict__.values():
+        for obj in list(module.__dict__.values()):
             if type(obj) == type and issubclass(obj, Exception):
                 allowed_exceptions.append(obj)
 
@@ -92,7 +93,7 @@ def create_boar_proxy(from_server, to_server):
 
     try:
         assert server.ping() == "pong"
-    except ConnectionLost, e:
+    except ConnectionLost as e:
         raise UserError("Could not connect to remote repository: %s" % e)
     except:
         raise
@@ -154,7 +155,7 @@ def connect_tcp(url):
     port = int(port)
     try:
         return _connect_tcp(host, port)
-    except socket.error, e:
+    except socket.error as e:
         raise UserError("Network error: %s" % e)
 
 def connect_local(url):

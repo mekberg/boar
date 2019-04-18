@@ -15,6 +15,8 @@
 # limitations under the License.
 
 from __future__ import with_statement
+from past.builtins import cmp
+from builtins import object
 
 import os, re
 
@@ -111,9 +113,9 @@ def invert_bloblist(bloblist):
 
 
 def sorted_bloblist(bloblist):
-    def info_comp(x, y):
-        return cmp(x['filename'], y['filename'])
-    return sorted(bloblist, info_comp)
+    #def info_comp(x, y):
+    #    return cmp(x['filename'], y['filename'])
+    return sorted(bloblist, key=lambda bi: bi['filename'])
 
 def parse_manifest_name(path):
     """Returns a tuple (lowercase hash name, hash). Both are None if
@@ -144,7 +146,7 @@ def is_recipe_filename(filename):
         and is_md5sum(filename_parts[0])
 
 
-class SimpleProgressPrinter:
+class SimpleProgressPrinter(object):
     def __init__(self, output, label = "Processing"):
         self.last_t = 0
         self.start_t = time.time()

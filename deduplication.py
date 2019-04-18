@@ -14,7 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
 from __future__ import with_statement
+from builtins import hex
+from builtins import range
+from builtins import object
 
 from common import *
 from ordered_dict import OrderedDict
@@ -27,6 +31,8 @@ import array
 try:
     if os.getenv("BOAR_DISABLE_DEDUP") == "1": raise ImportError()
     import cdedup
+    if not hasattr(cdedup, "__version__"):
+        raise ImportError()
     assert cdedup.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % rollingcs.__version__
     cdedup_version = cdedup.__version__
     from cdedup import RollingChecksum, calc_rolling, IntegerSet, BlocksDB
@@ -50,7 +56,7 @@ def CreateIntegerSet(ints):
     intset.add_all(ints)
     return intset
 
-class FakeRollingChecksum:
+class FakeRollingChecksum(object):
     """This is a dummy version of RollingChecksum. An instance of this
     class will never report any hits."""
     def __init__(self, window_size, intset):
@@ -62,10 +68,10 @@ class FakeRollingChecksum:
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         raise StopIteration()
 
-class FakeIntegerSet:
+class FakeIntegerSet(object):
     """This is a dummy version of IntegerSet. An instance of this
     class will always return False when contains() is called."""
     def __init__(self, bucket_count):
@@ -77,7 +83,7 @@ class FakeIntegerSet:
     def contains(self, n):
         return False
 
-class FakeBlockChecksum:
+class FakeBlockChecksum(object):
     """This is a dummy version of BlockChecksum. An instance of this
     class will always return an empty list when harvest() is
     called."""
@@ -90,7 +96,7 @@ class FakeBlockChecksum:
     def harvest(self):
         return []
 
-class TmpBlocksDB:
+class TmpBlocksDB(object):
     def __init__(self, blocksdb):
         self.blocksdb = blocksdb
         self.blocks = {} # md5 -> [(blob, offset), ...]
@@ -111,7 +117,7 @@ class TmpBlocksDB:
     def has_block(self, md5):
         return md5 in self.blocks or self.blocksdb.has_block(md5)
 
-class FakeBlocksDB:
+class FakeBlocksDB(object):
     def __init__(self, dbfile, block_size):
         self.block_size = block_size
 
@@ -145,7 +151,7 @@ class FakeBlocksDB:
 
 
 
-class BlockChecksum:
+class BlockChecksum(object):
     def __init__(self, window_size):
         self.buffer = TailBuffer()
         self.window_size = window_size
@@ -170,7 +176,7 @@ class BlockChecksum:
 if not dedup_available:
     del BlockChecksum
 
-class UniformBlobGetter:
+class UniformBlobGetter(object):
     def __init__(self, repo, local_blob_dir = None):
         self.repo = repo
         self.local_blob_dir = local_blob_dir
@@ -180,7 +186,7 @@ class UniformBlobGetter:
         if self.local_blob_dir:
             local_path = os.path.join(self.local_blob_dir, blob_name)
             if os.path.exists(local_path):
-                return long(os.path.getsize(local_path))
+                return int(os.path.getsize(local_path))
         return self.repo.get_blob_size(blob_name)
 
     def get_blob_reader(self, blob_name, offset, size):
@@ -193,7 +199,7 @@ class UniformBlobGetter:
                 return FileDataSource(fo, size)
         return self.repo.get_blob_reader(blob_name, offset, size)
 
-class OriginalPieceHandler:
+class OriginalPieceHandler(object):
     def init_piece(self, index):
         pass
 
@@ -352,7 +358,7 @@ class RecipeFinder(GenericStateMachine):
 
     def feed(self, s):
         #print "Feeding", len(s), "bytes"
-        assert type(s) == str
+        assert type(s) == bytes
         assert not self.closed
         self.feed_byte_count += len(s)
         self.rs.feed_string(s)
@@ -441,7 +447,7 @@ class RecipeFinder(GenericStateMachine):
                 seqfinder = BlockSequenceFinder(self.blocksdb)
                 for md5 in s:
                     if not seqfinder.can_add(md5):
-                        blob, offset, size = seqfinder.get_matches().next()
+                        blob, offset, size = next(seqfinder.get_matches())
                         restored_size += size
                         yield get_dict(blob, offset, size, False)
                         seqfinder = BlockSequenceFinder(self.blocksdb)
@@ -510,7 +516,7 @@ class RecipeFinder(GenericStateMachine):
             self.__polish_recipe_repeats()
         return self.recipe
 
-class BlockSequenceFinder:
+class BlockSequenceFinder(object):
     def __init__(self, blocksdb):
         self.blocksdb = blocksdb
 
@@ -557,27 +563,27 @@ class BlockSequenceFinder:
         #print "Candidates are", list(self.get_matches())
 
 def print_recipe(recipe):
-    print "Md5sum:", recipe["md5sum"]
-    print "Size  :", recipe["size"]
-    print "Method:", recipe['method']
-    print "Pieces:", len(recipe['pieces'])
+    print("Md5sum:", recipe["md5sum"])
+    print("Size  :", recipe["size"])
+    print("Method:", recipe['method'])
+    print("Pieces:", len(recipe['pieces']))
     pos = 0
     dedup_size = 0
     for p in recipe['pieces']:
-        print "  Original     :", p['original']
-        print "  Source blob  :", p['source'] if p['source'] else "SELF"
-        print "  Source offset:", p['offset']
-        print "  Size         :", p['size']
-        print "  Position     : %s - %s" % (hex(pos), hex(pos + p['size'] * p.get('repeat', 1)))
-        print "  Repeat       :", p.get('repeat', "(1)")
-        print "  ---------------"
+        print("  Original     :", p['original'])
+        print("  Source blob  :", p['source'] if p['source'] else "SELF")
+        print("  Source offset:", p['offset'])
+        print("  Size         :", p['size'])
+        print("  Position     : %s - %s" % (hex(pos), hex(pos + p['size'] * p.get('repeat', 1))))
+        print("  Repeat       :", p.get('repeat', "(1)"))
+        print("  ---------------")
         pos += p['size']
         if p['source'] == None: # Count the parts we couldn't find elsewhere
             dedup_size += p['size']
     try:
-        print "Dedup removed %s%% of original size" % round((100.0 * (1.0 - float(dedup_size) / recipe["size"])), 1)
+        print("Dedup removed %s%% of original size" % round((100.0 * (1.0 - float(dedup_size) / recipe["size"])), 1))
     except ZeroDivisionError:
-        print "Zero size recipe"
+        print("Zero size recipe")
         pass
 
 def benchmark():
@@ -590,7 +596,7 @@ def benchmark():
         b.feed_string(data)
         size += len(data)
         b.harvest()
-    print size, time.time() - t0
+    print(size, time.time() - t0)
 
 #res=cProfile.run('main()', "prof.txt")
 #import pstats
