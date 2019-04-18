@@ -1,3 +1,8 @@
+from __future__ import division
+from __future__ import print_function
+from builtins import range
+from past.utils import old_div
+from builtins import object
 from common import *
 from jsonrpc import DataSource
 import deduplication
@@ -46,7 +51,7 @@ class RecipeReader(DataSource):
         piece_size_sum = 0
         for piece in recipe['pieces']:
             repeat = piece.get('repeat', 1)
-            for n in xrange(0, repeat):
+            for n in range(0, repeat):
                 piece_to_add = copy(piece)
                 piece_to_add['position_in_recipe'] = piece_size_sum
                 piece_size_sum += piece['size']
@@ -81,14 +86,14 @@ class RecipeReader(DataSource):
         return self.bytes_left_in_segment
 
     def __del__(self):
-        for f in self.file_handles.values():
+        for f in list(self.file_handles.values()):
             f.close()
         del self.file_handles
 
     def __read_from_blob(self, blob, position, size):
         blobpath = self.blob_paths[blob]
         if blobpath not in self.file_handles:
-            for f in self.file_handles.values():
+            for f in list(self.file_handles.values()):
                 f.close()
             self.file_handles.clear()
             self.file_handles[blobpath] = open(blobpath, "rb")
@@ -146,7 +151,7 @@ def benchmark():
     import tempfile
     blob_fo = tempfile.NamedTemporaryFile()
     blob_path = blob_fo.name
-    class FakeRepo:
+    class FakeRepo(object):
         def get_blob_path(self, blob):
             return blob_path
     block_size = 65536
@@ -163,7 +168,7 @@ def benchmark():
              } ]
               }
     reader = RecipeReader(recipe, FakeRepo())
-    print block_size * block_count / (2**20), "Mbytes"
+    print(old_div(block_size * block_count, (2**20)), "Mbytes")
     sw = StopWatch()
     reader.read()
     sw.mark("Read complete")
@@ -181,7 +186,7 @@ def benchmark():
 def simple_test():
     import tempfile
     blob_path = "/tmp/blobreader-test.txt"
-    class FakeRepo:
+    class FakeRepo(object):
         def get_blob_path(self, blob):
             return blob_path
     with open(blob_path, "w") as f:
@@ -198,7 +203,7 @@ def simple_test():
             ]
               }
     reader = RecipeReader(recipe, FakeRepo())
-    print reader.read()
+    print(reader.read())
 
 
 if __name__ == "__main__":

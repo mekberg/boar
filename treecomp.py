@@ -14,10 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from builtins import object
 from common import invert_dict
 
 
-class TreeComparer:
+class TreeComparer(object):
     def __init__(self, basetree, newtree):
         """ A tree is defined by a dict on the form
         {filename: fingerprint} """
@@ -55,7 +56,7 @@ class TreeComparer:
 
         # This loop covers all possible cases except files that are truly new
         # in newtree (moves/renames are covered).
-        for base_fn, base_hash in self.basetree.iteritems():
+        for base_fn, base_hash in self.basetree.items():
             if base_fn in self.newtree:
                 if base_hash == self.newtree[base_fn]:
                     self.unchanged_files.add(base_fn)
@@ -79,7 +80,7 @@ class TreeComparer:
 
         # Any files in newtree not covered above must be truly new files
         # with no counterparts in basetree at all.
-        for new_fn, new_hash in self.newtree.iteritems():
+        for new_fn, new_hash in self.newtree.items():
             if new_fn not in newtree_covered:
                 self.added_files.add(new_fn)
 

@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from __future__ import with_statement
+
+from builtins import range
 import sys, os, unittest, tempfile, shutil
 
 TMPDIR=tempfile.gettempdir()
@@ -24,6 +25,14 @@ if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import common
+
+def readfile(fn):
+    with open(fn, "rb") as fo:
+        return fo.read()
+
+def writefile(fn, data):
+    with open(fn, "wb") as fo:
+        return fo.read()
 
 class TestGetTree(unittest.TestCase):
     def setUp(self):
@@ -34,7 +43,7 @@ class TestGetTree(unittest.TestCase):
         # Ensure that this directory contains at least one file, so
         # that we notice if the scan erronously includes this
         # directory.
-        open(os.path.join(self.tmpdir, u"NOT_INCLUDED_IN_TEST.MARKER"), "w")
+        open(os.path.join(self.tmpdir, u"NOT_INCLUDED_IN_TEST.MARKER"), "w").close()
 
         self.old_cwd = os.getcwd()
         os.chdir(self.tmpdir)
@@ -52,17 +61,18 @@ class TestGetTree(unittest.TestCase):
         assert not os.path.isabs(fn)
         if data == None:
             data = fn
-        if type(data) == unicode:
+        if type(data) == str:
             data = data.encode('utf8')
         dirname = os.path.dirname(fn)
         if dirname:
             os.makedirs(self.fullpath(dirname))
-        open(self.fullpath(fn), 'w').write(data)
+        with open(self.fullpath(fn), 'wb') as fo:
+            fo.write(data)
 
     def assertTreeEquals(self, tree, expected):
         #print tree
         #print expected
-        self.assertEquals(sorted(tree), sorted(expected))
+        self.assertEqual(sorted(tree), sorted(expected))
 
     def assertTreeExists(self, tree, root=None):
         for fn in tree:
@@ -142,16 +152,16 @@ class TestStrictFileWriterBasics(unittest.TestCase):
     def testEmptyFile(self):
         sfw = common.StrictFileWriter(self.filename, "d41d8cd98f00b204e9800998ecf8427e", 0)
         sfw.close()
-        self.assertEquals("", open(self.filename).read())
+        self.assertEqual(b"", readfile(self.filename))
 
     def testWithHappy(self):
         with common.StrictFileWriter(self.filename, "6118fda28fbc20966ba8daafdf836683", len("avocado")) as sfw:
-            sfw.write("avocado")
+            sfw.write(b"avocado")
 
     def testWithTooShort(self):
         def dotest():
             with common.StrictFileWriter(self.filename, "6118fda28fbc20966ba8daafdf836683", len("avocado")) as sfw:
-                sfw.write("avocad")
+                sfw.write(b"avocad")
         self.assertRaises(common.ConstraintViolation, dotest)
 
     def testWithTooShort2(self):
@@ -171,91 +181,91 @@ class TestStrictFileWriterEnforcement(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors = True)
 
     def testExisting(self):
-        self.sfw.write("avocado")
+        self.sfw.write(b"avocado")
         self.sfw.close()
         self.assertRaises(common.ConstraintViolation, common.StrictFileWriter, self.filename, \
                               "fe01d67a002dfa0f3ac084298142eccd", len("orange"))
-        self.assertEquals("avocado", open(self.filename).read())
+        self.assertEqual(b"avocado", readfile(self.filename))
 
     def testExistingOverwrite(self):
-        self.sfw.write("avocado")
+        self.sfw.write(b"avocado")
         self.sfw.close()
         with common.StrictFileWriter(self.filename, "fe01d67a002dfa0f3ac084298142eccd", \
                                          len("orange"), overwrite = True) as sfw2:
-            sfw2.write("orange")
-        self.assertEquals("orange", open(self.filename).read())
+            sfw2.write(b"orange")
+        self.assertEqual(b"orange", readfile(self.filename))
 
     def testOverrun(self):
-        self.assertRaises(common.ConstraintViolation, self.sfw.write, "avocadoo")
+        self.assertRaises(common.ConstraintViolation, self.sfw.write, b"avocadoo")
 
     def testOverrun2(self):
-        self.sfw.write("avo")
-        self.sfw.write("cad")
-        self.sfw.write("o")
-        self.assertRaises(common.ConstraintViolation, self.sfw.write, "o")
+        self.sfw.write(b"avo")
+        self.sfw.write(b"cad")
+        self.sfw.write(b"o")
+        self.assertRaises(common.ConstraintViolation, self.sfw.write, b"o")
 
     def testUnderrun(self):
-        self.sfw.write("avocad")
+        self.sfw.write(b"avocad")
         self.assertRaises(common.ConstraintViolation, self.sfw.close)
 
     def testHappyPath(self):
-        self.sfw.write("avocado")
+        self.sfw.write(b"avocado")
         self.sfw.close()
-        self.assertEquals("avocado", open(self.filename).read())
+        self.assertEqual(b"avocado", readfile(self.filename))
 
     def testHappyPath2(self):
-        self.sfw.write("")
-        self.sfw.write("avo")
-        self.sfw.write("cad")
-        self.sfw.write("")
-        self.sfw.write("o")
-        self.sfw.write("")
+        self.sfw.write(b"")
+        self.sfw.write(b"avo")
+        self.sfw.write(b"cad")
+        self.sfw.write(b"")
+        self.sfw.write(b"o")
+        self.sfw.write(b"")
         self.sfw.close()
-        self.assertEquals("avocado", open(self.filename).read())
+        self.assertEqual(b"avocado", readfile(self.filename))
 
     def testWrongChecksum(self):
-        self.assertRaises(common.ConstraintViolation, self.sfw.write, "avocato")
+        self.assertRaises(common.ConstraintViolation, self.sfw.write, b"avocato")
 
     def testWithHappyPath(self):
         with self.sfw:
-            self.sfw.write("avocado")
+            self.sfw.write(b"avocado")
         self.assertTrue(self.sfw.is_closed())
-        self.assertEquals("avocado", open(self.filename).read())
+        self.assertEqual(b"avocado", readfile(self.filename))
 
     def testWithContentViolation(self):
         try:
             with self.sfw:
-                self.sfw.write("AVOCADO")
+                self.sfw.write(b"AVOCADO")
             assert False, "Should throw an exception"
-        except Exception, e:
+        except Exception as e:
             # Must be a content violation
-            self.assertEquals(type(e), common.ContentViolation)
+            self.assertEqual(type(e), common.ContentViolation)
         self.assertTrue(self.sfw.is_closed())
 
     def testWithUnderrunViolation(self):
         try:
             with self.sfw:
-                self.sfw.write("AVO")
+                self.sfw.write(b"AVO")
             assert False, "Should throw an exception"
-        except Exception, e:
+        except Exception as e:
             # Must be a size violation
-            self.assertEquals(type(e), common.SizeViolation)
+            self.assertEqual(type(e), common.SizeViolation)
         self.assertTrue(self.sfw.is_closed())
 
     def testWithOverrunViolation(self):
         try:
             with self.sfw:
-                self.sfw.write("avocados")
+                self.sfw.write(b"avocados")
             assert False, "Should throw an exception"
-        except Exception, e:
+        except Exception as e:
             # Must be a size violation
-            self.assertEquals(type(e), common.SizeViolation)
+            self.assertEqual(type(e), common.SizeViolation)
         self.assertTrue(self.sfw.is_closed())
 
 class TestStripPathOffset(unittest.TestCase):
     def testSimple(self):
-        self.assertEquals("b", common.strip_path_offset("/a", "/a/b"))
-        self.assertEquals("", common.strip_path_offset("/a", "/a"))
+        self.assertEqual("b", common.strip_path_offset("/a", "/a/b"))
+        self.assertEqual("", common.strip_path_offset("/a", "/a"))
 
     def testArgumentChecks(self):
         # Offset must not end with slash.
@@ -266,11 +276,11 @@ class TestStripPathOffset(unittest.TestCase):
 class TestTailBuffer(unittest.TestCase):
     def test_large_buffer(self):
         tb = common.TailBuffer()
-        ONE_HUNDRED_MB = "x" * (100 * 2**20)
+        ONE_HUNDRED_MB = b"x" * (100 * 2**20)
         for n in range(50): # 5GB should be enough for anyone
             tb.append(ONE_HUNDRED_MB)
             size = tb.virtual_size()
-            self.assertTrue(isinstance(size, (int, long)))
+            self.assertTrue(isinstance(size, int))
             tb.release(size)
         self.assertEqual(tb.virtual_size(), 50 * 100 * 2**20)
 
@@ -278,7 +288,7 @@ class TestMisc(unittest.TestCase):
     def test_common_tail(self):
         def test(s1, s2, expected):
             result = common.common_tail(s1, s2)
-            self.assertEquals(expected, result)
+            self.assertEqual(expected, result)
         test("abc", "abc", "abc")
         test("c", "abc", "c")
         test("abc", "c", "c")

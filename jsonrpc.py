@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+from builtins import str
+from builtins import object
 __version__ = "2008-08-31-beta"
 __author__   = "Roland Koebler <rk(at)simple-is-better.org>"
 __license__  = """Copyright (c) 2007-2008 by Roland Koebler (rk(at)simple-is-better.org)
@@ -157,14 +160,14 @@ def dictkeyclean(d):
     :Raises: UnicodeEncodeError
     """
     new_d = {}
-    for (k, v) in d.iteritems():
+    for (k, v) in d.items():
         new_d[str(k)] = v
     return new_d
 
 #----------------------
 # JSON-RPC 1.0
 
-class DataSource:
+class DataSource(object):
     def __init__(self):
         # Don't use this
         raise NotImplementedError()
@@ -253,13 +256,13 @@ class FileDataSource(DataSource):
 #----------------------
 # JSON-RPC 2.0
 
-class JsonRpc20:
+class JsonRpc20(object):
     """BOAR-JSON-RPC V2.0"""
     @staticmethod
     def dumps_request( method, params=(), id=0 ):
         """ Serialize a JSON-RPC-Request. Accepts a method name and parameters.
         """
-        if not isinstance(method, (str, unicode)):
+        if not isinstance(method, str):
             raise TypeError('"method" must be a string (or unicode string).')
         if not isinstance(params, (tuple, list, dict)):
             raise TypeError("params must be a tuple/list/dict or None.")
@@ -300,15 +303,15 @@ class JsonRpc20:
         """
         try:
             data = json.loads(string)
-        except ValueError, err:
+        except ValueError as err:
             raise RPCParseError("No valid JSON. (%s)" % str(err))
         if not isinstance(data, dict):  raise RPCInvalidRPC("No valid RPC-package.")
         if "jsonrpc" not in data:       raise RPCInvalidRPC("""Invalid Response, "jsonrpc" missing.""")
-        if not isinstance(data["jsonrpc"], (str, unicode)):
+        if not isinstance(data["jsonrpc"], str):
             raise RPCInvalidRPC("""Invalid Response, "jsonrpc" must be a string.""")
         if data["jsonrpc"] != "2.0":    raise RPCInvalidRPC("""Invalid jsonrpc version.""")
         if "method" not in data:        raise RPCInvalidRPC("""Invalid Request, "method" is missing.""")
-        if not isinstance(data["method"], (str, unicode)):
+        if not isinstance(data["method"], str):
             raise RPCInvalidRPC("""Invalid Request, "method" must be a string.""")
         if "params" not in data:        data["params"] = ()
         #convert params-keys from unicode to str
@@ -334,11 +337,11 @@ class JsonRpc20:
         """
         try:
             data = json.loads(string)
-        except ValueError, err:
+        except ValueError as err:
             raise RPCParseError("No valid JSON. (%s)" % str(err))
         if not isinstance(data, dict):  raise RPCInvalidRPC("No valid RPC-package.")
         if "jsonrpc" not in data:       raise RPCInvalidRPC("""Invalid Response, "jsonrpc" missing.""")
-        if not isinstance(data["jsonrpc"], (str, unicode)):
+        if not isinstance(data["jsonrpc"], str):
             raise RPCInvalidRPC("""Invalid Response, "jsonrpc" must be a string.""")
         if data["jsonrpc"] != "2.0":    raise RPCInvalidRPC("""Invalid jsonrpc version.""")
         if "id" not in data:            raise RPCInvalidRPC("""Invalid Response, "id" missing.""")
@@ -381,7 +384,7 @@ class JsonRpc20:
             elif data["error"]["code"] == HANDLE_EXCEPTION:
                 exception = None
                 exception_obj = json.loads(data["error"]["data"])
-                assert isinstance(exception_obj['message'], unicode)
+                assert isinstance(exception_obj['message'], str)
                 for exception_type in allowed_exceptions:
                     if exception_obj['module'] == exception_type.__module__ and \
                             exception_obj['name'] == exception_type.__name__:
@@ -416,7 +419,7 @@ def log_dummy( message ):
 
 def log_stdout( message ):
     """print message to STDOUT"""
-    print message
+    print(message)
 
 def log_file( filename ):
     """return a logfunc which logs to a file (in utf-8)"""
@@ -440,14 +443,14 @@ HEADER_SIZE=22
 HEADER_MAGIC=0x626f6172 # "boar"
 HEADER_VERSION=6
 
-def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0L, progress_packet = False):
+def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0, progress_packet = False):
     assert binary_payload_size >= 0
     assert type(has_binary_payload) == bool
     assert type(progress_packet) == bool
     if progress_packet:
         assert binary_payload_size == 0 and not has_binary_payload
     header_str = struct.pack("!III?Q?", HEADER_MAGIC, HEADER_VERSION, payload_size,\
-                                 has_binary_payload, long(binary_payload_size), progress_packet)
+                                 has_binary_payload, int(binary_payload_size), progress_packet)
     assert len(header_str) == HEADER_SIZE
     return header_str
 
@@ -480,7 +483,7 @@ def read_header(stream):
 
     return payload_size, binary_payload_size, is_progress_packet
 
-class BoarMessageClient:
+class BoarMessageClient(object):
     """This class it a "transport". It is the client end of a
     connection capable of passing opaque message strings and streamed
     data.
@@ -496,7 +499,7 @@ class BoarMessageClient:
         self.progress_callback = cb
 
     def log(self, s):
-        print s
+        print(s)
 
     def close( self ):
         self.s_in.close()
@@ -544,7 +547,7 @@ class BoarMessageClient:
         return self.__recv()
 
 
-class BoarMessageServer:
+class BoarMessageServer(object):
     """This class is the server end of a connection capable of passing
     opaque message strings and streamed data. It is the responsibility
     of the given 'handler' object to make sense of the received
@@ -610,10 +613,10 @@ class BoarMessageServer:
                     datasize, binary_data_size, is_progress_packet = read_header(self.s_in)
                     if is_progress_packet:
                         raise ConnectionLost("Got a progress packet from the client")
-                except WrongProtocolVersion, e:
+                except WrongProtocolVersion as e:
                     self.__send_result("['Dummy message. The response header should tell the client that the server is of an incompatible version']")
                     break
-                except ConnectionLost, e:
+                except ConnectionLost as e:
                     self.log("Disconnected: %s" % e)
                     break
                 data = self.s_in.read(datasize)
@@ -637,7 +640,7 @@ class BoarMessageServer:
 #=========================================
 # client side: server proxy
 
-class ServerProxy:
+class ServerProxy(object):
     """RPC-client: server proxy
 
     A logical connection to a RPC server.
@@ -718,7 +721,7 @@ class ServerProxy:
         return _method(self.__req, name)
 
 # request dispatcher
-class _method:
+class _method(object):
     """some "magic" to bind an RPC method to an RPC server.
 
     Supports "nested" methods (e.g. examples.getStateName).
@@ -746,7 +749,7 @@ class _method:
 #=========================================
 # server side: Server
 
-class RpcHandler:
+class RpcHandler(object):
     def __init__( self, logfile=None ):
         """
         :Parameters:
@@ -816,10 +819,10 @@ class RpcHandler:
             if len(req) == 2:
                 raise RPCFault("JsonRPC notifications not supported")
             method, params, id = req
-        except RPCFault, err:
+        except RPCFault as err:
             self.dead = True
             return JsonRpc20.dumps_error( err, id=None )
-        except Exception, err:
+        except Exception as err:
             self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], repr(err)), id=None )
@@ -842,10 +845,10 @@ class RpcHandler:
                     result = self.funcs[method]( *params )
             if isinstance(result, DataSource):
                 return result
-        except RPCFault, err:
+        except RPCFault as err:
             self.dead = True
             return JsonRpc20.dumps_error( err, id=None )
-        except Exception, err:
+        except Exception as err:
             self.dead = True
             exception_string = json.dumps({'module': err.__class__.__module__,
                                            'name': err.__class__.__name__,
@@ -854,7 +857,7 @@ class RpcHandler:
 
         try:
             return JsonRpc20.dumps_response( result, id )
-        except Exception, err:
+        except Exception as err:
             self.dead = True
             self.log( "%d (%s): %s" % (INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR], str(err)) )
             return JsonRpc20.dumps_error( RPCFault(INTERNAL_ERROR, ERROR_MESSAGE[INTERNAL_ERROR]), id )

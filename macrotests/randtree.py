@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3.7
 # -*- coding: utf-8 -*-
 
 # Copyright 2011 Mats Ekberg
@@ -16,6 +16,11 @@
 # limitations under the License.
 
 from __future__ import with_statement
+from builtins import chr
+from builtins import str
+from builtins import range
+from builtins import object
+
 import sys
 import os
 import time
@@ -29,7 +34,7 @@ if __name__ == '__main__':
     boar_home = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, boar_home)
 
-from common import md5sum, VERY_LARGE_NUMBER
+from common import md5sum, VERY_LARGE_NUMBER, str2bytes
 
 allowed_chars = u" abcdefghijklmnpqrstuvwxyzåäöABCDEFGHIJKLMNPQRSTUVWXYZÅÄÖ_0123456789"
 
@@ -41,16 +46,18 @@ def get_random_filename(random, windows_compatible = False):
         result = result.rstrip(". ") # Not allowed by most windows applications, including python
         if result == "":
             result = "x"
+    print("Random py3 filename is:", result)
     return result
 
 def lowercase(iterable):
     for s in iterable:
         yield s.lower()
 
-class RandTree:
+class RandTree(object):
     def __init__(self, directory, use_windows_limits = False, max_path_length = VERY_LARGE_NUMBER):
         self.directory = os.path.abspath(directory)
         self.dirs = [""]
+        print("Random init value is", random_module.Random(0).random())
         self.rnd = random_module.Random(0)
         self.max_path_length = max_path_length
         self.files = {} # filename -> seed integer
@@ -58,7 +65,7 @@ class RandTree:
         self.use_windows_limits = use_windows_limits
 
     def find_unused_filename(self, prefix = "", suffix = ""):
-        for n in xrange(0, 100):
+        for n in range(0, 100):
             candidate_path = self.__find_unused_filename(prefix, suffix)
             if len(candidate_path) <= self.max_path_length:
                 return candidate_path
@@ -80,13 +87,13 @@ class RandTree:
         return filename
 
     def add_dirs(self, number_of_dirs):
-        for n in xrange(number_of_dirs):
+        for n in range(number_of_dirs):
             new_dir = self.find_unused_filename(prefix = "dir_")
             assert len(new_dir) <= self.max_path_length
             self.dirs.append(new_dir)
 
     def add_files(self, number_of_files):
-        for n in xrange(number_of_files):
+        for n in range(number_of_files):
             new_file = self.find_unused_filename(prefix = "file_")
             assert len(new_file) <= self.max_path_length
             assert "\\" not in new_file
@@ -103,6 +110,7 @@ class RandTree:
                 os.makedirs(directory)
             assert os.path.isdir(directory)
             with open(fullname, "wb") as f:
+               # print("Creating file", fullname)
                 f.write(self.get_file_data(fn))
 
     def modify_files(self, number_of_files):
@@ -125,13 +133,12 @@ class RandTree:
         if seed not in self.file_data:
             random_module.seed(seed)
             size = random_module.randint(0, 2**17)
-            bytes = [chr(x) for x in range(0, 256)]
-            self.file_data[seed] = ''.join([random_module.choice(bytes) for i in xrange(size)])
+            self.file_data[seed] = bytes([random_module.randint(0, 255) for i in range(size)])
         return self.file_data[seed]
 
     def fingerprint(self):
         md5 = hashlib.md5()
-        sep = "!SEPARATOR!"
+        sep = b"!SEPARATOR!"
         for fn in sorted(self.files):
             md5.update(fn.replace("\\", "/").encode("utf-8"))
             md5.update(sep)
@@ -142,10 +149,10 @@ class RandTree:
     def write_md5sum(self, destination, prefix = ""):
         with open(destination, "wb") as f:
             for fn in sorted(self.files):
-                f.write(md5sum(self.get_file_data(fn)))
-                f.write(" *")
-                f.write(os.path.join(prefix, fn.encode("utf-8")))
-                f.write(os.linesep)
+                f.write(bytes(md5sum(self.get_file_data(fn)), "ascii"))
+                f.write(b" *")
+                f.write(os.path.join(str2bytes(prefix), fn.encode("utf-8")))
+                f.write(str2bytes(os.linesep))
 
 assert list(lowercase({"Tjo": 1})) == ["tjo"]
 

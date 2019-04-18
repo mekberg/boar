@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import absolute_import
 from __future__ import with_statement
+from builtins import str
+from builtins import object
 
 import os
 import tempfile
@@ -22,7 +25,7 @@ import re
 import sys
 import copy
 
-import repository
+from . import repository
 from boar_exceptions import *
 
 import shutil
@@ -71,17 +74,17 @@ def bloblist_fingerprint(bloblist):
     files."""
     md5 = hashlib.md5()
     blobdict = bloblist_to_dict(bloblist)
-    filenames = blobdict.keys()
+    filenames = list(blobdict.keys())
     filenames.sort()
-    sep = "!SEPARATOR!"
+    sep = b"!SEPARATOR!"
     for fn in filenames:
         md5.update(fn.encode("utf-8"))
         md5.update(sep)
-        md5.update(blobdict[fn]['md5sum'])
+        md5.update(str2bytes(blobdict[fn]['md5sum']))
         md5.update(sep)
     return md5.hexdigest()
 
-class _NaiveSessionWriter:
+class _NaiveSessionWriter(object):
     """ This class takes care of the actual writing of data files to a
     snapshot directory. It checks its arguments for only the most
     basic errors. Specifically, it does not attempt to verify the
@@ -90,7 +93,7 @@ class _NaiveSessionWriter:
     by the caller."""
 
     def __init__(self, session_name, base_session, path):
-        assert session_name and isinstance(session_name, unicode)
+        assert session_name and isinstance(session_name, str)
         assert base_session == None or isinstance(base_session, int)
         assert os.path.exists(path) and os.path.isdir(path)
         assert (not os.listdir(path)) or os.listdir(path) == ["deleted"] # Allow for writing in snapshots currently being deleted
@@ -134,7 +137,7 @@ class _NaiveSessionWriter:
 
     def delete(self, deleted_session_name, deleted_fingerprint):
         assert deleted_fingerprint == None or is_md5sum(deleted_fingerprint)
-        assert deleted_session_name == None or type(deleted_session_name) == unicode
+        assert deleted_session_name == None or type(deleted_session_name) == str
         assert (deleted_fingerprint == None) == (deleted_session_name == None)
         self.deleted_session_name = deleted_session_name
         self.deleted_fingerprint = deleted_fingerprint
@@ -175,8 +178,8 @@ class _NaiveSessionWriter:
 
         md5_filename = os.path.join(self.session_path, "session.md5")
         with open(md5_filename, "wb") as f:
-            f.write(md5sum_file(bloblist_filename) + " *bloblist.json\n")
-            f.write(md5sum_file(session_filename) + " *session.json\n")
+            f.write(str2bytes(md5sum_file(bloblist_filename) + " *bloblist.json\n"))
+            f.write(str2bytes(md5sum_file(session_filename) + " *session.json\n"))
 
         fingerprint_marker = os.path.join(self.session_path, self.fingerprint + ".fingerprint")
         with open(fingerprint_marker, "wb") as f:
@@ -246,7 +249,7 @@ class PieceHandler(deduplication.OriginalPieceHandler):
             os.rename(self.filename, real_name)
 
         self.blocks = []
-        for index, blockifier in self.blockifiers.items():
+        for index, blockifier in list(self.blockifiers.items()):
             for offset, rolling, md5 in blockifier.harvest():
                 self.blocks.append((self.final_md5, self.piece_start_offsets[index] + offset, rolling, md5))
 
@@ -256,9 +259,9 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         assert self.fileobj == None
         return self.final_md5, self.piece_start_offsets[index]
 
-class SessionWriter:
+class SessionWriter(object):
     def __init__(self, repo, session_name, base_session = None, session_id = None, force_base_snapshot = False):
-        assert session_name and isinstance(session_name, unicode)
+        assert session_name and isinstance(session_name, str)
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
         assert isinstance(force_base_snapshot, bool)
@@ -351,6 +354,7 @@ class SessionWriter:
         """ Adds the given fragment to the end of the new blob with the given checksum."""
         assert is_md5sum(blob_md5)
         assert not self.dead
+        assert type(fragment) == bytes
         self.blob_deduplicator[blob_md5].feed(fragment)
 
     def blob_finished(self, blob_md5):
@@ -391,8 +395,8 @@ class SessionWriter:
 
     def add(self, metadata):
         assert not self.dead
-        assert metadata.has_key('md5sum')
-        assert metadata.has_key('filename')
+        assert 'md5sum' in metadata
+        assert 'filename' in metadata
         assert metadata['filename'].find("\\") == -1, \
             "Filenames must be in unix format"
         assert metadata['filename'].find("//") == -1, \
@@ -411,9 +415,9 @@ class SessionWriter:
 
     def remove(self, filename):
         assert not self.dead
-        assert isinstance(filename, unicode)
+        assert isinstance(filename, str)
         assert self.base_session
-        assert self.base_bloblist_dict.has_key(filename)
+        assert filename in self.base_bloblist_dict
         metadata = {'filename': filename,
                     'action': 'remove'}
         self.metadatas[filename] = metadata
@@ -434,7 +438,7 @@ class SessionWriter:
             assert self.session_name == sessioninfo['name'], \
                 "Committed session name '%s' did not match expected name '%s'" % \
                 (sessioninfo['name'], self.session_name)
-        self.writer.set_fingerprint(bloblist_fingerprint(self.resulting_blobdict.values()))
+        self.writer.set_fingerprint(bloblist_fingerprint(list(self.resulting_blobdict.values())))
         self.writer.set_client_data(sessioninfo)
 
         snapshot_blobs = [filename for filename in os.listdir(self.session_path) if is_md5sum(filename)]
@@ -449,9 +453,9 @@ class SessionWriter:
                 "a blob in the commit exists as both raw blob and recipe"
 
         if self.force_base_snapshot:
-            bloblist = self.resulting_blobdict.values()
+            bloblist = list(self.resulting_blobdict.values())
         else:
-            bloblist = self.metadatas.values()
+            bloblist = list(self.metadatas.values())
 
         for blobitem in bloblist:
             if "action" in blobitem:
@@ -476,10 +480,10 @@ class SessionWriter:
             self.session_mutex.release()
 
 
-class SessionReader:
+class SessionReader(object):
     def __init__(self, repo, session_path):
         assert session_path, "Session path must be given"
-        assert isinstance(session_path, unicode)
+        assert isinstance(session_path, str)
         if os.path.exists(os.path.join(session_path, "deleted")):
             # If a session is in the middle of being deleted, read all
             # data from the deletion folder instead
@@ -597,6 +601,6 @@ class SessionReader:
                     self.load_stats['add_count'] += 1
             apply_delta(bloblist, rawbloblist)
         self.load_stats['total_count'] = len(bloblist)
-        return bloblist.values()
+        return list(bloblist.values())
 
 

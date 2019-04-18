@@ -1,6 +1,8 @@
+from __future__ import print_function
 
 
-class GenericStateMachine:
+from builtins import object
+class GenericStateMachine(object):
     def __init__(self):
         self.states = set()
         self.events = set()
@@ -103,7 +105,7 @@ class GenericStateMachine:
             self.execute_once()
 
 def say(s):
-    print s
+    print(s)
 
 def main():
     gsm = GenericStateMachine()
@@ -119,7 +121,7 @@ def main():
     gsm.dispatch("EV")
     gsm.execute_once()
     gsm.execute_until_idle()
-    print gsm.state
+    print(gsm.state)
 
 if __name__ == "__main__":
     main()

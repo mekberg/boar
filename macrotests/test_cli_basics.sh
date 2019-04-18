@@ -32,6 +32,6 @@ mkdir nonrepo
 (cd nonrepo; $BOAR update 2>&1 | grep "This directory is not a boar workdir" ) || { echo "Non-workdir update caused unexpected error message"; exit 1; }
 
 echo --- Test that asserts disabling is disabled
-python -O $BOAR --version && exit 1
+$PYTHON_BINARY -O $BOAR --version && exit 1
 
 true

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3.7
 # -*- coding: utf-8 -*-
 
 # Copyright 2012 Mats Ekberg
@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
 import sys
 import os
 
@@ -55,18 +56,18 @@ def main():
         md5 = md5sum_file(fn)
         if fn not in expected:
             extra_files.append(fn)
-            print "?", fn
+            print("?", fn)
         else:
             if expected[fn] != md5:
                 diff_files.append(fn)
-                print "M", fn
-    for fn in expected.keys():
+                print("M", fn)
+    for fn in list(expected.keys()):
         if fn not in tree:
             missing_files.append(fn)
-            print "D", fn
+            print("D", fn)
 
     if extra_files or diff_files or missing_files:
-        print >>sys.stderr, "*** Content does not match"
+        print("*** Content does not match", file=sys.stderr)
         sys.exit(1)
 
 main()

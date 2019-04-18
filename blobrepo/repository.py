@@ -14,7 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import absolute_import
 from __future__ import with_statement
+from builtins import map
+from builtins import str
+from builtins import range
+from builtins import object
 
 """
 The Repository together with SessionWriter and SessionReader are the
@@ -24,17 +29,17 @@ only classes that directly accesses the repository.
 import os
 import re
 import shutil
-import sessions
+from . import sessions
 import sys
 import tempfile
 import random, time
 
 from common import *
 from boar_common import *
-import blobreader
+from . import blobreader
 from jsonrpc import FileDataSource
 from boar_exceptions import *
-from blobreader import create_blob_reader
+from .blobreader import create_blob_reader
 
 import deduplication
 
@@ -179,11 +184,11 @@ BlocksDB = deduplication.FakeBlocksDB
 if deduplication.dedup_available:
     BlocksDB = deduplication.BlocksDB
 
-class Repo:
+class Repo(object):
     def __init__(self, repopath):
         # The path must be absolute to avoid problems with clients
         # that changes the cwd. For instance, fuse.
-        assert isinstance(repopath, unicode)
+        assert isinstance(repopath, str)
         assert(os.path.isabs(repopath)), "The repo path must be absolute. "\
             +"Was: " + repopath
         if not looks_like_repo(repopath):
@@ -316,7 +321,7 @@ class Repo:
                 warn("Version marker should not exist for repo format v0")
                 safe_delete_file(version_file)
             create_file(version_file, "1")
-        except OSError, e:
+        except OSError as e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
 
@@ -344,7 +349,7 @@ class Repo:
             if os.path.exists(sha256_dir):
                 os.rmdir(sha256_dir)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "2")
-        except OSError, e:
+        except OSError as e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
 
@@ -373,7 +378,7 @@ class Repo:
         try:
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "3")
-        except OSError, e:
+        except OSError as e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
 
@@ -397,7 +402,7 @@ class Repo:
             if not os.path.exists(os.path.join(self.repopath, REPOID_FILE)):
                 create_file(os.path.join(self.repopath, REPOID_FILE), repoid)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "4")
-        except OSError, e:
+        except OSError as e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
 
@@ -420,7 +425,7 @@ class Repo:
                 os.mkdir(os.path.join(self.repopath, RECIPES_DIR))
             replace_file(os.path.join(self.repopath, RECOVERYTEXT_FILE), recoverytext)
             replace_file(os.path.join(self.repopath, VERSION_FILE), "5")
-        except OSError, e:
+        except OSError as e:
             raise UserError("Upgrade could not complete. Make sure that the repository "+
                             "root is writable and try again. The error was: '%s'" % e)
 
@@ -518,11 +523,11 @@ class Repo:
         blobpath = self.get_blob_path(sum)
         if os.path.exists(blobpath):
             # Windows always returns a Long. Let's be consistent.
-            return long(os.path.getsize(blobpath))
+            return int(os.path.getsize(blobpath))
         recipe = self.get_recipe(sum)
         if not recipe:
             raise ValueError("No such blob or recipe exists: "+sum)
-        return long(recipe['size'])
+        return int(recipe['size'])
 
     def get_blob_reader(self, sum, offset = 0, size = None):
         """ Returns a blob reader object that can be used to stream
@@ -594,7 +599,7 @@ class Repo:
 
     def create_snapshot(self, session_name, base_session = None, session_id = None, force_base_snapshot = False):
         misuse_assert(not self.readonly, "Repository is read-only")
-        assert isinstance(session_name, unicode)
+        assert isinstance(session_name, str)
         assert base_session == None or isinstance(base_session, int)
         assert session_id == None or isinstance(session_id, int)
         assert isinstance(force_base_snapshot, bool)
@@ -606,7 +611,7 @@ class Repo:
     def find_last_revision(self, session_name):
         """ Returns the id of the latest snapshot in the specified
         session. Returns None if there is no such session. """
-        assert isinstance(session_name, unicode)
+        assert isinstance(session_name, str)
         all_sids = self.get_all_sessions()
         all_sids.sort()
         all_sids.reverse()
@@ -752,7 +757,7 @@ class Repo:
         return result
 
     def consolidate_snapshot(self, session_path, forced_session_id = None, progress_callback = lambda f: None):
-        assert isinstance(session_path, unicode)
+        assert isinstance(session_path, str)
         assert forced_session_id == None or isinstance(forced_session_id, int)
         assert not self.readonly, "Cannot consolidate because repo is read-only"
         self.repo_mutex.lock_with_timeout(60)
@@ -762,7 +767,7 @@ class Repo:
             self.repo_mutex.release()
 
     def __consolidate_snapshot(self, session_path, forced_session_id, progress_callback):
-        assert isinstance(session_path, unicode)
+        assert isinstance(session_path, str)
         assert self.repo_mutex.is_locked()
         assert not self.get_queued_session_id()
         assert not self.readonly, "Cannot consolidate because repo is read-only"
@@ -807,7 +812,7 @@ class Repo:
         if not self.allows_permanent_erase():
             raise MisuseError("Not allowed for this repo")
         misuse_assert(not self.readonly, "Cannot erase snapshots from a write protected repo")
-        snapshot_ids = map(int, snapshot_ids) # Make sure there are only ints here
+        snapshot_ids = list(map(int, snapshot_ids)) # Make sure there are only ints here
         snapshot_ids.sort()
         snapshot_ids.reverse()
 
@@ -815,7 +820,7 @@ class Repo:
         for rev in snapshot_ids:
             try:
                 self.__erase_snapshot(rev, trashdir)
-            except OSError, e:
+            except OSError as e:
                 if e.errno == 13:
                     raise UserError("Snapshot %s is write protected, cannot erase. Change your repository file permissions and try again." % rev)
                 raise
@@ -940,7 +945,7 @@ class Repo:
         pass
 
 
-class Transaction:
+class Transaction(object):
 
     def __init__(self, repo, transaction_dir):
         self.repo = repo
@@ -1139,4 +1144,5 @@ def _snapshot_delete_test_hook(rev):
 
 def generate_random_repoid():
     # Nothing fancy here, just a reasonably unique string.
-    return "repo_" + md5sum(str(random.random()) + "!" + str(time.time()))
+    seed = str(random.random()) + "!" + str(time.time())
+    return "repo_" + md5sum(bytes(seed, "utf8"))

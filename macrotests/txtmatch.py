@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3.7
 # -*- coding: utf-8 -*-
 
 # Copyright 2012 Mats Ekberg
@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
+from builtins import range
 import sys
 import os
 import re
@@ -25,9 +27,9 @@ def read_file(filename):
     if filename == "-":
         lines = sys.stdin.readlines()
     else:
-        with open(filename, "rb") as f:
+        with open(filename, "r") as f:
             lines = f.readlines()
-    return map(lambda s: s.rstrip("\n\r"), lines)
+    return [s.rstrip("\n\r") for s in lines]
 
 def match_line(pattern, text, magic_string):
     if pattern.startswith(magic_string):
@@ -40,19 +42,19 @@ def match_line(pattern, text, magic_string):
 def txtmatch(pattern_lines, text_lines, magic_string = None):
     def print_error(pattern_lines, text_lines):
         for line in pattern_lines:
-            print "expected:", line
+            print("expected:", line)
         for line in text_lines:
-            print "actual  :", line
+            print("actual  :", line)
 
     if len(pattern_lines) != len(text_lines):
-        print "*** Length mismatch"
+        print("*** Length mismatch")
         print_error(pattern_lines, text_lines)
         return False
     for i in range(0, len(pattern_lines)):
         text = text_lines[i]
         pattern = pattern_lines[i]
         if not match_line(pattern, text, magic_string):
-            print "Mismatch at line", i, "(magic = '%s')" % magic_string
+            print("Mismatch at line", i, "(magic = '%s')" % magic_string)
             print_error(pattern_lines, text_lines)
             return False
     return True
@@ -73,7 +75,7 @@ def main():
     text_lines = read_file(text_file)
 
     if not txtmatch(pattern_lines, text_lines, magic_string = options.magic):
-        print >>sys.stderr, "*** Text mismatch"
+        print("*** Text mismatch", file=sys.stderr)
         sys.exit(1)
     sys.exit(0)
 

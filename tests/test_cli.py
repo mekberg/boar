@@ -25,14 +25,14 @@ if __name__ == '__main__':
     sys.path.insert(0, os.path.join(boar_home, "macrotests"))
 
 import randtree
-from common import get_tree, md5sum, md5sum_file
+from common import get_tree, md5sum, md5sum_file, str2bytes, bytes2str
 
 def call(cmd, check=True, cwd=None):
     """Execute a command and return output and status code. If 'check' is True,
     an exception will be raised if the command exists with an error code. If
     'cwd' is set, the command will execute in that directory."""
     def localencoding(us):
-        if type(us) == unicode:
+        if type(us) == str:
             if os.name == "nt":
                 return us.encode("mbcs")
             else:
@@ -58,7 +58,7 @@ else:
 
 def write_file(path, contents):
     with open(path, "wb") as f:
-        f.write(contents)
+        f.write(str2bytes(contents))
 
 class TestCli(unittest.TestCase):
     def setUp(self):
@@ -98,7 +98,7 @@ class TestCli(unittest.TestCase):
         if "WORKDIR" in globals(): del WORKDIR
 
     def testCat(self):
-        testdata = "a\n\b\n\c"
+        testdata = b"a\n\b\n\c"
         call([BOAR, "--repo", REPO, "co", SESSION])
         write_file(os.path.join(SESSION, "fil.txt"), testdata)
         call([BOAR, "ci"], cwd=SESSION)
@@ -112,7 +112,7 @@ class TestCli(unittest.TestCase):
         write_file(os.path.join(SESSION, "a/fil.txt"), testdata)
         call([BOAR, "ci"], cwd=os.path.join(SESSION, "a"))
         output, returncode = call([BOAR, "log", "fil.txt"], cwd=os.path.join(SESSION, "a"))
-        assert "r2 | " in output
+        assert b"r2 | " in output
         assert returncode == 0
 
     def testPartialCommit(self):
@@ -136,10 +136,10 @@ class TestCli(unittest.TestCase):
         write_file(os.path.join(WORKDIR, file_notincluded), "not included")
 
         output, returncode = call([BOAR, "ci", file_new, file_modified, file_deleted], cwd=WORKDIR)
-        assert "Checked in session id 3" in output
+        assert b"Checked in session id 3" in output
         output, returncode = call([BOAR,  "--repo", REPO,
                                    "contents", "-r", "3", SESSION])
-        parsed_output = sorted(json.loads(output)['files'])
+        parsed_output = sorted(json.loads(output)['files'], key=lambda x: x['filename'])
         for o in parsed_output:
             del o['mtime']
         self.assertEqual(parsed_output,
@@ -154,7 +154,7 @@ class TestCli(unittest.TestCase):
                                {"filename": "file_new.txt",
                                 "size": 3,
                                 "md5": "22af645d1859cb5ca6da0c484f1f37ea"
-                                }]))
+                                }], key=lambda x: x['filename']))
 
     def testPartialCommitInOffsetWorkdir(self):
         self.setupWorkdir(SESSION, offset="subdir1")
@@ -183,10 +183,10 @@ class TestCli(unittest.TestCase):
                                    os.path.join("subdir2", file_new),
                                    os.path.join("subdir2", file_modified),
                                    os.path.join("subdir2", file_deleted)], cwd=WORKDIR)
-        assert "Checked in session id 3" in output
+        assert b"Checked in session id 3" in output
         output, returncode = call([BOAR,  "--repo", REPO,
                                    "contents", "-r", "3", SESSION])
-        parsed_output = sorted(json.loads(output)['files'])
+        parsed_output = sorted(json.loads(output)['files'], key=lambda x: x['filename'])
         for o in parsed_output:
             del o['mtime']
         self.assertEqual(parsed_output,
@@ -201,7 +201,7 @@ class TestCli(unittest.TestCase):
                                {"filename": "subdir1/subdir2/file_new.txt",
                                 "size": 3,
                                 "md5": "22af645d1859cb5ca6da0c484f1f37ea"
-                                }]))
+                                }], key=lambda x: x['filename']))
 
 
 if __name__ == '__main__':

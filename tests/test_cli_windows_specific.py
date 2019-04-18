@@ -25,7 +25,7 @@ if __name__ == '__main__':
     sys.path.insert(0, os.path.join(boar_home, "macrotests"))
 
 import randtree
-from common import get_tree, md5sum, md5sum_file
+from common import get_tree, md5sum, md5sum_file, str2bytes
 
 def call(cmd, check=True, cwd=None):
     """Execute a command and return output and status code. If 'check' is True,
@@ -49,7 +49,7 @@ else:
 
 def write_file(path, contents):
     with open(path, "wb") as f:
-        f.write(contents)
+        f.write(str2bytes(contents))
 
 class TestCli(unittest.TestCase):
     def setUp(self):
@@ -60,14 +60,14 @@ class TestCli(unittest.TestCase):
         output, returncode = call([BOAR, "mkrepo", "TESTREPOåäö"], check=False)
         assert returncode == 1
         call([BOAR, "--repo", "TESTREPOåäö", "mksession", "TestSessionåäö"])
-        assert "ERROR: File or directory already exists" in output
+        assert b"ERROR: File or directory already exists" in output
 
     def tearDown(self):
         os.chdir(BOAR_HOME)
         shutil.rmtree(self.testdir)
 
     def testCat(self):
-        testdata = "a\n\b\n\c"
+        testdata = b"a\n\b\n\c"
         call([BOAR, "--repo", "TESTREPOåäö", "co", "TestSessionåäö"])
         write_file("TestSessionåäö/fil.txt", testdata)
         call([BOAR, "ci"], cwd="TestSessionåäö")
@@ -81,7 +81,7 @@ class TestCli(unittest.TestCase):
         write_file("TestSessionåäö/a/fil.txt", testdata)
         call([BOAR, "ci"], cwd="TestSessionåäö/a")
         output, returncode = call([BOAR, "log", "fil.txt"], cwd="TestSessionåäö/a")
-        assert "r2 | " in output
+        assert b"r2 | " in output
         assert returncode == 0
 
 class TestCliWindowsSpecific(unittest.TestCase):
@@ -98,7 +98,7 @@ class TestCliWindowsSpecific(unittest.TestCase):
     #
     def testNoArgs(self):
         output, returncode = call([BOAR], check=False)
-        assert "Usage: boar" in output
+        assert b"Usage: boar" in output
         assert returncode == 1
 
     def testMkrepo(self):

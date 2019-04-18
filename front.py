@@ -20,12 +20,19 @@ this interface. Secondly, all arguments and return values are
 primitive values that can be serialized easily, which makes it easy to
 implement an RPC mechanism for this interface.
 """
+from __future__ import division
+from __future__ import print_function
 
+from builtins import str
+from builtins import range
+from past.builtins import basestring
+from builtins import object
+from past.utils import old_div
 from blobrepo import repository
 from boar_exceptions import *
 import sys
 from time import ctime, time
-from common import md5sum, is_md5sum, warn, get_json_module, StopWatch, calculate_progress
+from common import md5sum, is_md5sum, warn, get_json_module, StopWatch, calculate_progress, str2bytes
 from boar_common import SimpleProgressPrinter
 from blobrepo.sessions import bloblist_fingerprint
 import copy
@@ -53,6 +60,7 @@ def add_file_simple(front, filename, contents):
     """Adds a file with contents to a new snapshot. The front instance
     "create_session()" must have been called before this function is
     used, or an exception will be thrown."""
+    contents = str2bytes(contents)
     content_checksum = md5sum(contents)
     if not front.has_blob(content_checksum) and not front.new_snapshot_has_blob(content_checksum):
         front.init_new_blob(content_checksum, len(contents))
@@ -101,7 +109,7 @@ def __clone(from_front, to_front):
     self = to_front
     other_repo = from_front
     assert other_max_rev >= self_max_rev
-    sessions_to_clone = range(self_max_rev + 1, other_max_rev + 1)
+    sessions_to_clone = list(range(self_max_rev + 1, other_max_rev + 1))
     count = 0
 
     all_deleted_snapshots = from_front.get_deleted_snapshots()
@@ -116,7 +124,7 @@ def __clone(from_front, to_front):
 
     for session_id in sessions_to_clone:
         count += 1
-        print "Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_clone))
+        print("Cloning snapshot %s (%s/%s)" % (session_id, count, len(sessions_to_clone)))
         if session_id in all_deleted_snapshots:
             self.create_session(u"__deleted")
             if snapshots_to_delete:
@@ -138,7 +146,7 @@ def __clone(from_front, to_front):
 
     if self.allows_permanent_erase():
         removed_blobs_count = self.erase_orphan_blobs()
-        print "Found and removed", removed_blobs_count," orphan blobs"
+        print("Found and removed", removed_blobs_count," orphan blobs")
 
 def find_snapshots_to_delete(from_front, to_front):
     """ Find all snapshots in from_front that has been deleted, but
@@ -172,7 +180,7 @@ def __clone_single_snapshot(from_front, to_front, session_id):
                 pp = SimpleProgressPrinter(sys.stdout,
                                            label="Sending blob %s of %s (%s MB)" %
                                            (n+1, len(other_raw_bloblist),
-                                            round(blobinfo['size'] / (1.0 * 2**20), 3)))
+                                            round(old_div(blobinfo['size'], (1.0 * 2**20)), 3)))
                 sw = StopWatch(enabled=False, name="front.clone")
                 to_front.init_new_blob(md5sum, blobinfo['size'])
                 sw.mark("front.init_new_blob()")
@@ -223,7 +231,7 @@ def verify_repo(front, verify_blobs = True, verbose = False):
     for rev in range(1, front.repo_get_highest_used_revision() + 1):
         front.repo_verify_snapshot(rev)
     session_ids = front.get_session_ids()
-    if verbose: print "Verifying %s snapshots" % (len(session_ids))
+    if verbose: print("Verifying %s snapshots" % (len(session_ids)))
     existing_blobs = set(front.get_all_raw_blobs()) | set(front.get_all_recipes())
     for i in range(0, len(session_ids)):
         id = session_ids[i]
@@ -238,22 +246,22 @@ def verify_repo(front, verify_blobs = True, verbose = False):
         for bi in bloblist:
             if bi['md5sum'] not in existing_blobs:
                 raise CorruptionError("Snapshot %s is missing blob %s" % (session_ids[i], bi['md5sum']))
-        if verbose: print "Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist))
+        if verbose: print("Snapshot %s (%s): All %s blobs ok" % (id, calc_fingerprint, len(bloblist)))
     if not verify_blobs:
-        if verbose: print "Skipping blob verification"
+        if verbose: print("Skipping blob verification")
         return True
-    if verbose: print "Collecting a list of all blobs..."
+    if verbose: print("Collecting a list of all blobs...")
     count = front.init_verify_blobs()
-    if verbose: print "Verifying %s blobs..." % (count)
+    if verbose: print("Verifying %s blobs..." % (count))
     done = 0
     while done < count:
         done += len(front.verify_some_blobs())
-        if verbose: print done, "of "+str(count)+" blobs verified, "+ \
-            str(round(1.0*done/count * 100,1)) + "% done."
+        if verbose: print(done, "of "+str(count)+" blobs verified, "+ \
+            str(round(1.0*done/count * 100,1)) + "% done.")
     return True
 
 
-class Front:
+class Front(object):
     def __init__(self, repo):
         self.repo = repo
         self.new_session = None
@@ -283,7 +291,7 @@ class Front:
             if not include_meta and name.startswith("__"):
                 continue
             sessions_count[name] = sessions_count.get(name, 0) + 1
-        return sessions_count.keys()
+        return list(sessions_count.keys())
 
     def get_deleted_snapshots(self):
         return self.repo.get_deleted_snapshots()
@@ -497,8 +505,8 @@ class Front:
     def add(self, metadata):
         """ Must be called after a create_session(). Adds a link to a existing
         blob. Will throw an exception if there is no such blob """
-        assert metadata.has_key("md5sum")
-        assert metadata.has_key("filename")
+        assert "md5sum" in metadata
+        assert "filename" in metadata
         self.new_session.add(metadata)
 
     def remove(self, filename):
@@ -559,8 +567,8 @@ class Front:
         """Commit a snapshot started with create_snapshot(). The session must
         exist beforehand. Accepts an optional log message."""
         if log_message != None:
-            assert type(log_message) == unicode, "Log message must be in unicode"
-        assert type(session_name) == unicode
+            assert type(log_message) == str, "Log message must be in unicode"
+        assert type(session_name) == str
         if not self.find_last_revision(session_name):
             raise UserError("Session '%s' does not seem to exist in the repo." % (session_name))
         return self.commit_raw(session_name, log_message, int(time()), ctime(), progress_callback = progress_callback)
@@ -634,7 +642,7 @@ class Front:
     def deduplication_enabled(self):
         return self.repo.deduplication_enabled()
 
-class DryRunFront:
+class DryRunFront(object):
 
     def __init__(self, front):
         self.realfront = front

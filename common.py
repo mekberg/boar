@@ -15,6 +15,11 @@
 # limitations under the License.
 
 from __future__ import with_statement
+from __future__ import print_function
+
+from builtins import str
+from builtins import object
+from past.builtins import basestring
 
 import hashlib
 import re
@@ -30,8 +35,18 @@ import textwrap
 from tempfile import TemporaryFile
 from threading import current_thread
 
+def bytes2str(b):
+    if type(b) == str:
+        return b
+    return b.decode("utf8")
+
+def str2bytes(s):
+    if type(s) == bytes:
+        return s
+    return s.encode("utf8")
+
 def json_has_bug():
-    if type(json.loads(json.dumps("abc"))) != unicode: # Simplejson, built-in json
+    if type(json.loads(json.dumps("abc"))) != str: # Simplejson, built-in json
         return True
     try:
         json.dumps({}, indent=4) # ujson < 1.33 lacks "indent"
@@ -45,7 +60,7 @@ try:
     original_loads = json.loads
     def unicode_loads(s, *args, **kw):
         if type(s) == str:
-            s = unicode(s, "utf-8")
+            s = str(s, "utf-8")
         return original_loads(s, *args, **kw)
     json.loads = unicode_loads
 
@@ -58,7 +73,7 @@ def get_json_module():
     return json
 
 # Something like sys.maxsize, but works pre-2.6
-VERY_LARGE_NUMBER = 9223372036854775807L
+VERY_LARGE_NUMBER = 9223372036854775807
 
 def verify_assert():
     try:
@@ -75,7 +90,7 @@ def dumps_json(obj):
 
 def write_json(filename, obj):
     assert not os.path.exists(filename), "File already exists: " + filename
-    data = dumps_json(obj)
+    data = dumps_json(obj).encode("utf-8")
     with StrictFileWriter(filename, md5sum(data), len(data)) as f:
         f.write(data)
 
@@ -117,7 +132,7 @@ def prefixprint(prefix, text, stream = None):
 def invert_dict(d):
     """ Turns {key: value} into {value: [keys]} """
     inv_d = {}
-    for key, value in d.iteritems():
+    for key, value in d.items():
         if value in inv_d:
             inv_d[value].append(key)
         else:
@@ -147,7 +162,7 @@ def read_file(path, expected_md5 = None):
 def parse_md5sum(text):
     """Expects a sting containing a classic md5sum.exe output format,
     and returns the data on the form [(md5, filename), ...]."""
-    assert type(text) == unicode
+    assert type(text) == str
     result = []
     for line in text.splitlines():
         line = line.rstrip("\r\n")
@@ -192,8 +207,8 @@ def safe_open(path, flags = "rb"):
     return open(path, "rb")
 
 def md5sum(data):
-    if type(data) != str:
-        raise ValueError("Value must be a basic string")
+    if type(data) != bytes:
+        raise ValueError("Value must be bytes")
     m = hashlib.md5()
     m.update(data)
     return m.hexdigest()
@@ -260,6 +275,9 @@ def create_file(destination, content, tmp_suffix = ".tmp"):
     suffix, and then moved to its destination. The suffix file may
     exist and will in that case be overwritten and lost."""
     assert not os.path.exists(destination), "File already exists: %s" % destination
+    if type(content) == str:
+        content = str2bytes(content)
+    assert type(content) == bytes
     tmpfile = destination + tmp_suffix
     with StrictFileWriter(tmpfile, md5sum(content), len(content)) as f:
         f.write(content)
@@ -274,6 +292,8 @@ def replace_file(destination, content, tmp_suffix = ".tmp"):
     atomic, the destination file may just be deleted if the operation
     fails half-way."""
     tmpfile = destination + tmp_suffix
+    if type(content) == str:
+        content = str2bytes(content)
     with StrictFileWriter(tmpfile, md5sum(content), len(content)) as f:
         f.write(content)
     if os.path.exists(destination):
@@ -320,7 +340,7 @@ def split_file(source, dest_dir, cut_positions, want_piece = None):
 def convert_win_path_to_unix(path):
     """ Converts "C:\\dir\\file.txt" to "/dir/file.txt".
         Has no effect on unix style paths. """
-    assert isinstance(path, unicode)
+    assert isinstance(path, str)
     nodrive = os.path.splitdrive(path)[1]
     result = nodrive.replace("\\", "/")
     #print "convert_win_path_to_unix: " + path + " => " + result
@@ -387,7 +407,7 @@ def split_path_from_start(path):
     the path instead. /var/tmp/junk returns ("var",
     "tmp/junk"). Windows style paths will be converted and returned
     unix-style."""
-    assert type(path) == unicode
+    assert type(path) == str, type(path)
     path = convert_win_path_to_unix(path)
     path = path.lstrip("/")
     if "/" in path:
@@ -395,8 +415,8 @@ def split_path_from_start(path):
     else:
         pieces = [path]
     head, tail = pieces[0], u"/".join(pieces[1:])
-    assert type(head) == unicode
-    assert type(tail) == unicode
+    assert type(head) == str
+    assert type(tail) == str
     return head, tail
 
 assert split_path_from_start(u"junk") == ("junk", "")
@@ -422,8 +442,8 @@ def my_relpath(path, start=os.path.curdir):
     assert os.path.isabs(path)
     if not path:
         raise ValueError("no path specified")
-    assert isinstance(path, unicode)
-    assert isinstance(start, unicode)
+    assert isinstance(path, str)
+    assert isinstance(start, str)
     absstart = uabspath(start)
     abspath = uabspath(path)
     if absstart[-1] != os.path.sep:
@@ -448,10 +468,11 @@ def open_raw(filename):
 
 class UndecodableFilenameException(Exception):
     def __init__(self, path, filename):
-        assert type(filename) == str, "Tried to raise UndecodableFilenameException with decoded filename"
-        assert type(path) == unicode, "Tried to raise UndecodableFilenameException with non-unicode path"
+        assert type(filename) == bytes, "Tried to raise UndecodableFilenameException with decoded filename"
+        assert type(path) == bytes, "Tried to raise UndecodableFilenameException with non-unicode path"
         self.human_readable_name = "%s%s%s" % (
-            path.encode(sys.getfilesystemencoding()).encode("string_escape"), os.sep, filename.encode("string_escape"))
+            path.decode(sys.getfilesystemencoding(), errors="replace"), os.sep,
+            filename.decode(sys.getfilesystemencoding(), errors="replace"))
         Exception.__init__(self, "Path '%s' can not be decoded with the default system encoding (%s)" %
                            (self.human_readable_name, sys.getfilesystemencoding()))
         self.path = path
@@ -460,8 +481,8 @@ class UndecodableFilenameException(Exception):
 def uabspath(path):
     if os.path.isabs(path):
         return path
-    assert type(path) == unicode
-    return os.path.normpath(os.path.join(os.getcwdu(), path))
+    assert type(path) == str
+    return os.path.normpath(os.path.join(os.getcwd(), path))
 
 # def uncify_absolute(fn):
 #     if os.name == 'nt':
@@ -485,7 +506,7 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
     files found so far. When processing has completed, finished() will
     be called.
     """
-    assert isinstance(root, unicode) # Avoid any encoding problems later
+    assert isinstance(root, str) # Avoid any encoding problems later
     assert type(skip) == type([]), "skip list must be a list"
     assert sep in ("/", "\\")
     if absolute_paths:
@@ -504,7 +525,7 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
     absolute_root = uabspath(root)
 
     if not progress_printer:
-        class DummyProgressPrinter:
+        class DummyProgressPrinter(object):
             def update(self, new_value=None): pass
             def finished(self): pass
         progress_printer = DummyProgressPrinter()
@@ -515,17 +536,20 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
         old_cwd = os.getcwd()
         try:
             os.chdir(root)
-            names = os.listdir(u".")
+            names = os.listdir(b".")
+            
             for name in names:
-                if type(name) != unicode:
-                    raise UndecodableFilenameException(root, name)
+                try:
+                    name = name.decode(sys.getfilesystemencoding())
+                except UnicodeDecodeError:
+                    raise UndecodableFilenameException(root.encode(sys.getfilesystemencoding()), name)
                 if name in skip:
                     continue
                 try:
                     stat = os.stat(name)
-                except OSError, e:
+                except OSError as e:
                     if e.errno == 2 and os.path.islink(name):
-                        print "Warning: ignoring broken symbolic link: ", path + name
+                        print("Warning: ignoring broken symbolic link: ", path + name)
                         continue
                     raise
                 if os.path.stat.S_ISDIR(stat.st_mode):
@@ -554,7 +578,7 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
     # The order of the returned files must be deterministic for tests to pass.
     return sorted(all_files)
 
-class FileMutex:
+class FileMutex(object):
     """ The purpose of this class is to protect a shared resource from
     other processes. It accomplishes this by using the atomicity of
     the mkdir system call.
@@ -586,7 +610,7 @@ class FileMutex:
         self.mutex_name = mutex_name
         self.mutex_id = md5sum(mutex_name.encode("utf-8"))
         self.mutex_file = os.path.join(mutex_dir, "mutex-" + self.mutex_id)
-        self.owner_id = md5sum(str(time.time()) + str(os.getpid())) + "-" + str(os.getpid())
+        self.owner_id = md5sum(bytes("%s%s%s" % (time.time(), os.getpid(), os.getpid()), "ascii"))
         self.mutex_owner_file = os.path.join(self.mutex_file, self.owner_id)
         self.lock_levels = 0
 
@@ -605,7 +629,7 @@ class FileMutex:
             os.mkdir(self.mutex_file)
             with open(self.mutex_owner_file, "w"): pass
             self.lock_levels += 1
-        except OSError, e:
+        except OSError as e:
             if e.errno != 17: # errno 17 = directory already exists
                 raise
             #lockpid = int(os.listdir(self.mutex_file)[0].split("-")[1])
@@ -653,11 +677,11 @@ class FileMutex:
             os.unlink(self.mutex_owner_file)
             os.rmdir(self.mutex_file)
         except OSError:
-            print "Warning: could not remove lockfile", self.mutex_file
+            print("Warning: could not remove lockfile", self.mutex_file)
 
     def __del__(self):
         if self.is_locked():
-            print "Warning: lockfile %s was forgotten. Cleaning up..." % self.mutex_name
+            print("Warning: lockfile %s was forgotten. Cleaning up..." % self.mutex_name)
             self.release()
 
 def tounicode(s):
@@ -666,37 +690,17 @@ def tounicode(s):
     returns None result."""
     if s == None:
         return None
-    if isinstance(s, unicode):
+    if isinstance(s, str):
         return s
     s = s.decode(locale.getpreferredencoding())
-    assert type(s) == unicode
+    assert type(s) == str
     return s
 
 def dedicated_stdout():
-    """ This function replaces the sys.stdout with sys.stderr and
-    returns sys.stdout so that the caller gets exclusive
-    access. (unless someone else has made a local copy). This function
-    is aware of StreamEncoder and will make sure that nothing has been
-    written to stdout at the time of the call, otherwise an
-    AssertionError will be raised. This function will always return
-    the original sys.stdout, even if it has been wrapped in a
-    StreamEncoder."""
-    if isinstance(sys.stdout, StreamEncoder):
-        assert sys.stdout.bytecount == 0, "Cannot dedicate stdout, some data has already been written"
-        real_stdout = sys.stdout.stream
-    else:
-        real_stdout = sys.stdout
-    sys.stdout = sys.stderr
-    return real_stdout
+    return sys.stdout
 
 def encoded_stdout():
-    """Returns the sys.stdout stream wrapped in a StreamEncoder. Makes
-    sure that there is no accidential nesting of StreamEncoder due to
-    globally replacing sys.stdout with a wrapped version."""
-    if isinstance(sys.stdout, StreamEncoder):
-        return sys.stdout
-    else:
-        return StreamEncoder(sys.stdout)
+    return sys.stdout
 
 def printable(s):
     """Safely convert the given unicode string to a normal <str>
@@ -705,51 +709,11 @@ def printable(s):
     under no circumstances will an encoding exception be raised."""
     if type(s) == str:
         return s
-    elif type(s) == unicode:
+    elif type(s) == str:
         return s.encode(locale.getpreferredencoding(), "backslashreplace")
     else:
         raise ValueError("Argument must be a string or unicode")
 
-
-class StreamEncoder:
-    """ Wraps an output stream (typically sys.stdout) and encodes all
-    written strings according to the current preferred encoding, with
-    configurable error handling. Using errors = "strict" will yield
-    identical behaviour to original sys.stdout."""
-
-    def __init__(self, stream, errors = "backslashreplace"):
-        assert errors in ("strict", "replace", "ignore", "backslashreplace")
-        assert not type(stream) == type(self), "Cannot nest StreamEncoders"
-        self.errors = errors
-        self.bytecount = 0
-        self.stream = stream
-
-        if os.name == "nt":
-            self.codec_name = "cp437"
-        else:
-            self.codec_name = locale.getpreferredencoding()
-
-    def write(self, s):
-        if type(s) != unicode:
-            self.stream.write(s)
-            return
-        encoded_s = s.encode(self.codec_name, self.errors)
-        self.stream.write(encoded_s)
-        self.bytecount += len(encoded_s)
-
-    def close(self):
-        self.stream.close()
-
-    def flush(self):
-        self.stream.flush()
-
-    def __enter__(self):
-        """ Support for the 'with' statement """
-        return self
-
-    def __exit__(self, type, value, traceback):
-        """ Support for the 'with' statement """
-        self.close()
 
 def dir_exists(path):
     return os.path.exists(path) and os.path.isdir(path)
@@ -761,10 +725,10 @@ def posix_normpath(path):
     platform it is currently executing on. The argument must be
     unicode and must not contain backslash."""
     assert not "\\" in path, "expected posix style paths, was: %s" % path
-    assert isinstance(path, unicode), "argument must be unicode"
+    assert isinstance(path, str), "argument must be unicode"
     result = tounicode(os.path.normpath(path).replace("\\", "/"))
     assert not "\\" in result
-    assert isinstance(result, unicode)
+    assert isinstance(result, str)
     return result
 
 
@@ -802,12 +766,13 @@ def unc_makedirs(s):
 
 def FakeFile():
     """ Behaves like a file object, but does not actually do anything."""
-    return open(os.path.devnull, "w")
+    fo = open(os.path.devnull, "w")
+    return fo
 
 # DevNull is an alias for FakeFile
 DevNull = FakeFile
 
-class FileAsString:
+class FileAsString(object):
     def __init__(self, fo):
         self.fo = fo
         self.fo.seek(0, 2)
@@ -836,7 +801,7 @@ class FileAsString:
         self.size = self.fo.tell()
 
 
-class RateLimiter:
+class RateLimiter(object):
     """This class makes it easy to perform some action only when a
     certain time has passed. The maxrate parameter is given in Hz and
     may be a float. The first call to ready() will always return
@@ -862,7 +827,7 @@ def isWritable(path):
     try:
         with TemporaryFile(dir=path):
             pass
-    except OSError, e:
+    except OSError as e:
         return False
     return True
 
@@ -882,7 +847,7 @@ class ContentViolation(ConstraintViolation):
     pass
 
 
-class StrictFileWriter:
+class StrictFileWriter(object):
     """This class will work as a file object when created, but with
     the additional functionality that it will not allow the file to
     exceed the given size. Also, the file must not exist before, and
@@ -896,7 +861,7 @@ class StrictFileWriter:
     """
     def __init__(self, filename, md5, size, overwrite = False):
         assert is_md5sum(md5)
-        assert type(size) == int or type(size) == long
+        assert type(size) == int or type(size) == int
         assert size >= 0
         self.filename = filename
         self.expected_md5 = md5
@@ -913,6 +878,7 @@ class StrictFileWriter:
         self.written_bytes = 0
 
     def write(self, buf):
+        assert type(buf) == bytes
         if self.written_bytes + len(buf) > self.expected_size:
             self.__close()
             raise SizeViolation("Violation of file contract (too big) detected: "+str(self.filename))
@@ -966,7 +932,7 @@ def common_tail(s1, s2):
         return ""
     return s1[-n:]
 
-class Struct:
+class Struct(object):
     def __init__(self, **entries):
         self.__dict__.update(entries)
 
@@ -975,19 +941,19 @@ class Struct:
 
 
 import time
-class StopWatch:
+class StopWatch(object):
     def __init__(self, enabled = True, name = None):
-        self.t_init = time.clock()
-        self.t_last = time.clock()
+        self.t_init = time.monotonic()
+        self.t_last = time.monotonic()
         self.enabled = enabled
         self.name = name
 
     def mark(self, msg = None):
-        now = time.clock()
+        now = time.monotonic()
         if self.enabled:
             prefix = ("SW (%s):" % self.name) if self.name else "SW:"
-            print "%s %s %s (total %s)" % (prefix, msg, now - self.t_last, now - self.t_init )
-        self.t_last = time.clock()
+            print("%s %s %s (total %s)" % (prefix, msg, now - self.t_last, now - self.t_init ))
+        self.t_last = time.monotonic()
 
 def overrides(interface_class):
     """ This is a method decorator that can be used to ensure/document
@@ -998,18 +964,19 @@ def overrides(interface_class):
     return overrider
 
 import array
-class TailBuffer:
+class TailBuffer(object):
     """ A buffer that only physically keeps the last bytes of the data
     that is appended to it, but can be accessed using the positions of
     the original data. All data is kept until release() is called by
     the user."""
 
     def __init__(self):
-        self.buffer = array.array("c")
+        self.buffer = array.array("B")
         self.shifted = 0
 
     def append(self, s):
-        self.buffer.fromstring(s)
+        assert type(s) == bytes
+        self.buffer.frombytes(s)
 
     def release(self, offset):
         assert offset >= self.shifted
@@ -1034,7 +1001,7 @@ class TailBuffer:
             "Requested slice %s overlaps with the released part of the buffer (up to %s)" % (index, self.shifted)
         index2 = slice(index.start - self.shifted, index.stop - self.shifted)
         #print index, "->", index2
-        return self.buffer.__getitem__(index2).tostring()
+        return self.buffer.__getitem__(index2).tobytes()
 
 
 def PartialProgress(f1, f2, progress_callback):
@@ -1064,12 +1031,12 @@ def calculate_progress(total_count, count, start_progress = 0.0):
     is any problem with the calculation or incoming arguments, this
     function will return 0.0"""
     default = 0.0
-    progress = float(start_progress)
-    if not (0.0 <= progress <= 1.0):
-        return default
-    if not (0 <= count <= total_count):
-        return default
     try:
+        progress = float(start_progress)
+        if not (0.0 <= progress <= 1.0):
+            return default
+        if not (0 <= count <= total_count):
+            return default
         progress += float(count) / float(total_count)
     except:
         pass
@@ -1086,7 +1053,7 @@ assert calculate_progress(10, 11) == 0.0  # Too large count
 assert calculate_progress(10, -5) == 0.0  # Illegal count
 assert calculate_progress(-5, -5) == 0.0  # Illegal
 
-class ProgressHelper:
+class ProgressHelper(object):
     def __init__(self, start_f, progress_callback):
         assert 0.0 <= start_f <= 1.0
         self.current_progress = start_f

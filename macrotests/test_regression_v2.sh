@@ -5,8 +5,7 @@ testdir="`pwd`"
 tar -xzf $BOARTESTHOME/regression-v2.tar.gz || exit 1
 REPO=$testdir/regression-v2/TESTREPO
 
-cat >expected.txt <<EOF
-NOTICE: Old repo format detected. Upgrading...
+cat >expected-output.txt <<EOF
 !Checking out to workdir .*/TestSession
 attention.png
 modified.txt
@@ -14,8 +13,13 @@ windows-räksmörgås.txt
 !Finished in .* seconds
 EOF
 
-$BOAR --repo=$REPO co TestSession >output.txt 2>&1 || { cat output.txt; echo "Initial checkout failed"; exit 1; }
-txtmatch.py expected.txt output.txt || { echo "Unexpected checkout output"; exit 1; }
+cat >expected-err.txt <<EOF
+NOTICE: Old repo format detected. Upgrading...
+EOF
+
+$BOAR --repo=$REPO co TestSession >output.txt 2>err.txt || { cat output.txt; echo "Initial checkout failed"; exit 1; }
+txtmatch.py expected-err.txt err.txt || { echo "Unexpected checkout err"; exit 1; }
+txtmatch.py expected-output.txt output.txt || { echo "Unexpected checkout output"; exit 1; }
 
 cat >expected.txt <<EOF
 [1, null, "TestSession", "d41d8cd98f00b204e9800998ecf8427e", null, false]
@@ -49,7 +53,7 @@ Changed paths:
 !Finished in .* seconds
 EOF
 
-$BOAR --repo=$REPO log -v >output.txt 2>&1 || { cat output.txt; echo "Repo log -v failed"; exit 1; }
+$BOAR --repo=$REPO log -v >output.txt 2>err.txt || { cat output.txt; echo "Repo log -v failed"; exit 1; }
 txtmatch.py expected.txt output.txt || { echo "Unexpected log -v output"; exit 1; }
 
 

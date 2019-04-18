@@ -14,11 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
+from builtins import map
+from builtins import range
+from builtins import object
 import sys, os, unittest, shutil
 import sqlite3
 
 if os.getenv("BOAR_SKIP_DEDUP_TESTS") == "1":
-    print "Skipping test_deduplication.py due to BOAR_SKIP_DEDUP_TESTS"
+    print("Skipping test_deduplication.py due to BOAR_SKIP_DEDUP_TESTS")
     sys.exit(0)
 
 if __name__ == '__main__':
@@ -34,12 +38,15 @@ from boar_exceptions import UserError, SoftCorruptionError
 from front import Front, verify_repo
 from wdtools import read_tree, write_tree, WorkdirHelper, boar_dirs, write_file
 
+from deduplication import dedup_available
+assert dedup_available, "No deduplication module installed"
+
 from deduplication import print_recipe
 from deduplication import RecipeFinder
 from deduplication import BlocksDB
 from cdedup import IntegerSet, calc_rolling
 
-class FakePieceHandler:
+class FakePieceHandler(object):
     def init_piece(self, index): pass
     def add_piece_data(self, index, data): pass
     def end_piece(self, index): pass
@@ -68,7 +75,7 @@ class TestRecipeFinder(unittest.TestCase, WorkdirHelper):
         recipe = recipe_finder.get_recipe()
         self.assertEquals(recipe, {'md5sum': '5afc35e6684b843ceb498f5031f22660',
                                    'method': 'concat', 'size': 6,
-                                   'pieces': [{'source': 'FAKEBLOB', 'size': 3L,
+                                   'pieces': [{'source': 'FAKEBLOB', 'size': 3,
                                                'original': True, 'repeat': 1, 'offset': 0},
                                               {'source': u'47bce5c74f589f4867dbd57e9ca9f808', 'size': 3,
                                                'original': False, 'repeat': 1, 'offset': 0}]
@@ -415,7 +422,7 @@ class TestDeduplicationWorkdir(unittest.TestCase, WorkdirHelper):
         # Make sure we don't get a "OSError: [Errno 24] Too many open files"
         a_blob = self.addWorkdirFile("a.txt", "aaa")
         self.wd.checkin()
-        b_data = "aaa".join(map(str, range(0,10000)))
+        b_data = "aaa".join(map(str, list(range(0,10000))))
         b_blob = self.addWorkdirFile("b.txt", b_data)
         self.wd.checkin()
 

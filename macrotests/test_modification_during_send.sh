@@ -6,7 +6,7 @@ $BOAR --repo=TESTREPO co "Session" || exit 1
 cat >modify_open_raw.py <<"EOF"
 def send_file_hook_modify(filename):
     assert filename.endswith("avocado.txt")
-    with open(filename, "wb") as f:
+    with open(filename, "w") as f:
         f.write("avoCado")
 workdir._send_file_hook = send_file_hook_modify
 EOF
