@@ -27,7 +27,6 @@ from jsonrpc import FileDataSource
 import sys
 import tempfile
 import array
-
 try:
     if os.getenv("BOAR_DISABLE_DEDUP") == "1": raise ImportError()
     import cdedup
