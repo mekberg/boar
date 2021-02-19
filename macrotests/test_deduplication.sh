@@ -7,7 +7,7 @@ TESTDIR="`pwd`"
 REPO=$TESTDIR/DEDUPREPO
 CLONE=$TESTDIR/DEDUPCLONE
 BIGFILE=$TESTDIR/bigfile.bin
-mkrandfile.py 0 1000000 $BIGFILE || exit 1
+python2.7 "${BOARTESTHOME}/mkrandfile.py" 0 1000000 $BIGFILE || exit 1
 md5sum -c <<EOF || exit 1
 d978f6138c52b8be4f07bbbf571cd450  $BIGFILE
 EOF

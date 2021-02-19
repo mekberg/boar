@@ -20,9 +20,33 @@ from builtins import range
 import sys
 import os
 
+assert sys.version_info.major == 2 and sys.version_info.minor in (5,6,7), "Requires specific python version for correct RNG output"
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common import tounicode, md5sum_file
+def md5sum_file(filename):
+    m = hashlib.md5()
+    with open(filename) as f:
+        while True:            
+            block = f.read(1024)
+            if not block:
+                break
+            m.update(block)
+    return m.hexdigest()
+
+
+def tounicode(s):
+    """Decodes a string from the system default encoding to
+    unicode. Unicode strings are returned unchanged. None argument
+    returns None result."""
+    if s == None:
+        return None
+    if isinstance(s, str):
+        return s
+    s = s.decode(locale.getpreferredencoding())
+    assert type(s) == str
+    return s
+
 import hashlib
 import random
 import struct
