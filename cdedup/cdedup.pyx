@@ -378,7 +378,7 @@ cdef class BlocksDB:
            
 
    def add_block(self, blob, offset, md5):
-       assert self.in_transaction, "Tried to add a block outside of a transaction"       
+       assert self.in_transaction, "Tried to add a block outside of a transaction"
        result = add_block(self.dbhandle, blob, offset, md5)
        if result != BLOCKSDB_DONE:
            raise Exception(get_error_message(self.dbhandle))

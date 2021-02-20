@@ -374,12 +374,12 @@ class SessionWriter(object):
         sw.mark(2)
         if recipe:
             recipe = self.blob_deduplicator[blob_md5].get_recipe()
-            recipe_json = json.dumps(recipe, indent = 4)
-            recipe_md5 = md5sum(recipe_json)
+            recipe_json_bytes = str2bytes(json.dumps(recipe, indent = 4))
+            recipe_md5 = md5sum(recipe_json_bytes)
             recipe_path = os.path.join(self.session_path, blob_md5 + ".recipe")
             if not os.path.exists(recipe_path): # If it already exists, don't write it again
-                with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json)) as recipe_file:
-                    recipe_file.write(recipe_json)
+                with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json_bytes)) as recipe_file:
+                    recipe_file.write(recipe_json_bytes)
         sw.mark(3)
         del self.blob_deduplicator[blob_md5]
 
