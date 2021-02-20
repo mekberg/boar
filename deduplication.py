@@ -101,6 +101,8 @@ class TmpBlocksDB(object):
         self.blocks = {} # md5 -> [(blob, offset), ...]
 
     def add_tmp_block(self, md5, blob, offset):
+        md5 = str2bytes(md5)
+        blob = str2bytes(blob)
         assert is_md5sum(md5)
         assert is_md5sum(blob)
         if md5 not in self.blocks:
@@ -111,9 +113,11 @@ class TmpBlocksDB(object):
         return self.blocksdb.get_block_size()
 
     def get_block_locations(self, md5, limit = -1):
+        md5 = str2bytes(md5)
         return self.blocks.get(md5, []) + self.blocksdb.get_block_locations(md5, limit)
 
     def has_block(self, md5):
+        md5 = str2bytes(md5)
         return md5 in self.blocks or self.blocksdb.has_block(md5)
 
 class FakeBlocksDB(object):
@@ -183,7 +187,7 @@ class UniformBlobGetter(object):
     def get_blob_size(self, blob_name):
         assert is_md5sum(blob_name)
         if self.local_blob_dir:
-            local_path = os.path.join(self.local_blob_dir, blob_name)
+            local_path = os.path.join(self.local_blob_dir, bytes2str(blob_name))
             if os.path.exists(local_path):
                 return int(os.path.getsize(local_path))
         return self.repo.get_blob_size(blob_name)
@@ -427,7 +431,7 @@ class RecipeFinder(GenericStateMachine):
             assert size >= 0
             assert type(original) == bool
 
-            return OrderedDict([("source", source),
+            return OrderedDict([("source", bytes2str(source)),
                                 ("offset", offset),
                                 ("size", size),
                                 ("original", original),

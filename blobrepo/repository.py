@@ -473,7 +473,7 @@ class Repo(object):
 
     def get_blob_path(self, sum):
         assert is_md5sum(sum), "Was: %s" % (sum)
-        return os.path.join(self.repopath, BLOB_DIR, sum[0:2], sum)
+        return os.path.join(self.repopath, BLOB_DIR, bytes2str(sum[0:2]), bytes2str(sum))
 
     def has_block(self, sha):
         return self.blocksdb.has_block(sha)
@@ -866,7 +866,7 @@ class Repo(object):
         trashdir = tempfile.mkdtemp(prefix = "TRASH_erased_blobs_", dir = self.get_path(TMP_DIR))
 
         self.blocksdb.begin()
-        self.blocksdb.delete_blocks([blob for blob in orphan_blobs if self.has_raw_blob(blob)])
+        self.blocksdb.delete_blocks([str2bytes(blob) for blob in orphan_blobs if self.has_raw_blob(str2bytes(blob))])
         self.blocksdb.commit()
 
         for blob in orphan_blobs:
@@ -993,6 +993,8 @@ class Transaction(object):
         blocksdb.begin()
         for block_spec in blocks:
             blob_md5, offset, rolling, sha256 = block_spec
+            blob_md5 = str2bytes(blob_md5)
+            sha256 = str2bytes(sha256)
             # Possibly another commit sneaked in a recipe while we
             # were looking the other way. Let's be lenient for now.
 
