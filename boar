@@ -50,6 +50,8 @@ import boarserve
 
 json = get_json_module()
 
+assert sys.version_info.major >= 3
+
 def beta(f):
     assert f.__name__.startswith("cmd_")
     def beta_warning(*args, **kwargs):
@@ -57,7 +59,7 @@ def beta(f):
         f(*args, **kwargs)
     return beta_warning
 
-BOAR_VERSION = "boar-devel.16-Nov-2012"
+BOAR_VERSION = "boar-devel.py3"
 
 def print_help():
     print("""Boar version %s
@@ -909,7 +911,7 @@ def cmd_contents(args):
         for bi in dump['files']:
             stdout.write(bi['md5'])
             stdout.write(" *")
-            stdout.write(bi['filename'].encode("utf-8"))
+            stdout.write(bi['filename'])
             stdout.write("\n")
     else:
         json.dump(dump, stdout, indent = 4)
