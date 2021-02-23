@@ -439,23 +439,33 @@ def log_filedate( filename ):
 
 #----------------------
 
-HEADER_SIZE=22
+HEADER_SIZE=23
 HEADER_MAGIC=0x626f6172 # "boar"
-HEADER_VERSION=6
+HEADER_VERSION=7
 
-def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0, progress_packet = False):
+COMPATIBLE_HEADER_VERSIONS = {HEADER_VERSION}
+
+def pack_header(payload_size, has_binary_payload = False, binary_payload_size = 0, progress_packet = False, error_packet = False):
     assert binary_payload_size >= 0
     assert type(has_binary_payload) == bool
     assert type(progress_packet) == bool
     if progress_packet:
         assert binary_payload_size == 0 and not has_binary_payload
-    header_str = struct.pack("!III?Q?", HEADER_MAGIC, HEADER_VERSION, payload_size,\
-                                 has_binary_payload, int(binary_payload_size), progress_packet)
+    header_str = struct.pack("!III?Q??", HEADER_MAGIC, HEADER_VERSION, payload_size,\
+                                 has_binary_payload, int(binary_payload_size), progress_packet, error_packet)
     assert len(header_str) == HEADER_SIZE
     return header_str
 
+def is_header(stream):
+    data = stream.peek(4)
+    if len(data) < 4:
+        return False
+    magic, = struct.unpack("!I", data[0:4])
+    assert type(magic) == type(HEADER_MAGIC)
+    return magic == HEADER_MAGIC
+    
 def read_header(stream):
-    leader = stream.read(8)
+    leader = stream.read(8) # Magic + version
     if len(leader) != 8:
         raise ConnectionLost("Transport stream closed by other side.")
     magic_number, version_number = struct.unpack("!II", leader)
@@ -463,16 +473,16 @@ def read_header(stream):
     if magic_number != HEADER_MAGIC:
         raise ConnectionLost("Garbled message stream: %s..." % repr(leader))
 
-    if version_number != HEADER_VERSION:
-        raise WrongProtocolVersion("Wrong message protocol version: Expected %s, got %s" % (HEADER_VERSION, version_number))
+    if version_number not in COMPATIBLE_HEADER_VERSIONS:
+        raise WrongProtocolVersion("Wrong message protocol version: Expected %s, got incompatible version %s" % (HEADER_VERSION, version_number))
 
     header_data = stream.read(HEADER_SIZE - 8)
 
     if len(header_data) != HEADER_SIZE - 8:
         raise ConnectionLost("Transport stream closed by other side after greeting.")
 
-    payload_size, has_binary_payload, binary_payload_size, is_progress_packet = \
-        struct.unpack("!I?Q?", header_data)
+    payload_size, has_binary_payload, binary_payload_size, is_progress_packet, is_error_packet = \
+        struct.unpack("!I?Q??", header_data)
     if is_progress_packet:
         if binary_payload_size != 0 or has_binary_payload:
             raise ConnectionLost("Connection closed due to malformed progress packet")
@@ -481,7 +491,22 @@ def read_header(stream):
         assert binary_payload_size == 0
         binary_payload_size = None
 
-    return payload_size, binary_payload_size, is_progress_packet
+    return payload_size, binary_payload_size, is_progress_packet, is_error_packet
+
+def readJson(stream, size):
+    if is_header(stream):
+        payload_size, binary_payload_size, is_progress_packet, is_error_packet = read_header(stream)
+        if is_error_packet:
+            raise RPCParseError("Something went wrong on the other side")
+        else:
+            raise RPCParseError("Expected JSON message, got BOAR header")
+    data = stream.read(size)
+    assert len(data) == size
+    try:
+        o = json.loads(data)
+    except json.decoder.JSONDecodeError:
+        raise RPCParseError("Couldn't parse response - JSON decode error", data)
+    return o
 
 class BoarMessageClient(object):
     """This class it a "transport". It is the client end of a
@@ -490,6 +515,7 @@ class BoarMessageClient(object):
     """
     def __init__( self, s_in, s_out, logfunc=log_dummy):
         assert s_in and s_out
+        assert "b" in s_in.mode and "b" in s_out.mode
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
@@ -509,7 +535,6 @@ class BoarMessageClient(object):
         return "<JsonrpcClient, %s, %s>" % (self.s_in, self.s_out)
 
     def __send( self, string, datasource = None ):
-        #print "CLIENT sending", string, datasource
         bin_length = 0
         if datasource:
             bin_length = datasource.bytes_left()
@@ -529,13 +554,15 @@ class BoarMessageClient(object):
 
     def __recv( self ):
         while True:
-            datasize, binary_data_size, is_progress_packet = read_header(self.s_in)
-            data = self.s_in.read(datasize)
+            datasize, binary_data_size, is_progress_packet, is_error_packet = read_header(self.s_in)
+            
             if not is_progress_packet:
                 break
-            f = json.loads(data)
-            self.progress_callback(f)
 
+            progress_obj = readJson(self.s_in, datasize)
+            self.progress_callback(progress_obj)
+
+        data = self.s_in.read(datasize)
         if binary_data_size != None:
             return data, StreamDataSource(self.s_in, binary_data_size)
         else:
@@ -562,6 +589,7 @@ class BoarMessageServer(object):
     """
     def __init__( self, s_in, s_out, handler, logfunc=log_dummy ):
         assert s_in and s_out
+        assert "b" in s_in.mode and "b" in s_out.mode
         self.s_in = s_in
         self.s_out = s_out
         self.call_count = 0
@@ -583,7 +611,7 @@ class BoarMessageServer(object):
     def __send_result(self, result):
         assert result != None
         if isinstance(result, DataSource):
-            dummy_result = jsonrpc20.dumps_response(None)
+            dummy_result = str2bytes(jsonrpc20.dumps_response(None))
             header = pack_header(len(dummy_result), True, result.bytes_left())
             self.s_out.write( header )
             self.s_out.write( dummy_result )
@@ -597,12 +625,19 @@ class BoarMessageServer(object):
         self.s_out.flush()
 
     def __send_progress(self, progress):
+
         assert progress >= 0 or progress <= 1.0
         progress = round(progress, 3)
-        progress_object = json.dumps(progress)
+        progress_object = str2bytes(json.dumps(progress))
         header = pack_header(len(progress_object), progress_packet = True)
-        self.s_out.write( header )
-        self.s_out.write( progress_object )
+        try:
+            self.s_out.write( header )
+            self.s_out.write( progress_object )
+        except Exception as e:
+            print(traceback.format_exception(None, # <- type(e) by docs, but ignored 
+                                             e, e.__traceback__),
+                  file=sys.stderr, flush=True)
+            raise
         #self.s_out.flush() # Not necessary or desirable for progress
 
     def serve(self):
@@ -610,7 +645,7 @@ class BoarMessageServer(object):
             self.log( "BoarMessageServer.Serve(): connected")
             while 1:
                 try:
-                    datasize, binary_data_size, is_progress_packet = read_header(self.s_in)
+                    datasize, binary_data_size, is_progress_packet, is_error_packet = read_header(self.s_in)
                     if is_progress_packet:
                         raise ConnectionLost("Got a progress packet from the client")
                 except WrongProtocolVersion as e:
@@ -628,6 +663,8 @@ class BoarMessageServer(object):
                 if incoming_data_source:
                     assert incoming_data_source.bytes_left() == 0,\
                         "The data source object must be exhausted by the handler."
+                if type(result) == str:
+                    result = str2bytes(result)
                 self.__send_result(result)
                 self.call_count += 1
                 if self.handler.dead:
@@ -702,7 +739,7 @@ class ServerProxy(object):
             req_str  = JsonRpc20.dumps_request( methodname, args, id )
         else:
             req_str  = JsonRpc20.dumps_request( methodname, kwargs, id )
-
+        req_str = str2bytes(req_str)
         try:
             self.caller_progress_callback = progress_callback
             resp_str, result_data_source = self.__transport.sendrecv( req_str, datasource)

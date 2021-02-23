@@ -81,11 +81,15 @@ def user_friendly_open_local_repository(path):
 
 def create_boar_proxy(from_server, to_server):
     allowed_exceptions = []
-    import exceptions, boar_exceptions, common
-    for module in exceptions, boar_exceptions, common:
-        for obj in list(module.__dict__.values()):
-            if type(obj) == type and issubclass(obj, Exception):
-                allowed_exceptions.append(obj)
+    import builtins as builtin_exceptions
+    all_exceptions = sorted(n for n, e in vars(builtin_exceptions).items() 
+                            if isinstance(e, type) and 
+                            issubclass(e, BaseException))
+    import boar_exceptions, common
+
+    for e in all_exceptions + list(boar_exceptions.__dict__.values()) + list(common.__dict__.values()):
+        if type(e) == type and issubclass(e, Exception):
+            allowed_exceptions.append(e)
 
     cb = lambda x: sys.stdout.write("Progress: %s%%" % (x*100))
     transport = jsonrpc.BoarMessageClient(from_server, to_server)
