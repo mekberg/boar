@@ -62,7 +62,7 @@ def init_stdio_server(repopath):
     sys.stdin and sys.stdout to prevent any print commands from
     accidentially corrupting the communication. (sys.stdout is
     directed to sys.stderr, sys.stdin is set to None)"""
-    server = PipedBoarServer(repopath, sys.stdin, sys.stdout)
+    server = PipedBoarServer(repopath, sys.stdin.buffer, sys.stdout.buffer)
     sys.stdin = None
     sys.stdout = sys.stderr
     return server
