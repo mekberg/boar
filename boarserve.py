@@ -67,8 +67,9 @@ def init_stdio_server(repopath):
     sys.stdout = sys.stderr
     return server
 
-class ForkingTCPServer(socketserver.ForkingMixIn, socketserver.TCPServer):
-    pass
+if "fork" in dir(os):
+    class ForkingTCPServer(socketserver.ForkingMixIn, socketserver.TCPServer):
+        pass
 
 def run_socketserver(repopath, address, port):
     repository.Repo(repopath) # Just check if the repo path is valid
