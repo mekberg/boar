@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.7
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Copyright 2010 Mats Ekberg
@@ -51,6 +51,7 @@ import boarserve
 json = get_json_module()
 
 assert sys.version_info.major >= 3
+assert sys.version_info.minor >= 7
 
 def beta(f):
     assert f.__name__.startswith("cmd_")
