@@ -79,7 +79,7 @@ def user_friendly_open_local_repository(path):
         repo = repository.Repo(path)
     return repo
 
-def create_boar_proxy(from_server, to_server):
+def create_boar_proxy(to_server, from_server):
     allowed_exceptions = []
     import builtins as builtin_exceptions
     all_exceptions = sorted(n for n, e in vars(builtin_exceptions).items() 
