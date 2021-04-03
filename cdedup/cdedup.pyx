@@ -278,7 +278,7 @@ cdef class BlocksDB:
    def __init__(self, dbfile, block_size):
        assert isinstance(block_size, (int, long)), \
            "illegal argument: block_size must be an integer. Was: %s" % block_size
-       dbfile_utf8 = dbfile.encode("utf-8")
+       dbfile_utf8 = dbfile.encode("utf-8") if type(dbfile) == str else dbfile
        result = init_blocksdb(dbfile_utf8, block_size, &self.dbhandle)
        if result != BLOCKSDB_DONE:
            raise SoftCorruptionError(get_error_message(self.dbhandle))

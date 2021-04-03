@@ -374,7 +374,7 @@ class RecipeFinder(GenericStateMachine):
             block_data = self.tail_buffer[offset : offset + self.block_size]
             md5 = md5sum(block_data)
             self.end_of_last_hit >= 0
-            if self.blocksdb.has_block(md5):
+            if self.blocksdb.has_block(str2bytes(md5)):
                 assert self.end_of_last_hit >= 0
                 if offset - self.end_of_last_hit > 0:
                     # If this hit is NOT a continuation of the last
@@ -555,6 +555,7 @@ class BlockSequenceFinder(object):
         return surviving_candidates
 
     def add_block(self, block_md5):
+        block_md5 = str2bytes(block_md5)
         self.feeded_blocks += 1
         if self.firstblock:
             self.firstblock = False
