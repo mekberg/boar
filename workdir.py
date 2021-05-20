@@ -220,8 +220,9 @@ class Workdir(object):
             for info in self.get_bloblist(self.revision):
                 f.write(info['md5sum'] +" *" + info['filename'] + "\n")
 
-    def checkout(self, write_meta = True, symlink = False):
+    def checkout(self, write_meta = True, symlink = False, reflink = False):
         assert os.path.exists(self.root) and os.path.isdir(self.root)
+        assert not (symlink and reflink)
         front = self.get_front()
         if not self.revision:
             self.revision = front.find_last_revision(self.sessionName)
@@ -231,9 +232,9 @@ class Workdir(object):
         for info in sorted_bloblist(self.get_bloblist(self.revision)):
             if not is_child_path(self.offset, info['filename']):
                 continue
-            self.fetch_file(info['filename'], info['md5sum'], overwrite = False, symlink = symlink)
+            self.fetch_file(info['filename'], info['md5sum'], overwrite = False, symlink = symlink, reflink = reflink)
 
-    def fetch_file(self, session_path, md5, overwrite = False, symlink = False):
+    def fetch_file(self, session_path, md5, overwrite = False, symlink = False, reflink = False):
         assert is_child_path(self.offset, session_path)
         target = strip_path_offset(self.offset, session_path)
         target_path = os.path.join(self.root, target)
@@ -246,6 +247,15 @@ class Workdir(object):
             if not os.path.exists(target_dir):
                 os.makedirs(target_dir)
             os.symlink(blob_path, target_path)
+        elif reflink:
+            from reflink import reflink
+            assert self.get_front().repo.has_raw_blob(md5)
+            blob_path = self.get_front().repo.get_blob_path(md5)
+            assert overwrite or not os.path.exists(target_path)
+            target_dir = os.path.dirname(target_path)
+            if not os.path.exists(target_dir):
+                os.makedirs(target_dir)
+            reflink(blob_path, target_path)
         else:
             fetch_blob(self.get_front(), md5, target_path, overwrite = overwrite)
 
