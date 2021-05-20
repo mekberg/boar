@@ -1113,6 +1113,8 @@ def cmd_co(args):
                       help="The revision to check out (default is latest)")
     parser.add_option("-l", "--symlink", dest = "symlink", action="store_true",
                       help="Create symlinks to the repository instead of copying the data. (DANGEROUS)")
+    parser.add_option("-L", "--reflink", dest = "reflink", action="store_true",
+                      help="Create reflinks instead of copying the data (only within same device, requires filesystem support).")
 
     (options, args) = parser.parse_args(args)
     if not args:
@@ -1136,13 +1138,13 @@ def cmd_co(args):
     repourl = get_repo_url()
     front = connect_to_repo(repourl)
 
-    if options.symlink:
+    if options.symlink or options.reflink:
         if os.name == "nt":
-            raise UserError("Symlinks can not be used on windows")
+            raise UserError("Symlinks/reflinks can not be used on windows")
         if not (repourl.startswith("/") or repourl.startswith("file://")):
-            raise UserError("Symlinks can only be used with a local repository specification")
+            raise UserError("Symlinks/reflinks can only be used with a local repository specification")
         if front.deduplication_enabled():
-            raise UserError("Symlinks can not be used with deduplicated repositories")
+            raise UserError("Symlinks/reflinks can not be used with deduplicated repositories")
 
     latest_sid = front.find_last_revision(session_name)
     if not latest_sid:
@@ -1159,7 +1161,7 @@ def cmd_co(args):
 
     os.mkdir(workdir_path)
     wd = workdir.Workdir(repourl, session_name, offset, sid, workdir_path, front = front)
-    wd.checkout(symlink=options.symlink)
+    wd.checkout(symlink=options.symlink, reflink=options.reflink)
 
 def cmd_setprop(args):
     parser = OptionParser(usage="usage: boar setprop [options] <session name> <property> [new value]")
