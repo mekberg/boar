@@ -56,9 +56,9 @@ class TestBlobRepo(unittest.TestCase):
     def assertListsEqualAsSets(self, lst1, lst2):
         self.assertEqual(len(lst1), len(lst2))
         for i in lst1:
-            self.assert_(i in lst2)
+            self.assertTrue(i in lst2)
         for i in lst2:
-            self.assert_(i in lst1)
+            self.assertTrue(i in lst1)
 
     def test_empty_commit(self):
         writer = self.repo.create_snapshot(SESSION_NAME)
@@ -160,7 +160,9 @@ class TestBlobRepo(unittest.TestCase):
         writer.add(committed_info)
         writer.commit()
         self.assertEqual(self.repo.get_orphan_blobs(), set())
-        open(os.path.join(self.repo.repopath, "blobs", "55", "551d8cd98f00b204e9800998ecf8427e"), "w")
+        # Create a stray blob file and ensure it's closed to avoid ResourceWarnings
+        with open(os.path.join(self.repo.repopath, "blobs", "55", "551d8cd98f00b204e9800998ecf8427e"), "w"):
+            pass
         self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
 
     def test_find_orphan_recipes(self):
@@ -173,7 +175,9 @@ class TestBlobRepo(unittest.TestCase):
         writer.commit()
         self.assertEqual(self.repo.get_orphan_blobs(), set())
         os.mkdir(os.path.join(self.repo.repopath, "recipes", "55"))
-        open(os.path.join(self.repo.repopath, "recipes", "55", "551d8cd98f00b204e9800998ecf8427e.recipe"), "w")
+        # Create a stray recipe file and ensure it's closed to avoid ResourceWarnings
+        with open(os.path.join(self.repo.repopath, "recipes", "55", "551d8cd98f00b204e9800998ecf8427e.recipe"), "w"):
+            pass
         self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
 
 if __name__ == '__main__':
