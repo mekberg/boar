@@ -59,8 +59,9 @@ try:
     import simplejson as json
     original_loads = json.loads
     def unicode_loads(s, *args, **kw):
-        if type(s) == str:
-            s = str(s, "utf-8")
+        # Accept both bytes and text; decode bytes as UTF-8.
+        if isinstance(s, bytes):
+            s = s.decode("utf-8")
         return original_loads(s, *args, **kw)
     json.loads = unicode_loads
 
