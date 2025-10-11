@@ -6,15 +6,15 @@ fi
 TESTDIR="`pwd`"
 REPO=$TESTDIR/reciperepo
 BIGFILE=$TESTDIR/bigfile.bin
-mkrandfile.py 0 1000000 $BIGFILE || exit 1
+python2.7 "${BOARTESTHOME}/mkrandfile.py" 0 1000000 $BIGFILE || exit 1
 md5sum -c <<EOF || exit 1
 d978f6138c52b8be4f07bbbf571cd450  $BIGFILE
 EOF
 
 
-mkrandfile.py 0 1000000 A || exit 1
-mkrandfile.py 1 1000000 B || exit 1
-mkrandfile.py 2 1000000 C || exit 1
+python2.7 "${BOARTESTHOME}/mkrandfile.py" 0 1000000 A || exit 1
+python2.7 "${BOARTESTHOME}/mkrandfile.py" 1 1000000 B || exit 1
+python2.7 "${BOARTESTHOME}/mkrandfile.py" 2 1000000 C || exit 1
 
 ############################
 

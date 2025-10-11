@@ -37,6 +37,7 @@ fi
 
 for testcase in $testcases; do
     echo -n "Executing $testcase..."
+    echo  "*********************************"
     TMPDIR=`mktemp --tmpdir=/tmp -d "boar-${testcase}.XXXXXX"`
     OUTPUT="${TMPDIR}.log"
     export BOAR_CACHEDIR="$TMPDIR/cache"

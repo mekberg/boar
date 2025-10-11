@@ -62,13 +62,14 @@ def init_stdio_server(repopath):
     sys.stdin and sys.stdout to prevent any print commands from
     accidentially corrupting the communication. (sys.stdout is
     directed to sys.stderr, sys.stdin is set to None)"""
-    server = PipedBoarServer(repopath, sys.stdin, sys.stdout)
+    server = PipedBoarServer(repopath, sys.stdin.buffer, sys.stdout.buffer)
     sys.stdin = None
     sys.stdout = sys.stderr
     return server
 
-class ForkingTCPServer(socketserver.ForkingMixIn, socketserver.TCPServer):
-    pass
+if "fork" in dir(os):
+    class ForkingTCPServer(socketserver.ForkingMixIn, socketserver.TCPServer):
+        pass
 
 def run_socketserver(repopath, address, port):
     repository.Repo(repopath) # Just check if the repo path is valid
