@@ -130,7 +130,7 @@ class RecipeReader(DataSource):
         readsize = min(self.bytes_left_in_segment, readsize)
         assert readsize >= 0
 
-        result = ""
+        result = b""
         while len(result) < readsize:
             #print self.segment_start_in_recipe, self.segment_size, self.bytes_left_in_segment
             current_recipe_read_position = self.segment_start_in_recipe + (self.segment_size - self.bytes_left_in_segment)

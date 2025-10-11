@@ -27,7 +27,6 @@ from jsonrpc import FileDataSource
 import sys
 import tempfile
 import array
-
 try:
     if os.getenv("BOAR_DISABLE_DEDUP") == "1": raise ImportError()
     import cdedup
@@ -102,6 +101,8 @@ class TmpBlocksDB(object):
         self.blocks = {} # md5 -> [(blob, offset), ...]
 
     def add_tmp_block(self, md5, blob, offset):
+        md5 = str2bytes(md5)
+        blob = str2bytes(blob)
         assert is_md5sum(md5)
         assert is_md5sum(blob)
         if md5 not in self.blocks:
@@ -112,9 +113,11 @@ class TmpBlocksDB(object):
         return self.blocksdb.get_block_size()
 
     def get_block_locations(self, md5, limit = -1):
+        md5 = str2bytes(md5)
         return self.blocks.get(md5, []) + self.blocksdb.get_block_locations(md5, limit)
 
     def has_block(self, md5):
+        md5 = str2bytes(md5)
         return md5 in self.blocks or self.blocksdb.has_block(md5)
 
 class FakeBlocksDB(object):
@@ -184,7 +187,7 @@ class UniformBlobGetter(object):
     def get_blob_size(self, blob_name):
         assert is_md5sum(blob_name)
         if self.local_blob_dir:
-            local_path = os.path.join(self.local_blob_dir, blob_name)
+            local_path = os.path.join(self.local_blob_dir, bytes2str(blob_name))
             if os.path.exists(local_path):
                 return int(os.path.getsize(local_path))
         return self.repo.get_blob_size(blob_name)
@@ -371,7 +374,7 @@ class RecipeFinder(GenericStateMachine):
             block_data = self.tail_buffer[offset : offset + self.block_size]
             md5 = md5sum(block_data)
             self.end_of_last_hit >= 0
-            if self.blocksdb.has_block(md5):
+            if self.blocksdb.has_block(str2bytes(md5)):
                 assert self.end_of_last_hit >= 0
                 if offset - self.end_of_last_hit > 0:
                     # If this hit is NOT a continuation of the last
@@ -428,7 +431,7 @@ class RecipeFinder(GenericStateMachine):
             assert size >= 0
             assert type(original) == bool
 
-            return OrderedDict([("source", source),
+            return OrderedDict([("source", bytes2str(source)),
                                 ("offset", offset),
                                 ("size", size),
                                 ("original", original),
@@ -552,6 +555,7 @@ class BlockSequenceFinder(object):
         return surviving_candidates
 
     def add_block(self, block_md5):
+        block_md5 = str2bytes(block_md5)
         self.feeded_blocks += 1
         if self.firstblock:
             self.firstblock = False

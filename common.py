@@ -102,9 +102,10 @@ def read_json(filename):
 """ This file contains code that is generally useful, without being
 specific for any project """
 
-def is_md5sum(str):
+def is_md5sum(s):
+    b = str2bytes(s)
     try:
-        return re.match("^[a-f0-9]{32}$", str) != None
+        return re.match(b"^[a-f0-9]{32}$", b) != None
     except TypeError:
         return False
 
@@ -129,6 +130,7 @@ def prefixprint(prefix, text, stream = None):
     for row in prefixwrap(prefix, text):
         stream.write(row)
         stream.write("\n")
+        stream.flush()
 
 def invert_dict(d):
     """ Turns {key: value} into {value: [keys]} """
