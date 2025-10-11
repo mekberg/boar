@@ -128,7 +128,7 @@ cdef class RollingChecksum:
 
         self.feed_queue = []
         self.feed_pos = 0
-        self.feed_s = ""
+        self.feed_s = b""
 
     def __cinit__(self):
         self.state = NULL
@@ -138,8 +138,12 @@ cdef class RollingChecksum:
             destroy_rolling(self.state)
 
     def feed_string(self, s):
+        # Expect bytes; convert str to bytes if accidentally provided
+        if isinstance(s, str):
+            s = s.encode('utf-8')
+        assert isinstance(s, (bytes, bytearray)), "feed_string expects bytes"
         self.feed_queue.append(s)
-        #print "Feed queue length:", len(self.feed_queue)
+        #print("Feed queue length:", len(self.feed_queue))
 
     cdef _pop_queue(self):
         assert self.feed_pos == len(self.feed_s)
@@ -175,7 +179,7 @@ cdef class RollingChecksum:
     cpdef uint64_t value(self):
         try:
             while True:
-                self.next()
+                self.__next__()
         except StopIteration:
             return value64_rolling(self.state)
 
@@ -201,17 +205,17 @@ def benchmark():
     sw = StopWatch()
     randints = [random.randint(0, 2**32-1) for n in range(1000000)]
     intset = IntegerSet(len(randints))
-    print len(randints), randints[0:10]
+    print(len(randints), randints[0:10])
     intset.add_all(randints)
     del randints
     rs = RollingChecksum(65000, intset)
     sw.mark("Setup")
-    s = "a" * 4096
-    for c in xrange(0, 10000):
+    s = b"a" * 4096
+    for c in range(0, 10000):
         rs.feed_string(s)
         for result in rs:
             pass
-    print "Feeded", rs.feeded_bytecount, "bytes"
+    print("Feeded", rs.feeded_bytecount, "bytes")
     sw.mark("Feeding")
 
 def test_string(window_size, ls, ss):
@@ -229,30 +233,30 @@ def test_string(window_size, ls, ss):
     return rolling_rs1
 
 def self_test():
-    assert test_string(3, "xyzabc", "abc") == 50594179
-    assert test_string(3, "abc", "abc") == 50594179
-    assert test_string(3, "qabc", "abc") == 50594179
-    assert test_string(3, "", "") == 0
+    assert test_string(3, b"xyzabc", b"abc") == 50594179
+    assert test_string(3, b"abc", b"abc") == 50594179
+    assert test_string(3, b"qabc", b"abc") == 50594179
+    assert test_string(3, b"", b"") == 0
 
     rs = RollingChecksum(3, IntegerSet(100))
-    rs.feed_string("a")
-    rs.feed_string("b")
-    rs.feed_string("c")
+    rs.feed_string(b"a")
+    rs.feed_string(b"b")
+    rs.feed_string(b"c")
     assert rs.value() == 50594179
 
 
     intset = IntegerSet(100)
     rs = RollingChecksum(3, intset)
     intset.add_all([25231617, 50594179, 50987398, 51380617])
-    rs.feed_string("a")
-    rs.feed_string("b")
-    rs.feed_string("c")
-    rs.feed_string("d")
-    rs.feed_string("e")
+    rs.feed_string(b"a")
+    rs.feed_string(b"b")
+    rs.feed_string(b"c")
+    rs.feed_string(b"d")
+    rs.feed_string(b"e")
     result = list(rs)
-    assert result == [(0L, 50594179L), (1L, 50987398L), (2L, 51380617L)], result
+    assert result == [(0, 50594179), (1, 50987398), (2, 51380617)], result
 
-    #big_string = chr(255) * 10**6 # 10 MB
+    #big_string = bytes([255]) * 10**6 # 10 MB
     #assert test_string(10**6, big_string, big_string)
     #print "Self test completed"
 
@@ -264,7 +268,7 @@ class StopWatch:
 
     def mark(self, msg):
         now = time.time()
-        print "MARK: %s %s (total %s)" % ( msg, now - self.t_last, now - self.t_init )
+        print("MARK: %s %s (total %s)" % ( msg, now - self.t_last, now - self.t_init ))
         self.t_last = time.time()
 
 cdef class BlocksDB:
@@ -276,7 +280,8 @@ cdef class BlocksDB:
    cdef int __rolling_loaded
 
    def __init__(self, dbfile, block_size):
-       assert isinstance(block_size, (int, long)), \
+       from numbers import Integral
+       assert isinstance(block_size, Integral), \
            "illegal argument: block_size must be an integer. Was: %s" % block_size
        dbfile_utf8 = dbfile.encode("utf-8") if type(dbfile) == str else dbfile
        result = init_blocksdb(dbfile_utf8, block_size, &self.dbhandle)
@@ -421,9 +426,9 @@ cdef class BlocksDB:
        
 
 def test_blocksdb_class():
-    db = BlocksDB("testdb.sqlite")
-    print db.get_all_rolling()
-    print db.get_all_blocks("d41d8cd98f00b204e9800998ecf8427e")
+    db = BlocksDB(b"testdb.sqlite", 65536)
+    print(db.get_all_rolling())
+    print(db.get_block_locations(b"d41d8cd98f00b204e9800998ecf8427e"))
     db.begin()
     db.add_rolling(12345)
     db.commit()

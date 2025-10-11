@@ -1,15 +1,28 @@
 from distutils.core import setup
 from distutils.extension import Extension
-from Cython.Distutils import build_ext
 
-ext_modules = [Extension("cdedup",
-                         ["cdedup.pyx", "rollsum.c", "intset.c", "circularbuffer.c", "blocksdb.c"],
-                         extra_compile_args=["-static", "-O2", "-std=c99", "-Wall"],
-                         extra_link_args=["sqlite3.o"],
-                         )]
+try:
+    from Cython.Build import cythonize
+    use_cython = True
+except Exception:
+    use_cython = False
 
-setup(
-    name = 'Deduplication module',
-    cmdclass = {'build_ext': build_ext},
-    ext_modules = ext_modules
-    )
+sources = [
+    "cdedup.pyx" if use_cython else "cdedup.c",
+    "rollsum.c",
+    "intset.c",
+    "circularbuffer.c",
+    "blocksdb.c",
+]
+
+ext = Extension(
+    "cdedup",
+    sources,
+    extra_compile_args=["-O2", "-std=c99", "-Wall"],
+    extra_objects=["sqlite3.o"],
+    language="c",
+)
+
+extensions = cythonize([ext]) if use_cython else [ext]
+
+setup(name="Deduplication module", ext_modules=extensions)
