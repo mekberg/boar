@@ -25,9 +25,10 @@ from __future__ import print_function
 
 from builtins import str
 from builtins import range
-from past.builtins import basestring
 from builtins import object
-from past.utils import old_div
+
+# Python 3: ensure basestring identifier exists for legacy isinstance checks
+basestring = str
 from blobrepo import repository
 from boar_exceptions import *
 import sys
@@ -180,7 +181,7 @@ def __clone_single_snapshot(from_front, to_front, session_id):
                 pp = SimpleProgressPrinter(sys.stdout,
                                            label="Sending blob %s of %s (%s MB)" %
                                            (n+1, len(other_raw_bloblist),
-                                            round(old_div(blobinfo['size'], (1.0 * 2**20)), 3)))
+                                            round((blobinfo['size'] / float(2**20)), 3)))
                 sw = StopWatch(enabled=False, name="front.clone")
                 to_front.init_new_blob(md5sum, blobinfo['size'])
                 sw.mark("front.init_new_blob()")

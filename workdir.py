@@ -17,10 +17,7 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import with_statement
-from future import standard_library
-standard_library.install_aliases()
 from builtins import str
-from past.utils import old_div
 from builtins import object
 
 import os
@@ -918,9 +915,9 @@ class ChecksumProgressPrinter(object):
         processed_bytes = total_bytes - remaining_bytes
         print((" " * len(self.last_string)) + "\r", end=' ')
         self.last_string = "Scanning: %s files and %s Mb remaining (%s%% complete, %s Mb/s)" % \
-            (remaining_files, int(old_div(remaining_bytes,2**20)), \
+            (remaining_files, int(remaining_bytes / float(2**20)), \
              round(100 * (1.0 - 1.0 * remaining_bytes / total_bytes), 1), \
-             round(old_div((old_div(processed_bytes,2**20)),elapsed_time), 1))
+             round((processed_bytes / float(2**20)) / elapsed_time, 1))
         print(self.last_string + "\r", end=' ')
         sys.stdout.flush()
         self.last_t = now

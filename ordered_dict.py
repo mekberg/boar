@@ -9,17 +9,18 @@
 # Backport of OrderedDict() class that runs on Python 2.4, 2.5, 2.6, 2.7 and pypy.
 # Passes Python2.7's test suite and incorporates all the latest updates.
 
-from future import standard_library
-standard_library.install_aliases()
 try:
     from _thread import get_ident as _get_ident
-except ImportError:
+except Exception:
+    # Python implementations without _thread: fall back
     from _dummy_thread import get_ident as _get_ident
 
 try:
-    from _abcoll import KeysView, ValuesView, ItemsView
-except ImportError:
-    pass
+    # Python 3
+    from collections.abc import KeysView, ValuesView, ItemsView
+except Exception:
+    # Fallback: views not strictly required by this codepath
+    KeysView = ValuesView = ItemsView = object
 
 
 class OrderedDict(dict):

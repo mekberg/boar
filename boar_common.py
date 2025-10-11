@@ -15,7 +15,6 @@
 # limitations under the License.
 
 from __future__ import with_statement
-from past.builtins import cmp
 from builtins import object
 
 import os, re

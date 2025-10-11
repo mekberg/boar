@@ -19,7 +19,10 @@ from __future__ import print_function
 
 from builtins import str
 from builtins import object
-from past.builtins import basestring
+try:
+    basestring
+except NameError:
+    basestring = str
 
 import hashlib
 import re

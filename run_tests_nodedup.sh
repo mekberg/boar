@@ -2,7 +2,20 @@
 
 export BOAR_CACHEDIR=`mktemp --tmpdir=/tmp/ -d "boar_tests_cache_XXXXX"`
 export BOAR_SERVER_CLI="`pwd`/boar"
-export PYTHON_BINARY=$(head -n1 $BOAR_SERVER_CLI|cut -d ' ' -f2)
+
+# Prefer Python from active virtual environment
+if [ -n "$VIRTUAL_ENV" ]; then
+    if [ -x "$VIRTUAL_ENV/bin/python" ]; then
+        export PYTHON_BINARY="$VIRTUAL_ENV/bin/python"
+    elif [ -x "$VIRTUAL_ENV/bin/python3" ]; then
+        export PYTHON_BINARY="$VIRTUAL_ENV/bin/python3"
+    fi
+    export PATH="$VIRTUAL_ENV/bin:$PATH"
+fi
+
+if [ -z "$PYTHON_BINARY" ]; then
+    export PYTHON_BINARY=$(head -n1 $BOAR_SERVER_CLI|cut -d ' ' -f2)
+fi
 
 # If the interpreter from the boar shebang isn't available (e.g. python3.7),
 # fall back to a reasonable python3/python found on PATH.
