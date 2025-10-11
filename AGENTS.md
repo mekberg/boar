@@ -47,3 +47,5 @@ index 0000000000000000000000000000000000000000..63619b8b42bf3a3bedc2d02c807f3058
 +- This repository intentionally keeps legacy assets (old regression archives, Windows installers, etc.) for reproducibility. Avoid deleting or moving them without updating the integration tests that reference those artifacts.
 +
 +Refer back to this document when navigating the code; it should help you locate the right layer for your changes and respect the project’s cross-version compatibility constraints.
+
+* Make sure to activate the venv before running any tests.

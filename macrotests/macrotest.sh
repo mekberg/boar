@@ -44,7 +44,7 @@ fi
 
 # By default, run quietly: only show output on failure. Set VERBOSE=1 to see progress.
 for testcase in $testcases; do
-    [ -n "$VERBOSE" ] && echo "Running $testcase"
+    echo -n "Running $testcase..."
     TMPDIR=`mktemp --tmpdir=/tmp -d "boar-${testcase}.XXXXXX"`
     OUTPUT="${TMPDIR}.log"
     export BOAR_CACHEDIR="$TMPDIR/cache"
@@ -52,15 +52,16 @@ for testcase in $testcases; do
     # Execute the test in an isolated temp dir, capturing all output to the log
     ( cd "$TMPDIR" && bash "$BOARTESTHOME/${testcase}" ) >"$OUTPUT" 2>&1 || {
         # On failure, print the captured output and keep the temp dir for inspection
-        [ -z "$VERBOSE" ] && echo "Failure in $testcase"
+        echo " FAIL"
         cat "$OUTPUT"
         echo "*** Test case $testcase failed ($TMPDIR)"
         echo "*** Output in $OUTPUT"
         exit 1
     }
+    echo " ok"
     # Clean up only on success
     rm -r "$TMPDIR" || { echo "Couldn't clean up after test"; exit 1; }
     rm -f "$OUTPUT" || { echo "Couldn't clean up after test"; exit 1; }
 done
 
-[ -n "$VERBOSE" ] && echo "All macrotests completed ok"
+echo "All macrotests completed ok"
