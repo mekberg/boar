@@ -1,7 +1,6 @@
 from __future__ import division
 from __future__ import print_function
 from builtins import range
-from past.utils import old_div
 from builtins import object
 from common import *
 from jsonrpc import DataSource
@@ -168,7 +167,7 @@ def benchmark():
              } ]
               }
     reader = RecipeReader(recipe, FakeRepo())
-    print(old_div(block_size * block_count, (2**20)), "Mbytes")
+    print((block_size * block_count) / float(2**20), "Mbytes")
     sw = StopWatch()
     reader.read()
     sw.mark("Read complete")

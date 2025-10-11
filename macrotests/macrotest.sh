@@ -25,7 +25,14 @@ export BOAR="$TESTDIR/../boar"
 export BOARMOUNT="$TESTDIR/../boarmount"
 export BOARTESTHOME=`pwd`
 export BOAR_SERVER_CLI="$BOARTESTHOME/../boar"
-export PYTHON_BINARY=$(head -n1 $BOAR_SERVER_CLI|cut -d ' ' -f2)
+
+# Prefer Python from active virtual environment
+if [ -n "$VIRTUAL_ENV" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
+    export PYTHON_BINARY="$VIRTUAL_ENV/bin/python"
+    export PATH="$VIRTUAL_ENV/bin:$PATH"
+else
+    export PYTHON_BINARY=$(head -n1 $BOAR_SERVER_CLI|cut -d ' ' -f2)
+fi
 
 export PATH="$BOARTESTHOME:$PATH"
 
@@ -35,24 +42,25 @@ if [ "$1" != "" ]; then
     testcases="$@"
 fi
 
+# By default, run quietly: only show output on failure. Set VERBOSE=1 to see progress.
 for testcase in $testcases; do
-    echo -n "Executing $testcase..."
-    echo  "*********************************"
+    [ -n "$VERBOSE" ] && echo "Running $testcase"
     TMPDIR=`mktemp --tmpdir=/tmp -d "boar-${testcase}.XXXXXX"`
     OUTPUT="${TMPDIR}.log"
     export BOAR_CACHEDIR="$TMPDIR/cache"
     export BOAR_HIDE_PROGRESS=1
-    ( cd $TMPDIR && touch $OUTPUT && bash $BOARTESTHOME/${testcase} ) ||
-	{
-	    echo
-	    cat $OUTPUT
-	    echo "*** Test case $testcase failed ($TMPDIR)"
-	    echo "*** Output in $OUTPUT"
-	    exit 1
-        }
-    rm -r $TMPDIR || { echo "Couldn't clean up after test"; exit 1; }
-    rm $OUTPUT || { echo "Couldn't clean up after test"; exit 1; }
-    echo " OK"
+    # Execute the test in an isolated temp dir, capturing all output to the log
+    ( cd "$TMPDIR" && bash "$BOARTESTHOME/${testcase}" ) >"$OUTPUT" 2>&1 || {
+        # On failure, print the captured output and keep the temp dir for inspection
+        [ -z "$VERBOSE" ] && echo "Failure in $testcase"
+        cat "$OUTPUT"
+        echo "*** Test case $testcase failed ($TMPDIR)"
+        echo "*** Output in $OUTPUT"
+        exit 1
+    }
+    # Clean up only on success
+    rm -r "$TMPDIR" || { echo "Couldn't clean up after test"; exit 1; }
+    rm -f "$OUTPUT" || { echo "Couldn't clean up after test"; exit 1; }
 done
 
-echo "All tests completed ok"
+[ -n "$VERBOSE" ] && echo "All macrotests completed ok"
