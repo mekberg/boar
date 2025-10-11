@@ -32,7 +32,7 @@ try:
     import cdedup
     if not hasattr(cdedup, "__version__"):
         raise ImportError()
-    assert cdedup.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % rollingcs.__version__
+    assert cdedup.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % cdedup.__version__
     cdedup_version = cdedup.__version__
     from cdedup import RollingChecksum, calc_rolling, IntegerSet, BlocksDB
     dedup_available = True

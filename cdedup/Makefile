@@ -1,4 +1,6 @@
-all: rollingcs.so
+PYTHON ?= python3
+
+all: ../cdedup.so
 
 sqlite3.c:
 	wget "http://www.sqlite.org/2013/sqlite-amalgamation-3071601.zip" -O sqlite3.zip
@@ -9,8 +11,10 @@ sqlite3.c:
 	rm sqlite3.zip
 
 sqlite3.o: sqlite3.c sqlite3.h
-	gcc -O2 -c -fPIC -Wall -lpthread -ldl sqlite3.c 
+	gcc -O2 -c -fPIC -Wall sqlite3.c
 
-rollingcs.so: sqlite3.o cdedup.pyx blocksdb.c blocksdb.h rollsum.c rollsum.h intset.c intset.h circularbuffer.h circularbuffer.c setup-cython.py crc16.h Makefile
-	python3.7 setup-cython.py build_ext --inplace
+../cdedup.so: sqlite3.o cdedup.c blocksdb.c blocksdb.h rollsum.c rollsum.h intset.c intset.h circularbuffer.h circularbuffer.c setup-cython.py crc16.h Makefile
+	$(PYTHON) setup-cython.py build_ext --inplace
+	@# Copy the newest built extension (ABI-specific name) to repo root with a stable name
+	@set -e; sofile=$$(ls -t cdedup*.so | head -n1); test -n "$$sofile"; cp -f "$$sofile" ../cdedup.so
 
