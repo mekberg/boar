@@ -92,7 +92,11 @@ def create_boar_proxy(to_server, from_server):
             allowed_exceptions.append(e)
 
     cb = lambda x: sys.stdout.write("Progress: %s%%" % (x*100))
-    transport = jsonrpc.BoarMessageClient(from_server, to_server)
+    # Ensure correct stream directions:
+    # - s_in must be readable (server -> client), i.e., child's stdout (p.stdout)
+    # - s_out must be writable (client -> server), i.e., child's stdin (p.stdin)
+    # Callers pass (to_server=p.stdout, from_server=p.stdin), so swap here.
+    transport = jsonrpc.BoarMessageClient(to_server, from_server)
     server = jsonrpc.ServerProxy(transport=transport, allowed_exceptions=allowed_exceptions)
 
     try:
@@ -140,6 +144,14 @@ def connect_ssh(url):
 
     # Propagate any useful environment in this space-separated list
     env = "BOAR_DUMMY=1"
+
+    # During test runs, ensure the remote process uses our venv's python3
+    # so the shebang (#!/usr/bin/env python3) resolves consistently.
+    # Only apply when tests explicitly force remote repo usage.
+    if os.getenv("BOAR_TEST_REMOTE_REPO") and os.getenv("VIRTUAL_ENV"):
+        venv_bin = os.path.join(os.getenv("VIRTUAL_ENV"), "bin")
+        # Prepend venv bin to PATH for the remote command
+        env += f' PATH="{venv_bin}:$PATH"'
 
     # Propagate BOAR_DISABLE_DEDUP to enable remote testing
     # with/without dedup module

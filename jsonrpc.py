@@ -870,7 +870,28 @@ class RpcHandler(object):
             if isinstance(params, dict):
                 if incoming_data_source:
                     params['datasource'] = incoming_data_source
-                if "progress_callback" in inspect.getargspec(self.funcs[method]).args:
+                # Python 3.8+: inspect.getargspec was removed; use signature/getfullargspec
+                def _accepts_param(fn, name):
+                    try:
+                        sig = inspect.signature(fn)
+                        for p in sig.parameters.values():
+                            if p.name == name and p.kind in (
+                                p.POSITIONAL_OR_KEYWORD,
+                                p.KEYWORD_ONLY,
+                            ):
+                                return True
+                        return False
+                    except (ValueError, TypeError):
+                        # Some builtins or C-extensions may fail signature(); fallback
+                        try:
+                            spec = inspect.getfullargspec(fn)
+                            args = spec.args or []
+                            kwonly = spec.kwonlyargs or []
+                            return name in args or name in kwonly
+                        except Exception:
+                            return False
+
+                if _accepts_param(self.funcs[method], "progress_callback"):
                     params["progress_callback"] = progress_callback
                 result = self.funcs[method]( **params )
             else:

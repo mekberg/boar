@@ -16,9 +16,9 @@ fi
 if [ -z "$PYTHON_BINARY" ]; then
     export PYTHON_BINARY=$(head -n1 $BOAR_SERVER_CLI|cut -d ' ' -f2)
 fi
-
-# If the interpreter from the boar shebang isn't available (e.g. python3.7),
-# fall back to a reasonable python3/python found on PATH.
+#
+# Test without deduplication
+#
 if ! command -v "$PYTHON_BINARY" >/dev/null 2>&1; then
     if command -v python3 >/dev/null 2>&1; then
         PYTHON_BINARY=$(command -v python3)
