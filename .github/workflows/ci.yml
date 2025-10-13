@@ -14,6 +14,10 @@ jobs:
   unit-tests-nodedup:
     name: Unit tests (no dedup)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -24,6 +28,7 @@ jobs:
         uses: ./.github/actions/setup-boar
         with:
           build-dedup: "false"
+          python-version: ${{ matrix.python-version }}
 
       - name: Assert dedup module is not present
         shell: bash
@@ -46,6 +51,10 @@ jobs:
   unit-tests:
     name: Unit tests (with dedup)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -53,6 +62,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Boar environment
         uses: ./.github/actions/setup-boar
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Run unit tests
         shell: bash
@@ -70,6 +81,10 @@ jobs:
   macro-tests-local:
     name: Macro tests (local)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -77,6 +92,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Boar environment
         uses: ./.github/actions/setup-boar
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Run macro tests (local)
         shell: bash
@@ -90,6 +107,10 @@ jobs:
   macro-tests-simulated-remote:
     name: Macro tests (simulated remote)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -97,6 +118,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Boar environment
         uses: ./.github/actions/setup-boar
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Run macro tests (simulated remote)
         shell: bash
