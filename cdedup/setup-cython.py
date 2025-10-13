@@ -1,4 +1,13 @@
-from setuptools import Extension, setup
+try:
+    from setuptools import Extension, setup
+except ModuleNotFoundError:
+    import ensurepip
+    import importlib
+
+    ensurepip.bootstrap()
+    setuptools = importlib.import_module("setuptools")
+    Extension = setuptools.Extension
+    setup = setuptools.setup
 
 try:
     from Cython.Build import cythonize
