@@ -1,26 +1,31 @@
 name: Setup Boar environment
-description: Common setup steps for Boar CI jobs (Python, venv, deps, cdedup build)
+description: Common setup steps for Boar CI jobs (Python, venv, deps, optional cdedup build)
 inputs:
   python-version:
     description: Python version to use
     required: false
     default: "3.11"
+  build-dedup:
+    description: Build the cdedup extension (compiles sqlite amalgamation as part of build)
+    required: false
+    default: "true"
 runs:
   using: "composite"
   steps:
     - name: Set up Python
-    
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install build dependencies
+    - name: Install build dependencies (for cdedup)
+      if: ${{ inputs.build-dedup == 'true' }}
       shell: bash
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential wget unzip
 
-    - name: Set up virtualenv
+    - name: Set up virtualenv (with cython)
+      if: ${{ inputs.build-dedup == 'true' }}
       shell: bash
       run: |
         python -m venv .venv
@@ -28,7 +33,17 @@ runs:
         python -V
         pip install -U pip pytest cython
 
+    - name: Set up virtualenv (no cython)
+      if: ${{ inputs.build-dedup != 'true' }}
+      shell: bash
+      run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        python -V
+        pip install -U pip pytest
+
     - name: Build dedup extension (cdedup.so)
+      if: ${{ inputs.build-dedup == 'true' }}
       shell: bash
       run: |
         set -euo pipefail

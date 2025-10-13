@@ -11,6 +11,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  unit-tests-nodedup:
+    name: Unit tests (no dedup)
+    runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Boar environment (no dedup)
+        uses: ./.github/actions/setup-boar
+        with:
+          build-dedup: "false"
+
+      - name: Assert dedup module is not present
+        shell: bash
+        run: |
+          test ! -e cdedup.so
+
+      - name: Run unit tests (no dedup)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          export BOAR_SERVER_CLI="$PWD/boar"
+          export BOAR_CACHEDIR="$(mktemp --tmpdir=/tmp/ -d 'boar_tests_cache_XXXXX')"
+          for unittest in tests/test_*.py blobrepo/tests/test_*.py; do
+            echo "Executing $unittest (cachedir $BOAR_CACHEDIR)"
+            BOAR_SKIP_DEDUP_TESTS=1 BOAR_TEST_REMOTE_REPO=0 python "$unittest"
+          done
+          rm -rf "$BOAR_CACHEDIR"
+
   unit-tests:
     name: Unit tests (with dedup)
     runs-on: ubuntu-latest
