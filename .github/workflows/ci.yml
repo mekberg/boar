@@ -11,50 +11,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  All tests:
-    name: Tests (with dedup)
+  unit-tests:
+    name: Unit tests (with dedup)
     runs-on: ubuntu-latest
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Boar environment
+        uses: ./.github/actions/setup-boar
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install build dependencies
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential wget unzip
-
-      - name: Set up virtualenv
-        shell: bash
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -V
-          pip install -U pip pytest cython
-
-      - name: Build dedup extension (cdedup.so)
-        shell: bash
-        run: |
-          set -euo pipefail
-          source .venv/bin/activate
-          make -C cdedup PYTHON="$(which python)"
-          test -e cdedup.so
-
-      - name: Run unit tests and macrotests (no SSH stage)
+      - name: Run unit tests
         shell: bash
         run: |
           set -euo pipefail
           source .venv/bin/activate
           export BOAR_SERVER_CLI="$PWD/boar"
-
-          # Unit tests (with dedup available)
           export BOAR_CACHEDIR="$(mktemp --tmpdir=/tmp/ -d 'boar_tests_cache_XXXXX')"
           for unittest in tests/test_*.py blobrepo/tests/test_*.py; do
             echo "Executing $unittest (cachedir $BOAR_CACHEDIR)"
@@ -62,8 +35,42 @@ jobs:
           done
           rm -rf "$BOAR_CACHEDIR"
 
-          # Macrotests: run local and simulated-remote; skip SSH (no sshd on runners)
+  macro-tests-local:
+    name: Macro tests (local)
+    runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Boar environment
+        uses: ./.github/actions/setup-boar
+
+      - name: Run macro tests (local)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          export BOAR_SERVER_CLI="$PWD/boar"
           echo "Executing local macro tests"
           BOAR_TEST_REMOTE_REPO=0 bash macrotests/macrotest.sh
+
+  macro-tests-simulated-remote:
+    name: Macro tests (simulated remote)
+    runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Boar environment
+        uses: ./.github/actions/setup-boar
+
+      - name: Run macro tests (simulated remote)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          export BOAR_SERVER_CLI="$PWD/boar"
           echo "Executing simulated remote macro tests"
           BOAR_TEST_REMOTE_REPO=1 bash macrotests/macrotest.sh
