@@ -119,7 +119,7 @@ def sorted_bloblist(bloblist):
 def parse_manifest_name(path):
     """Returns a tuple (lowercase hash name, hash). Both are None if
     the path is not a valid manifest filename."""
-    m = re.match("(^|.*/)(manifest-([a-z0-9]+).txt|manifest-([a-z0-9]{32})\.md5|(manifest.md5))", path, flags=re.IGNORECASE)
+    m = re.match(r"(^|.*/)(manifest-([a-z0-9]+)\.txt|manifest-([a-z0-9]{32})\.md5|(manifest\.md5))", path, flags=re.IGNORECASE)
     if not m:
         return None, None
     if m.group(5):

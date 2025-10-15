@@ -427,7 +427,7 @@ def _parse_range(s, default_lower, default_upper):
         return int(s), int(s)
     except ValueError:
         pass
-    m = re.match("^(\d*):(\d*)$", s)
+    m = re.match(r"^(\d*):(\d*)$", s)
     if not m:
         raise UserError("Ranges must be given as N:M where N and M may be an empty string or an integer")
     lower = int(m.group(1)) if m.group(1) else default_lower
