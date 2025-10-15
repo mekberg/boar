@@ -29,7 +29,7 @@ from blobrepo import repository
 from common import *
 from boar_exceptions import *
 
-BOAR_URL_PATTERN = "boar(\+(local|ssh|tcp))?://.+"
+BOAR_URL_PATTERN = r"boar(\+(local|ssh|tcp))?://.+"
 
 def is_boar_url(string):
     return re.match(BOAR_URL_PATTERN, string) != None
@@ -128,8 +128,8 @@ def _connect_cmd(cmd):
     return server.front
 
 def connect_ssh(url):
-    url_with_user_match = re.match("boar\+ssh://(.*)@([^/]+)(/.*)", url)
-    url_without_user_match = re.match("boar\+ssh://([^@/]+)(/.*)", url)
+    url_with_user_match = re.match(r"boar\+ssh://(.*)@([^/]+)(/.*)", url)
+    url_without_user_match = re.match(r"boar\+ssh://([^@/]+)(/.*)", url)
     if url_with_user_match:
         user, host, path = url_with_user_match.groups()
     elif url_without_user_match:
@@ -165,7 +165,7 @@ def connect_ssh(url):
     return _connect_cmd(cmd)
 
 def connect_tcp(url):
-    url_match = re.match("boar(\+tcp)?://(.*):(\d+)/?", url)
+    url_match = re.match(r"boar(\+tcp)?://(.*):(\d+)/?", url)
     assert url_match, "Not a valid Boar URL:" + url
     _, host, port = url_match.groups()
     port = int(port)
@@ -175,7 +175,7 @@ def connect_tcp(url):
         raise UserError("Network error: %s" % e)
 
 def connect_local(url):
-    url_match = re.match("boar\+local://(.*)/?", url)
+    url_match = re.match(r"boar\+local://(.*)/?", url)
     assert url_match, "Not a valid local Boar URL:" + url
     repopath, = url_match.groups()
     boarhome = os.path.dirname(os.path.abspath(__file__))

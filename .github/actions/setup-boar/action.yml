@@ -39,7 +39,9 @@ runs:
         python -m venv .venv
         source .venv/bin/activate
         python -V
-        pip install -U pip pytest cython
+        pip install -U pip
+        pip install -r requirements.txt
+        pip install cython
 
     - name: Set up virtualenv (no cython)
       if: ${{ inputs.build-dedup != 'true' }}
@@ -48,7 +50,8 @@ runs:
         python -m venv .venv
         source .venv/bin/activate
         python -V
-        pip install -U pip pytest
+        pip install -U pip
+        pip install -r requirements.txt
 
     - name: Build dedup extension (cdedup.so)
       if: ${{ inputs.build-dedup == 'true' }}
