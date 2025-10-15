@@ -1,5 +1,11 @@
-from distutils.core import setup
-from distutils.extension import Extension
+try:
+    from setuptools import Extension, setup
+except ImportError:  # pragma: no cover - allow building without setuptools on legacy Python
+    try:
+        from distutils.core import setup  # type: ignore[attr-defined]
+        from distutils.extension import Extension  # type: ignore[attr-defined]
+    except ImportError as exc:  # Python 3.12+ without setuptools present
+        raise SystemExit("setuptools is required to build the cdedup extension") from exc
 
 try:
     from Cython.Build import cythonize
