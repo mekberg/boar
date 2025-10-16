@@ -67,7 +67,8 @@ class TestCli(unittest.TestCase):
         shutil.rmtree(self.testdir)
 
     def testCat(self):
-        testdata = b"a\n\b\n\c"
+        # Use valid escapes: newline, backspace, newline, then 'c'
+        testdata = b"a\n\b\nc"
         call([BOAR, "--repo", "TESTREPOåäö", "co", "TestSessionåäö"])
         write_file("TestSessionåäö/fil.txt", testdata)
         call([BOAR, "ci"], cwd="TestSessionåäö")
