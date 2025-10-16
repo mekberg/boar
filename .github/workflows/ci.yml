@@ -80,8 +80,9 @@ jobs:
           python -m venv .venv
           .\.venv\Scripts\Activate.ps1
           python -V
-          pip install -U pip
-          pip install -r requirements.txt
+          python -m ensurepip --upgrade
+          python -m pip install -U pip
+          python -m pip install -r requirements.txt
 
       - name: Run unit tests (no dedup)
         shell: pwsh
