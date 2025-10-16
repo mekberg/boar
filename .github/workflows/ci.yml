@@ -95,13 +95,20 @@ jobs:
           $testFiles = @()
           $testFiles += Get-ChildItem -Path tests -Filter 'test_*.py' | Select-Object -ExpandProperty FullName
           $testFiles += Get-ChildItem -Path blobrepo\tests -Filter 'test_*.py' | Select-Object -ExpandProperty FullName
-          foreach ($test in $testFiles) {
-            Write-Host "Executing $test (cachedir $cacheDir)"
-            $env:BOAR_SKIP_DEDUP_TESTS = '1'
-            $env:BOAR_TEST_REMOTE_REPO = '0'
-            python $test
+          try {
+            foreach ($test in $testFiles) {
+              Write-Host "Executing $test (cachedir $cacheDir)"
+              $env:BOAR_SKIP_DEDUP_TESTS = '1'
+              $env:BOAR_TEST_REMOTE_REPO = '0'
+              python $test
+              if ($LASTEXITCODE -ne 0) {
+                throw "Test $test failed with exit code $LASTEXITCODE"
+              }
+            }
           }
-          Remove-Item -LiteralPath $cacheDir -Recurse -Force
+          finally {
+            Remove-Item -LiteralPath $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
 
   unit-tests:
     name: Unit tests (with dedup)
