@@ -25,17 +25,10 @@ runs:
         restore-keys: |
           ${{ runner.os }}-pip-${{ inputs.python-version }}-
 
-    - name: Install build dependencies (for cdedup)
-      if: ${{ inputs.build-dedup == 'true' }}
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential wget unzip
-
-    - name: Cache cdedup build artifacts
+    - name: Restore cdedup build artifacts
       if: ${{ inputs.build-dedup == 'true' }}
       id: cdedup-cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: |
           cdedup/sqlite3.c
@@ -47,6 +40,13 @@ runs:
         key: ${{ runner.os }}-cdedup-${{ inputs.python-version }}-${{ hashFiles('cdedup/Makefile', 'cdedup/setup-cython.py', 'cdedup/*.c', 'cdedup/*.h', 'cdedup/*.pyx') }}
         restore-keys: |
           ${{ runner.os }}-cdedup-${{ inputs.python-version }}-
+
+    - name: Install build dependencies (for cdedup)
+      if: ${{ inputs.build-dedup == 'true' && steps.cdedup-cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential wget unzip
 
     - name: Set up virtualenv (with cython)
       if: ${{ inputs.build-dedup == 'true' }}
@@ -70,14 +70,29 @@ runs:
         pip install -r requirements.txt
 
     - name: Build dedup extension (cdedup.so)
-      if: ${{ inputs.build-dedup == 'true' }}
+      if: ${{ inputs.build-dedup == 'true' && steps.cdedup-cache.outputs.cache-hit != 'true' }}
       shell: bash
       run: |
         set -euo pipefail
         source .venv/bin/activate
-        if [ -f cdedup.so ]; then
-          echo "Using cached cdedup.so"
-        else
-          make -C cdedup PYTHON="$(which python)"
-        fi
+        make -C cdedup PYTHON="$(which python)"
         test -e cdedup.so
+
+    - name: Validate cached dedup extension
+      if: ${{ inputs.build-dedup == 'true' }}
+      shell: bash
+      run: |
+        test -e cdedup.so
+
+    - name: Save cdedup build artifacts
+      if: ${{ inputs.build-dedup == 'true' && steps.cdedup-cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          cdedup/sqlite3.c
+          cdedup/sqlite3.h
+          cdedup/sqlite3.o
+          cdedup/cdedup*.so
+          cdedup/build
+          cdedup.so
+        key: ${{ steps.cdedup-cache.outputs.cache-primary-key }}
