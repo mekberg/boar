@@ -34,6 +34,7 @@ import codecs
 import errno
 import time
 import textwrap
+import stat as statmod
 
 from tempfile import TemporaryFile
 from threading import current_thread
@@ -552,13 +553,13 @@ def get_tree(root, sep = os.sep, skip = [], absolute_paths = False, progress_pri
                 if name in skip:
                     continue
                 try:
-                    stat = os.stat(name)
+                    st = os.stat(name)
                 except OSError as e:
                     if e.errno == 2 and os.path.islink(name):
                         print("Warning: ignoring broken symbolic link: ", path + name)
                         continue
                     raise
-                if os.path.stat.S_ISDIR(stat.st_mode):
+                if statmod.S_ISDIR(st.st_mode):
                     rec_tree(name, path + name + sep)
                 else:
                     all_files.append(path + name)
