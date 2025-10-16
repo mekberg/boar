@@ -42,7 +42,7 @@ runs:
           ${{ runner.os }}-cdedup-${{ inputs.python-version }}-
 
     - name: Install build dependencies (for cdedup)
-      if: ${{ inputs.build-dedup == 'true' && steps.cdedup-cache.outputs.cache-hit != 'true' }}
+      if: ${{ runner.os == 'Linux' && inputs.build-dedup == 'true' && steps.cdedup-cache.outputs.cache-hit != 'true' }}
       shell: bash
       run: |
         sudo apt-get update
@@ -51,31 +51,50 @@ runs:
     - name: Set up virtualenv (with cython)
       if: ${{ inputs.build-dedup == 'true' }}
       shell: bash
+      env:
+        PIP_DISABLE_PIP_VERSION_CHECK: "1"
       run: |
+        set -euo pipefail
         python -m venv .venv
-        source .venv/bin/activate
-        python -V
-        pip install -U pip
-        pip install -r requirements.txt
-        pip install cython
+        if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+          VENV_PY=".venv/Scripts/python"
+        else
+          VENV_PY=".venv/bin/python"
+        fi
+        "$VENV_PY" -V
+        # Always invoke pip via the venv's python to avoid replacing pip.exe while running (Windows)
+        "$VENV_PY" -m pip install -U pip
+        "$VENV_PY" -m pip install -r requirements.txt
+        "$VENV_PY" -m pip install cython
 
     - name: Set up virtualenv (no cython)
       if: ${{ inputs.build-dedup != 'true' }}
       shell: bash
+      env:
+        PIP_DISABLE_PIP_VERSION_CHECK: "1"
       run: |
+        set -euo pipefail
         python -m venv .venv
-        source .venv/bin/activate
-        python -V
-        pip install -U pip
-        pip install -r requirements.txt
+        if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+          VENV_PY=".venv/Scripts/python"
+        else
+          VENV_PY=".venv/bin/python"
+        fi
+        "$VENV_PY" -V
+        "$VENV_PY" -m pip install -U pip
+        "$VENV_PY" -m pip install -r requirements.txt
 
     - name: Build dedup extension (cdedup.so)
       if: ${{ inputs.build-dedup == 'true' && steps.cdedup-cache.outputs.cache-hit != 'true' }}
       shell: bash
       run: |
         set -euo pipefail
-        source .venv/bin/activate
-        make -C cdedup PYTHON="$(which python)"
+        if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+          VENV_PY=".venv/Scripts/python"
+        else
+          VENV_PY=".venv/bin/python"
+        fi
+        make -C cdedup PYTHON="$VENV_PY"
         test -e cdedup.so
 
     - name: Validate cached dedup extension
