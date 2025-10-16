@@ -77,17 +77,20 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           python -m venv .venv
-          .\.venv\Scripts\Activate.ps1
-          python -V
-          pip install -U pip
-          pip install -r requirements.txt
+          $venvPy = Join-Path $PWD '.venv/Scripts/python.exe'
+          & $venvPy -V
+          $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
+          # Always upgrade/install via the venv's python to avoid replacing pip.exe while it's running
+          & $venvPy -m pip install --upgrade pip
+          & $venvPy -m pip install -r requirements.txt
 
       - name: Run unit tests (no dedup)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          .\.venv\Scripts\Activate.ps1
+          $venvPy = Join-Path $PWD '.venv/Scripts/python.exe'
           $env:BOAR_SERVER_CLI = "${PWD}\boar"
           $cacheDir = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ("boar_tests_cache_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
           New-Item -ItemType Directory -Path $cacheDir | Out-Null
@@ -100,7 +103,7 @@ jobs:
               Write-Host "Executing $test (cachedir $cacheDir)"
               $env:BOAR_SKIP_DEDUP_TESTS = '1'
               $env:BOAR_TEST_REMOTE_REPO = '0'
-              python $test
+              & $venvPy $test
               if ($LASTEXITCODE -ne 0) {
                 throw "Test $test failed with exit code $LASTEXITCODE"
               }
