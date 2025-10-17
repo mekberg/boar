@@ -557,7 +557,9 @@ class Workdir(object):
 
     def wd_sessionpath(self, wdpath):
         """Transforms a workdir path to a session path"""
-        if os.path.isabs(wdpath):
+        # isabs() changed in 3.13, need to check for slash explicitly now on windows. 
+        # See https://github.com/python/cpython/issues/44626
+        if os.path.isabs(wdpath) or wdpath.startswith("/") or wdpath.startswith("\\"):
             raise UserError("Given workdir subpath points outside current session: '%s'" % wdpath)
         if self.offset != "":
             wdpath = os.path.join(self.offset, wdpath)
