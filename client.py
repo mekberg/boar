@@ -92,11 +92,12 @@ def create_boar_proxy(to_server, from_server):
             allowed_exceptions.append(e)
 
     cb = lambda x: sys.stdout.write("Progress: %s%%" % (x*100))
-    # Ensure correct stream directions:
-    # - s_in must be readable (server -> client), i.e., child's stdout (p.stdout)
-    # - s_out must be writable (client -> server), i.e., child's stdin (p.stdin)
-    # Callers pass (to_server=p.stdout, from_server=p.stdin), so swap here.
-    transport = jsonrpc.BoarMessageClient(to_server, from_server)
+    # Ensure correct stream directions for the JSON-RPC transport:
+    # - s_in must be readable (data coming FROM the server TO the client)
+    #   which is 'from_server' (rb)
+    # - s_out must be writable (data going FROM the client TO the server)
+    #   which is 'to_server' (wb)
+    transport = jsonrpc.BoarMessageClient(from_server, to_server)
     server = jsonrpc.ServerProxy(transport=transport, allowed_exceptions=allowed_exceptions)
 
     try:
@@ -124,7 +125,8 @@ def _connect_cmd(cmd):
                          stderr = None)
     if p.poll():
         raise UserError("Transport command failed with error code %s" % (p.returncode))
-    server = create_boar_proxy(p.stdout, p.stdin)
+    # Child process acts as server: write TO server via p.stdin (wb), read FROM server via p.stdout (rb)
+    server = create_boar_proxy(p.stdin, p.stdout)
     return server.front
 
 def connect_ssh(url):
