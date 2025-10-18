@@ -31,7 +31,14 @@ if ! command -v "$PYTHON_BINARY" >/dev/null 2>&1; then
 fi
 
 test -e run_tests.sh || { echo "This command must be executed in the boar installation top dir"; exit 1; }
-test ! -e cdedup.so || { echo "ERROR: dedup module must not be installed for these tests"; exit 1; }
+"$PYTHON_BINARY" - <<'PY'
+import importlib.util
+import sys
+
+if importlib.util.find_spec("cdedup") is not None:
+    print("ERROR: dedup module must not be installed for these tests", file=sys.stderr)
+    raise SystemExit(1)
+PY
 
 #
 # Test WITHOUT deduplication

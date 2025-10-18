@@ -91,21 +91,64 @@ static inline void assert(int c, const char* msg){
   }
 }
 
+#ifdef ENABLE_BLOCKSDB_LOGGING
+#ifdef _WIN32
+#include <windows.h>
+#include <process.h>
+
+struct timeval {
+  long tv_sec;
+  long tv_usec;
+};
+
+static int gettimeofday(struct timeval* tv, void* tz) {
+  FILETIME ft;
+  unsigned long long micros;
+  const unsigned long long EPOCH_DIFF = 11644473600000000ULL;
+  (void)tz;
+  GetSystemTimeAsFileTime(&ft);
+  micros = (((unsigned long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime) / 10ULL;
+  micros -= EPOCH_DIFF;
+  tv->tv_sec = (long)(micros / 1000000ULL);
+  tv->tv_usec = (long)(micros % 1000000ULL);
+  return 0;
+}
+
+static int getpid_wrapper(void) {
+  return _getpid();
+}
+#else
 #include "unistd.h"
 #include "sys/time.h"
+static int getpid_wrapper(void) {
+  return getpid();
+}
+#endif
 
-static void blocksdb_log(const char* msg ) { 
+static void blocksdb_log(const char* msg ) {
   static FILE* log = NULL;
+#ifdef _WIN32
+  char logfile[MAX_PATH];
+  DWORD len = GetTempPathA(sizeof(logfile), logfile);
+  if(len == 0 || len > sizeof(logfile) - 32) {
+    strcpy(logfile, "boar-blocksdb-log.txt");
+  } else {
+    strcat(logfile, "boar-blocksdb-log.txt");
+  }
+#else
   char logfile[] = "/tmp/boar-blocksdb-log.txt";
+#endif
   if(log == NULL)
     log = fopen(logfile, "a");
-  assert(log, "Couldn't open log file");
+  if(!log)
+    return;
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  const long long time_in_mill = 
-    (tv.tv_sec) * 1000000 + (tv.tv_usec)  - 1366644831735000ll;  
-  fprintf(log, "%lld {PID %d} %s\n", time_in_mill, getpid(), msg); 
+  const long long time_in_mill =
+    (tv.tv_sec) * 1000000 + (tv.tv_usec)  - 1366644831735000ll;
+  fprintf(log, "%lld {PID %d} %s\n", time_in_mill, getpid_wrapper(), msg);
 }
+#endif
 
 #ifdef ENABLE_BLOCKSDB_LOGGING
 static void trace_callback( void* udp, const char* sql ) { 

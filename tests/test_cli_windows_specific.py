@@ -107,6 +107,16 @@ class TestCliWindowsSpecific(unittest.TestCase):
         call([BOAR, "mkrepo", "TESTREPO"])
         assert os.path.exists("TESTREPO")
 
+    @unittest.skipIf(os.name != "nt", "Windows-specific check")
+    def testDedupModuleLoads(self):
+        try:
+            import cdedup  # noqa: F401  - ensure import succeeds
+        except ImportError as exc:
+            self.fail("cdedup module should be importable on Windows: %s" % (exc,))
+        from deduplication import dedup_available, cdedup_version
+        self.assertTrue(dedup_available)
+        self.assertIsNotNone(cdedup_version)
+
     def testEmpty(self):
         pass
 

@@ -1,20 +1,35 @@
 PYTHON ?= python3
 
-all: ../cdedup.so
+DEST_EXT := $(strip $(shell $(PYTHON) - <<'PY'
+import os
+print('.pyd' if os.name == 'nt' else '.so')
+PY
+))
 
-sqlite3.c:
-	wget "http://www.sqlite.org/2013/sqlite-amalgamation-3071601.zip" -O sqlite3.zip
-	unzip -o sqlite3.zip 
-	cp sqlite-amalgamation-3071601/sqlite3.c .
-	cp sqlite-amalgamation-3071601/sqlite3.h .
-	rm -r sqlite-amalgamation-3071601
-	rm sqlite3.zip
+DEST_FILE := ../cdedup$(DEST_EXT)
 
-sqlite3.o: sqlite3.c sqlite3.h
-	gcc -O2 -c -fPIC -Wall sqlite3.c
+all: $(DEST_FILE)
 
-../cdedup.so: sqlite3.o blocksdb.c blocksdb.h rollsum.c rollsum.h intset.c intset.h circularbuffer.h circularbuffer.c setup-cython.py crc16.h Makefile
+$(DEST_FILE): blocksdb.c blocksdb.h rollsum.c rollsum.h intset.c intset.h circularbuffer.h circularbuffer.c setup-cython.py crc16.h Makefile cdedup.pyx
 	$(PYTHON) setup-cython.py build_ext --inplace
-	@# Copy the newest built extension (ABI-specific name) to repo root with a stable name
-	@set -e; sofile=$$(ls -t cdedup*.so | head -n1); test -n "$$sofile"; cp -f "$$sofile" ../cdedup.so
+	$(PYTHON) - <<'PY'
+import os
+import shutil
+from pathlib import Path
+
+base = Path('.').resolve()
+root = base.parent
+candidates = sorted(list(base.glob('cdedup*.so')) + list(base.glob('cdedup*.pyd')), key=lambda p: p.stat().st_mtime, reverse=True)
+if not candidates:
+    raise SystemExit('No built cdedup extension found')
+dest = root / ('cdedup.pyd' if os.name == 'nt' else 'cdedup.so')
+shutil.copy2(candidates[0], dest)
+print(f'Copied {candidates[0].name} -> {dest.name}')
+PY
+
+.PHONY: clean
+
+clean:
+	rm -f ../cdedup.so ../cdedup.pyd
+	rm -f cdedup*.so cdedup*.pyd cdedup.c sqlite3.c sqlite3.h
 
