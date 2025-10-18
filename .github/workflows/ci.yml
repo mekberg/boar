@@ -113,6 +113,102 @@ jobs:
             Remove-Item -LiteralPath $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
           }
 
+  unit-tests-windows:
+    name: Unit tests (Windows, dedup)
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: *py_versions
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements*.txt', 'setup.py', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m venv .venv
+          $venvPy = Join-Path $PWD '.venv/Scripts/python.exe'
+          & $venvPy -V
+          $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
+          & $venvPy -m pip install --upgrade pip
+          & $venvPy -m pip install -r requirements.txt
+          & $venvPy -m pip install cython
+
+      - name: Build dedup extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $venvPy = Join-Path $PWD '.venv/Scripts/python.exe'
+          Push-Location cdedup
+          try {
+            & $venvPy setup-cython.py build_ext --inplace
+            if ($LASTEXITCODE -ne 0) {
+              throw "cdedup build failed with exit code $LASTEXITCODE"
+            }
+            $module = Get-ChildItem -Filter 'cdedup*.pyd' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if (-not $module) {
+              throw 'No built cdedup module found'
+            }
+            Copy-Item -LiteralPath $module.FullName -Destination (Join-Path $PWD '..\cdedup.pyd') -Force
+          }
+          finally {
+            Pop-Location
+          }
+
+      - name: Assert dedup module is present
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path -Path (Join-Path $PWD 'cdedup.pyd'))) {
+            throw 'cdedup.pyd was not produced during the build'
+          }
+          $venvPy = Join-Path $PWD '.venv/Scripts/python.exe'
+          & $venvPy -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("cdedup") else 1)'
+
+      - name: Run unit tests (dedup)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $venvPy = Join-Path $PWD '.venv/Scripts/python.exe'
+          $env:BOAR_SERVER_CLI = "${PWD}\boar"
+          Remove-Item Env:BOAR_SKIP_DEDUP_TESTS -ErrorAction SilentlyContinue
+          $cacheDir = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ("boar_tests_cache_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
+          New-Item -ItemType Directory -Path $cacheDir | Out-Null
+          $env:BOAR_CACHEDIR = $cacheDir
+          $testFiles = @()
+          $testFiles += Get-ChildItem -Path tests -Filter 'test_*.py' | Select-Object -ExpandProperty FullName
+          $testFiles += Get-ChildItem -Path blobrepo\tests -Filter 'test_*.py' | Select-Object -ExpandProperty FullName
+          try {
+            foreach ($test in $testFiles) {
+              Write-Host "Executing $test (cachedir $cacheDir)"
+              $env:BOAR_TEST_REMOTE_REPO = '0'
+              & $venvPy $test
+              if ($LASTEXITCODE -ne 0) {
+                throw "Test $test failed with exit code $LASTEXITCODE"
+              }
+            }
+          }
+          finally {
+            Remove-Item -LiteralPath $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
   unit-tests:
     name: Unit tests (with dedup)
     runs-on: ubuntu-latest

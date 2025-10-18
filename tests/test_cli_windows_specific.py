@@ -107,6 +107,7 @@ class TestCliWindowsSpecific(unittest.TestCase):
         call([BOAR, "mkrepo", "TESTREPO"])
         assert os.path.exists("TESTREPO")
 
+    @unittest.skipIf(os.getenv("BOAR_SKIP_DEDUP_TESTS") == "1", "Deduplication tests disabled")
     @unittest.skipIf(os.name != "nt", "Windows-specific check")
     def testDedupModuleLoads(self):
         try:
