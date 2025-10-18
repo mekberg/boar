@@ -1,7 +1,3 @@
-from __future__ import print_function
-
-
-from builtins import object
 class GenericStateMachine(object):
     def __init__(self):
         self.states = set()

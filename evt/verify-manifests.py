@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Copyright 2012 Mats Ekberg
@@ -33,8 +33,6 @@ detect deviations from the file structure described in the
 manifest. As long as the files are intact, the file structure can
 always be reconstructed by using the manifest.
 """
-from __future__ import print_function
-
 # It would easy to import a lot of boar modules here, but the whole
 # point of an _external_ verification tool is that it should not rely
 # on anything in the boar package.

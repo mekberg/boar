@@ -15,12 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import with_statement
-from builtins import chr
-from builtins import str
-from builtins import range
-from builtins import object
-
 import sys
 import os
 import time

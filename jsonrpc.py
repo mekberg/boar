@@ -1,9 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-from builtins import str
-from builtins import object
 __version__ = "2008-08-31-beta"
 __author__   = "Roland Koebler <rk(at)simple-is-better.org>"
 __license__  = """Copyright (c) 2007-2008 by Roland Koebler (rk(at)simple-is-better.org)
@@ -263,7 +260,7 @@ class JsonRpc20(object):
         """ Serialize a JSON-RPC-Request. Accepts a method name and parameters.
         """
         if not isinstance(method, str):
-            raise TypeError('"method" must be a string (or unicode string).')
+            raise TypeError('"method" must be a string.')
         if not isinstance(params, (tuple, list, dict)):
             raise TypeError("params must be a tuple/list/dict or None.")
         obj = { "jsonrpc": "2.0",
@@ -314,7 +311,7 @@ class JsonRpc20(object):
         if not isinstance(data["method"], str):
             raise RPCInvalidRPC("""Invalid Request, "method" must be a string.""")
         if "params" not in data:        data["params"] = ()
-        #convert params-keys from unicode to str
+        # Ensure params dictionary keys are str instances
         elif isinstance(data["params"], dict):
             try:
                 data["params"] = dictkeyclean(data["params"])

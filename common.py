@@ -14,16 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import with_statement
-from __future__ import print_function
-
-from builtins import str
-from builtins import object
-try:
-    basestring
-except NameError:
-    basestring = str
-
 import hashlib
 import re
 import os
@@ -263,7 +253,7 @@ def checksum_file(f, checksum_names, start = 0, end = None, progress_callback = 
     checksums. The desired checksums are specified in a list by name
     in the 'checksum_names' argument."""
     assert f, "File must not be None"
-    if isinstance(f, basestring):
+    if isinstance(f, str):
         with safe_open(f, "rb") as fobj:
             return checksum_fileobj(fobj, checksum_names, start, end, progress_callback = progress_callback)
     return checksum_fileobj(f, checksum_names, start, end)
@@ -612,7 +602,7 @@ class FileMutex(object):
         be a hash of the mutex_name, and therefore the mutex_name does
         not need to be a valid filename.
         """
-        assert isinstance(mutex_name, basestring)
+        assert isinstance(mutex_name, str)
         self.owner_thread = current_thread()
         self.mutex_name = mutex_name
         self.mutex_id = md5sum(mutex_name.encode("utf-8"))

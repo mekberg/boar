@@ -14,13 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import with_statement
-from builtins import map
-from builtins import str
-from builtins import range
-from builtins import object
-
 """
 The Repository together with SessionWriter and SessionReader are the
 only classes that directly accesses the repository.
