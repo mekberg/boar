@@ -682,16 +682,10 @@ class FileMutex(object):
             self.release()
 
 def tounicode(s):
-    """Decodes a string from the system default encoding to
-    unicode. Unicode strings are returned unchanged. None argument
-    returns None result."""
-    if s == None:
+    """Return *s* as a text string using the filesystem encoding."""
+    if s is None:
         return None
-    if isinstance(s, str):
-        return s
-    s = s.decode(locale.getpreferredencoding())
-    assert type(s) == str
-    return s
+    return os.fsdecode(s)
 
 def dedicated_stdout():
     return sys.stdout
@@ -700,16 +694,12 @@ def encoded_stdout():
     return sys.stdout
 
 def printable(s):
-    """Safely convert the given unicode string to a normal <str>
-    according to the preferred system encoding. Some characters may be
-    mangled if they cannot be expressed in the local encoding, but
-    under no circumstances will an encoding exception be raised."""
-    if type(s) == str:
+    """Return *s* as a string suitable for user-facing output."""
+    if isinstance(s, str):
         return s
-    elif type(s) == str:
-        return s.encode(locale.getpreferredencoding(), "backslashreplace")
-    else:
-        raise ValueError("Argument must be a string or unicode")
+    if isinstance(s, bytes):
+        return s.decode(locale.getpreferredencoding(), "backslashreplace")
+    raise ValueError("Argument must be a string or bytes")
 
 
 def dir_exists(path):
