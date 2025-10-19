@@ -20,15 +20,6 @@ this interface. Secondly, all arguments and return values are
 primitive values that can be serialized easily, which makes it easy to
 implement an RPC mechanism for this interface.
 """
-from __future__ import division
-from __future__ import print_function
-
-from builtins import str
-from builtins import range
-from builtins import object
-
-# Python 3: ensure basestring identifier exists for legacy isinstance checks
-basestring = str
 from blobrepo import repository
 from boar_exceptions import *
 import sys
@@ -413,7 +404,7 @@ class Front(object):
         """Creates a new snapshot for the given session. Commit() must
         be called when the construction of the new snapshot is
         completed()."""
-        assert isinstance(session_name, basestring), session_name
+        assert isinstance(session_name, str), session_name
         assert not self.new_session, "There already exists an active new snapshot"
         self.new_session = self.repo.create_snapshot(session_name = session_name,
                                                      base_session = base_session,
@@ -568,7 +559,7 @@ class Front(object):
         """Commit a snapshot started with create_snapshot(). The session must
         exist beforehand. Accepts an optional log message."""
         if log_message != None:
-            assert type(log_message) == str, "Log message must be in unicode"
+            assert type(log_message) == str, "Log message must be a string"
         assert type(session_name) == str
         if not self.find_last_revision(session_name):
             raise UserError("Session '%s' does not seem to exist in the repo." % (session_name))

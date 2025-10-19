@@ -14,12 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function
-from __future__ import with_statement
-from builtins import hex
-from builtins import range
-from builtins import object
-
 from common import *
 from ordered_dict import OrderedDict
 from jsonrpc import FileDataSource

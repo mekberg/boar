@@ -15,7 +15,7 @@ The repository has a simple layout to ensure that the data can easily be extract
 For more on the project, check out the [FAQ](https://github.com/mekberg/boar/wiki/FAQ). If you are still wondering why the heck the world needs another VCS or Backup software, *please read the [Rationale](https://github.com/mekberg/boar/wiki/Rationale)*.
 
 # What do I need to run it?
-Boar is written in Python and tested on Windows and Linux. The Windows installer is self-contained. On Linux, you will need python 2.6 or higher. Also, you should know that boar is (so far) a command line tool and will require some basic command line skills.
+Boar is written in Python and tested on Windows and Linux. The Windows installer is self-contained. On Linux, you will need Python 3.8 or higher. Also, you should know that boar is (so far) a command line tool and will require some basic command line skills.
 
 # Sounds great! How do I get started?
 First, download boar from the [downloads page](https://github.com/mekberg/boar/packages).Then the [Quickstart guide](https://github.com/mekberg/boar/wiki/Quickstart) and the [Command Reference](https://github.com/mekberg/boar/wiki/CommandReference) should get you going. You might also want to check out the [FAQ](https://bitbucket.org/mats_ekberg/boar/wiki/FAQ).

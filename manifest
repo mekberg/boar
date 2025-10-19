@@ -1,13 +1,14 @@
-#!/bin/env python
+#!/usr/bin/env python3
 
 from common import *
 from treecomp import TreeComparer
 import sys
+import io
 
-import codecs
-
-# Avoid problems with unicode chars when piping the output of this program
-sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+else:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 class ManifestTree:
     def __init__(self, path):
@@ -35,7 +36,7 @@ def get_manifest_fn(root):
     return manifests[0]
 
 def write_manifest(manifest_contents, root):
-    assert type(manifest_contents) == unicode
+    assert isinstance(manifest_contents, str)
     assert not list_manifests(root)
     manifest_contents = manifest_contents.encode("utf8")
     manifest_fn = "manifest-%s.md5" % md5sum(manifest_contents)
@@ -67,17 +68,16 @@ def load_tree(path):
 
 def mkmanifest(tree):
     """Returns the manifest as a utf-8 encoded string"""
-    manifest = u""
+    manifest = ""
     for fn, md5 in sorted(tree.items()):
-        manifest += u"%s *%s\n" % (md5, fn)
-    assert type(manifest) == unicode
+        manifest += f"{md5} *{fn}\n"
+    assert isinstance(manifest, str)
     return manifest
 
 def ugetcwd():
-    return os.getcwd().decode(locale.getpreferredencoding())
+    return os.getcwd()
 
 def cmd_init():
-    import locale
     cwd = ugetcwd()
     tree = load_tree(cwd)
     manifest = mkmanifest(tree)
@@ -92,7 +92,7 @@ def cmd_accept():
     tree = load_tree(ugetcwd())
     manifest = mkmanifest(tree)
     if expected_md5 and expected_md5 != md5sum(manifest.encode("utf8")):
-        print "Current tree status does not match given checksum", expected_md5, md5sum(manifest)
+        print("Current tree status does not match given checksum", expected_md5, md5sum(manifest))
         sys.exit(1)
     replace_manifest(manifest, ugetcwd())
 
@@ -103,11 +103,11 @@ def cmd_diff():
     for md5, fn in read_md5sum(manifest_fn):
         old_dict[fn] = md5
     new_dict = load_tree(ugetcwd())
-    print "# Comparing with manifest", manifest_fn
+    print("# Comparing with manifest", manifest_fn)
     number_of_unchanged_files, number_of_new_files, number_of_deleted_files = print_diff(old_dict, new_dict)
     #print number_of_unchanged_files, "unchanged files"
-    print "# Set summary:", number_of_new_files, "new files,", number_of_deleted_files, "deleted files, ", len(set(new_dict.values())), "files in total"
-    print "# Current tree manifest md5:", md5sum(mkmanifest(new_dict).encode("utf8"))
+    print("# Set summary:", number_of_new_files, "new files,", number_of_deleted_files, "deleted files, ", len(set(new_dict.values())), "files in total")
+    print("# Current tree manifest md5:", md5sum(mkmanifest(new_dict).encode("utf8")))
 
 def print_diff(old_dict, new_dict):
     old_set = set(old_dict.values())
@@ -121,12 +121,12 @@ def print_diff(old_dict, new_dict):
             assert old_md5 and not new_md5
             if old_md5 not in new_set:
                 set_change = " -"
-            print "D %s %s" % (set_change, fn)
+            print(f"D {set_change} {fn}")
         elif tc.is_new(fn):
             assert new_md5 and not old_md5
             if new_md5 not in old_set:
                 set_change = "+ "
-            print "N %s %s" % (set_change, fn)
+            print(f"N {set_change} {fn}")
         elif tc.is_modified(fn):
             assert old_md5 and new_md5
             a = " "
@@ -137,7 +137,7 @@ def print_diff(old_dict, new_dict):
             if new_md5 not in old_set:
                 # A new file is introduced in the set
                 a = "+"
-            print "M %s %s" % (a+r, fn)
+            print(f"M {a+r} {fn}")
         else:
             assert False
     number_of_unchanged_files = len(old_set & new_set)

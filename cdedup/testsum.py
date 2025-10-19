@@ -1,4 +1,3 @@
-from __future__ import print_function
 # Copyright 2010 Mats Ekberg
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@ from __future__ import print_function
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from builtins import range
 import rollingcs
 from time import time
 

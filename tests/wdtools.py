@@ -1,4 +1,3 @@
-from builtins import object
 import os, sys, tempfile
 
 from common import convert_win_path_to_unix, md5sum, str2bytes, bytes2str

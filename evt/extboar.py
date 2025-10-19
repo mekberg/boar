@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Copyright 2013 Mats Ekberg
@@ -24,7 +24,6 @@ boar cli tool API. This makes this module useful even for verifying
 the behaviour of boar itself.
 """
 
-from builtins import object
 import json
 import re
 import sys
