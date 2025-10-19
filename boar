@@ -15,13 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import with_statement
-from __future__ import division
-from __future__ import print_function
-from builtins import map
-from builtins import str
-from builtins import range
-from builtins import object
 import sys
 import os
 import time
@@ -48,8 +41,7 @@ import boarserve
 
 json = get_json_module()
 
-assert sys.version_info.major >= 3
-assert sys.version_info.minor >= 7
+assert sys.version_info >= (3, 8)
 
 def execfile(filepath):
     with open(filepath, 'rb') as f:

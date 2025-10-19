@@ -14,12 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import division
-from __future__ import print_function
-from __future__ import with_statement
-from builtins import str
-from builtins import object
-
 import os
 from front import Front, DryRunFront
 import blobrepo.repository as repository

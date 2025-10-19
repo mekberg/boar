@@ -13,8 +13,6 @@ Environment variables respected (same as the shell runner):
   - BOAR_SERVER_CLI: path to boar entrypoint used by tests
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import subprocess

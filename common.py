@@ -14,16 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import with_statement
-from __future__ import print_function
-
-from builtins import str
-from builtins import object
-try:
-    basestring
-except NameError:
-    basestring = str
-
 import hashlib
 import re
 import os
@@ -263,7 +253,7 @@ def checksum_file(f, checksum_names, start = 0, end = None, progress_callback = 
     checksums. The desired checksums are specified in a list by name
     in the 'checksum_names' argument."""
     assert f, "File must not be None"
-    if isinstance(f, basestring):
+    if isinstance(f, str):
         with safe_open(f, "rb") as fobj:
             return checksum_fileobj(fobj, checksum_names, start, end, progress_callback = progress_callback)
     return checksum_fileobj(f, checksum_names, start, end)
@@ -612,7 +602,7 @@ class FileMutex(object):
         be a hash of the mutex_name, and therefore the mutex_name does
         not need to be a valid filename.
         """
-        assert isinstance(mutex_name, basestring)
+        assert isinstance(mutex_name, str)
         self.owner_thread = current_thread()
         self.mutex_name = mutex_name
         self.mutex_id = md5sum(mutex_name.encode("utf-8"))
@@ -692,16 +682,10 @@ class FileMutex(object):
             self.release()
 
 def tounicode(s):
-    """Decodes a string from the system default encoding to
-    unicode. Unicode strings are returned unchanged. None argument
-    returns None result."""
-    if s == None:
+    """Return *s* as a text string using the filesystem encoding."""
+    if s is None:
         return None
-    if isinstance(s, str):
-        return s
-    s = s.decode(locale.getpreferredencoding())
-    assert type(s) == str
-    return s
+    return os.fsdecode(s)
 
 def dedicated_stdout():
     return sys.stdout
@@ -710,16 +694,12 @@ def encoded_stdout():
     return sys.stdout
 
 def printable(s):
-    """Safely convert the given unicode string to a normal <str>
-    according to the preferred system encoding. Some characters may be
-    mangled if they cannot be expressed in the local encoding, but
-    under no circumstances will an encoding exception be raised."""
-    if type(s) == str:
+    """Return *s* as a string suitable for user-facing output."""
+    if isinstance(s, str):
         return s
-    elif type(s) == str:
-        return s.encode(locale.getpreferredencoding(), "backslashreplace")
-    else:
-        raise ValueError("Argument must be a string or unicode")
+    if isinstance(s, bytes):
+        return s.decode(locale.getpreferredencoding(), "backslashreplace")
+    raise ValueError("Argument must be a string or bytes")
 
 
 def dir_exists(path):
