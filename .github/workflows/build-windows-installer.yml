@@ -1,0 +1,74 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [ boar-py3-devel, main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+
+jobs:
+  windows:
+    name: Build boar.exe and Installer (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build boar.exe with PyInstaller
+        run: |
+          pyinstaller --noconfirm --clean --name boar --onefile boar
+          Get-ChildItem dist | Format-Table -AutoSize
+
+      - name: Smoke test boar.exe
+        run: |
+          .\dist\boar.exe --version
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --no-progress -y
+
+      - name: Build installer with Inno Setup
+        run: |
+          $iscc = "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found"
+          }
+          & $iscc "innosetup\innosetup.iss"
+
+      - name: Upload boar.exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: boar-windows-exe
+          path: dist/boar.exe
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: boar-windows-installer
+          path: boar-setup-win32.exe
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          $exe = Resolve-Path dist/boar.exe
+          $installer = Resolve-Path boar-setup-win32.exe
+          "Built executable: $exe" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Built installer:  $installer" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
