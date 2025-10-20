@@ -46,17 +46,27 @@ jobs:
 
       - name: Install Inno Setup
         run: |
-          choco install innosetup --no-progress -y
+          choco install innosetup --no-progress -y || choco upgrade innosetup --no-progress -y
 
       - name: Build installer with Inno Setup
         run: |
-          $iscc = "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          $iscc = $null
+          $cmd = Get-Command iscc.exe -ErrorAction SilentlyContinue
+          if ($cmd) { $iscc = $cmd.Source }
+          if (-not $iscc) {
+            $candidates = @(
+              "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+              "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+              "C:\\ProgramData\\chocolatey\\lib\\innosetup\\tools\\ISCC.exe"
+            )
+            foreach ($p in $candidates) { if (Test-Path $p) { $iscc = $p; break } }
           }
-          if (-not (Test-Path $iscc)) {
+          if (-not $iscc -or -not (Test-Path $iscc)) {
+            Write-Host "ISCC.exe not found in common locations."
+            Write-Host "Checked: $($candidates -join ', ')"
             throw "ISCC.exe not found"
           }
+          Write-Host "Using ISCC: $iscc"
           & $iscc "innosetup\innosetup.iss"
 
       - name: Upload boar.exe artifact
@@ -74,7 +84,15 @@ jobs:
       - name: Workflow summary
         if: always()
         run: |
-          $exe = Resolve-Path dist/boar.exe
-          $installer = Resolve-Path boar-setup-win32.exe
-          "Built executable: $exe" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Built installer:  $installer" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if (Test-Path dist/boar.exe) {
+            $exe = Resolve-Path dist/boar.exe
+            "Built executable: $exe" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } else {
+            "Executable not found (dist/boar.exe)." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
+          if (Test-Path boar-setup-win32.exe) {
+            $installer = Resolve-Path boar-setup-win32.exe
+            "Built installer:  $installer" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } else {
+            "Installer not found (boar-setup-win32.exe)." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
