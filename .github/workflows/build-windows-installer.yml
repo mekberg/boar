@@ -5,6 +5,12 @@ on:
     branches: [ boar-py3-devel, main, master ]
     tags: [ 'v*' ]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      python-version:
+        description: 'Python version to build with'
+        required: false
+        default: '3.11'
 
 jobs:
   windows:
@@ -20,7 +26,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ github.event.inputs.python-version || '3.11' }}
           cache: 'pip'
 
       - name: Install build dependencies
