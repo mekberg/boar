@@ -22,7 +22,7 @@ if __name__ == '__main__':
     sys.path.insert(0, boar_home)
     sys.path.insert(0, os.path.join(boar_home, "macrotests"))
 
-import randtree
+# import randtree
 from common import get_tree, md5sum, md5sum_file, str2bytes, bytes2str
 
 def call(cmd, check=True, cwd=None):
