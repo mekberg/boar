@@ -40,6 +40,28 @@ This repository contains Boar, a snapshotting backup/version control tool aimed 
 - Tests often rely on environment variables such as BOAR_CACHEDIR, BOAR_SERVER_CLI, BOAR_TEST_REMOTE_REPO, and BOAR_SKIP_DEDUP_TESTS. If you add new tests or scripts, make sure they respect the existing workflow so run_tests.sh keeps working.
 - This repository intentionally keeps legacy assets (old regression archives, Windows installers, etc.) for reproducibility. Avoid deleting or moving them without updating the integration tests that reference those artifacts.
 
-Refer back to this document when navigating the code; it should help you locate the right layer for your changes and respect the project's cross-version compatibility constraints.
+## Running tests
 
-Make sure to activate the venv before running any tests.
+- The virtual environment is located in `.venv/` (not `venv/`). Always activate it before running tests: `source .venv/bin/activate`
+- Macrotests must be run through `macrotests/macrotest.sh`, not directly. This script sets up required environment variables like `BOAR`, `BOAR_CACHEDIR`, and creates temporary test directories.
+- To run a specific macrotest: `bash macrotests/macrotest.sh test_name.sh`
+- To run all macrotests: `bash macrotests/macrotest.sh` (no arguments)
+- The test harness automatically cleans up temporary directories on success but preserves them on failure for debugging (check `/tmp/boar-testname.*.log` for output)
+
+## Command implementations
+
+- All CLI commands are implemented as `cmd_<command>` functions in the main `boar` file (e.g., `cmd_locate`, `cmd_ci`, `cmd_clone`)
+- Commands use OptionParser for argument parsing. Pay attention to the usage string and option definitions when modifying behavior
+- The `globals()["suppress_finishmessage"] = True` pattern is used to suppress the "Finished in X seconds" message for commands with special output formats (like JSON)
+- When adding JSON output to commands, make it opt-in via `--json` flag and ensure the output is pure JSON (no progress messages or other text)
+- Use `UserError` exceptions (from boar_exceptions.py) for user-facing error messages. These are caught and displayed cleanly without stack traces
+
+## Working with sessions
+
+- Sessions are Boar's equivalent of branches/snapshots. Each session has multiple revisions over time
+- Use `front.get_session_names(include_meta=False)` to list all sessions in a repository
+- Use `front.find_last_revision(session_name)` to get the latest revision number for a session
+- Use `front.get_session_bloblist(revision)` to get all blobs (files) in a specific revision
+- The `invert_bloblist()` helper creates a checksum→blobinfo lookup table, useful for the locate command and similar operations
+
+Refer back to this document when navigating the code; it should help you locate the right layer for your changes and respect the project's cross-version compatibility constraints.

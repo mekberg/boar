@@ -187,41 +187,129 @@ def verify_manifests(front, sid, verbose = False, required_manifests = []):
 def cmd_locate(args):
     if len(args) == 0:
         args = ["--help"]
-    parser = OptionParser(usage="usage: boar locate <session name> [[file/dir] [file/dir] ...]")
+    parser = OptionParser(usage="usage: boar locate [options] <session name> [[file/dir] [file/dir] ...] OR boar locate --json [[file/dir] [file/dir] ...]")
+    parser.add_option("--json", action="store_true", dest="json_output", default=False,
+                      help="Output results in JSON format (implies --all-sessions)")
+    parser.add_option("-a", "--all-sessions", action="store_true", dest="all_sessions", default=False,
+                      help="Search for files in all sessions")
     (options, args) = parser.parse_args(args)
-    if len(args) == 0:
-        raise UserError("You must specify which session to look in.")
-    sessionName = args[0]
-    files_to_look_for = args[1:]
+    
+    # Suppress finish message when using JSON output
+    if options.json_output:
+        globals()["suppress_finishmessage"] = True
+        # --json implies --all-sessions
+        options.all_sessions = True
+    
+    # Handle session name argument
+    if options.all_sessions:
+        sessionName = None
+        files_to_look_for = args
+        # Error if session name is provided with --json
+        # We check this by seeing if first arg is NOT an existing file/dir
+        # and IS a valid session name
+        if options.json_output and len(args) > 0:
+            first_arg = args[0]
+            # Only check if it doesn't exist as a file/dir
+            if not os.path.exists(first_arg):
+                # Might be a session name - check if it exists
+                front = connect_to_repo(get_repo_url())
+                if front.find_last_revision(first_arg):
+                    raise UserError("Cannot specify session name with --json (it implies --all-sessions)")
+    else:
+        if len(args) == 0:
+            raise UserError("You must specify which session to look in.")
+        sessionName = args[0]
+        files_to_look_for = args[1:]
+    
     if not files_to_look_for:
         files_to_look_for = ["."]
     files_to_look_for = [tounicode(os.path.abspath(fn)) for fn in files_to_look_for] 
-    front = connect_to_repo(get_repo_url())    
-    revision = front.find_last_revision(sessionName)
-    if not revision:
-        raise UserError("No such session: %s" % sessionName)
+    front = connect_to_repo(get_repo_url())
+    
+    # Get sessions to search
+    if options.all_sessions:
+        session_names = front.get_session_names(include_meta=False)
+        if not session_names:
+            raise UserError("No sessions found in repository")
+    else:
+        revision = front.find_last_revision(sessionName)
+        if not revision:
+            raise UserError("No such session: %s" % sessionName)
+        session_names = [sessionName]
 
-    missing = []
-    found = 0
-    inverted_bloblist = invert_bloblist(front.get_session_bloblist(revision))
+    results = []  # Flat list of all file results
+    
+    # Build inverted bloblists for all sessions upfront (optimization)
+    session_inverted_bloblists = {}
+    for sname in session_names:
+        revision = front.find_last_revision(sname)
+        if not revision:
+            continue
+        session_inverted_bloblists[sname] = invert_bloblist(front.get_session_bloblist(revision))
+    
+    # Build file tree to search for
+    files_to_check = []
     for root in files_to_look_for:
         if os.path.isdir(root):
             tree = get_tree(root, absolute_paths = True)
             tree.sort()
+            files_to_check.extend(tree)
         else:
-            tree = [root]
-        for f in tree:
-            csum = md5sum_file(f)
+            files_to_check.append(root)
+    
+    # Search for each file
+    for f in files_to_check:
+        csum = md5sum_file(f)
+        found_in_sessions = {}  # session -> list of repo paths
+        
+        # Check each session for this file
+        for sname in session_names:
+            inverted_bloblist = session_inverted_bloblists.get(sname)
+            if not inverted_bloblist:
+                continue
             blobinfos = list(map(dict, inverted_bloblist.get(csum, [])))
-            if not blobinfos:
-                print("Missing:", f)
-                missing.append(f)
-            else:
-                print("OK:", f)
-                found += 1
+            
+            if blobinfos:
+                if sname not in found_in_sessions:
+                    found_in_sessions[sname] = []
                 for bi in blobinfos:
-                    print("   " + bi['filename'])
-    print("%s files exists in the given session, %s do not." % (found, len(missing)))
+                    found_in_sessions[sname].append(bi['filename'])
+        
+        if not found_in_sessions:
+            if not options.json_output:
+                print("Missing:", f)
+            results.append({
+                'filename': f,
+                'md5': csum,
+                'sessions': {},
+                'existing': False
+            })
+        else:
+            if not options.json_output:
+                print("OK:", f)
+                for sname, repo_paths in found_in_sessions.items():
+                    for repo_path in repo_paths:
+                        if options.all_sessions:
+                            print("   [%s] %s" % (sname, repo_path))
+                        else:
+                            print("   " + repo_path)
+            # For existing files, add to results with existing=True
+            results.append({
+                'filename': f,
+                'md5': csum,
+                'sessions': found_in_sessions,
+                'existing': True
+            })
+    
+    if options.json_output:
+        print(json.dumps(results, indent=2))
+    else:
+        num_existing = sum(1 for r in results if r['existing'])
+        num_missing = sum(1 for r in results if not r['existing'])
+        print("%s files exists in the given session%s, %s do not." % 
+              (num_existing, 
+               "s" if options.all_sessions else "", 
+               num_missing))
 
 @beta
 def cmd_scanblocks(args):
