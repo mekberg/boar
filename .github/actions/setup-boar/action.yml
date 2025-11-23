@@ -90,9 +90,9 @@ runs:
       run: |
         set -euo pipefail
         if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
-          VENV_PY=".venv/Scripts/python"
+          VENV_PY="$PWD/.venv/Scripts/python"
         else
-          VENV_PY=".venv/bin/python"
+          VENV_PY="$PWD/.venv/bin/python"
         fi
         make -C cdedup PYTHON="$VENV_PY"
         test -e cdedup.so
