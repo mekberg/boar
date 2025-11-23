@@ -299,8 +299,7 @@ class SessionWriter(object):
             self.base_session_info = self.repo.get_session(self.base_session).get_properties()['client_data']
             self.base_bloblist_dict = bloblist_to_dict(\
                 self.repo.get_session(self.base_session).get_all_blob_infos())
-        self.resulting_blobdict = self.base_bloblist_dict # POTENTIAL BUG - should be copy?
-
+        self.resulting_blobdict = dict(self.base_bloblist_dict)
         self.forced_session_id = None
         if session_id != None:
             self.forced_session_id = int(session_id)

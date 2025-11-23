@@ -150,6 +150,25 @@ class TestBlobRepo(unittest.TestCase):
         writer1 = self.repo.create_snapshot(SESSION_NAME)
         self.assertRaises(Exception, writer1.remove, "doesnotexist.txt")
 
+    def test_remove_rejects_new_entries(self):
+        writer1 = self.repo.create_snapshot(SESSION_NAME)
+        writer1.init_new_blob(DATA1_MD5, len(DATA1))
+        writer1.add_blob_data(DATA1_MD5, DATA1)
+        writer1.blob_finished(DATA1_MD5)
+        writer1.add(self.fileinfo1)
+        base_revision = writer1.commit()
+
+        writer2 = self.repo.create_snapshot(SESSION_NAME, base_session=base_revision)
+        writer2.init_new_blob(DATA2_MD5, len(DATA2))
+        writer2.add_blob_data(DATA2_MD5, DATA2)
+        writer2.blob_finished(DATA2_MD5)
+        writer2.add(self.fileinfo2)
+        try:
+            with self.assertRaises(AssertionError):
+                writer2.remove(self.fileinfo2['filename'])
+        finally:
+            writer2.cancel()
+
     def test_find_orphan_blobs(self):
         committed_info = copy(self.fileinfo1)
         writer = self.repo.create_snapshot(SESSION_NAME)
