@@ -22,7 +22,8 @@ if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from optparse import OptionParser
-from common import get_tree, tounicode, md5sum_file
+from common import tounicode
+from file_scanner import FileScanner
 
 def main():
     args = sys.argv[1:]
@@ -45,14 +46,16 @@ def main():
     for line in fo:
         expected[line[34:].strip()] = line[0:32]
 
-    tree = get_tree(path)
+    scanner = FileScanner([path], relative_to=path)
+    scan_results = scanner.scan()
+    tree = list(scan_results.keys())
 
     extra_files = []
     diff_files = []
     missing_files = []
 
-    for fn in tree:
-        md5 = md5sum_file(fn)
+    for fn, info in scan_results.items():
+        md5 = info["md5"]
         if fn not in expected:
             extra_files.append(fn)
             print("?", fn)

@@ -27,7 +27,8 @@ if __name__ == '__main__':
     sys.path.insert(0, os.path.join(boar_home, "macrotests"))
 
 import randtree
-from common import get_tree, md5sum, md5sum_file
+from common import md5sum
+from file_scanner import FileScanner
 
 def call(cmd, check=True, cwd=None):
     """Execute a command and return output and status code. If 'check' is True,
@@ -113,12 +114,13 @@ class TestRandomTree(unittest.TestCase):
         self._assertWorkdirEqualsTree(u"second_workdir", r)
 
     def _assertWorkdirEqualsTree(self, workdir, randtree):
-        all_files = get_tree(os.path.abspath(workdir), skip = [".boar"], sep = "/")
+        scanner = FileScanner([os.path.abspath(workdir)], relative_to=os.path.abspath(workdir), skip=[".boar"])
+        scan_results = scanner.scan()
+        all_files = list(scan_results.keys())
         all_files.remove("manifest-md5.txt")
         self.assertEqual(set(all_files), set(map(backslashes_to_slashes, randtree.files)))
         for fn in all_files:
-            path = os.path.join(workdir, fn)
-            self.assertEqual(md5sum(randtree.get_file_data(fn)), md5sum_file(path))
+            self.assertEqual(md5sum(randtree.get_file_data(fn)), scan_results[fn]["md5"])
 
 
     def testWindowsCompatibleRandomTree(self):
@@ -141,4 +143,3 @@ class TestRandomTree(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

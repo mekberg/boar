@@ -2,6 +2,7 @@
 
 from common import *
 from treecomp import TreeComparer
+from file_scanner import FileScanner
 import sys
 import io
 
@@ -56,14 +57,12 @@ def replace_manifest(manifest_contents, root):
 
 def load_tree(path):
     """Return the current tree as a dict on the form { fn -> md5 }"""
-    tree = get_tree(path)
     new_dict = {}
-    for t in tree:
-        if not os.path.isfile(t):
+    scanner = FileScanner([path], relative_to=path)
+    for relpath, info in scanner.scan().items():
+        if is_manifest_fn(relpath):
             continue
-        if is_manifest_fn(t):
-            continue
-        new_dict[t] = md5sum_file(t)
+        new_dict[relpath] = info["md5"]
     return new_dict
 
 def mkmanifest(tree):
