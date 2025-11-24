@@ -22,6 +22,7 @@ import cProfile
 import posixpath
 import errno
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from optparse import OptionParser, SUPPRESS_HELP
 from blobrepo import repository
@@ -192,6 +193,8 @@ def cmd_locate(args):
                       help="Output results in JSON format (implies --all-sessions)")
     parser.add_option("-a", "--all-sessions", action="store_true", dest="all_sessions", default=False,
                       help="Search for files in all sessions")
+    parser.add_option("-j", "--threads", action="store", dest="threads", type="int", default=1,
+                      help="Number of files to checksum concurrently (default: 1)")
     (options, args) = parser.parse_args(args)
     
     # Suppress finish message when using JSON output
@@ -257,8 +260,8 @@ def cmd_locate(args):
         else:
             files_to_check.append(root)
     
-    # Search for each file
-    for f in files_to_check:
+    # Helper function to process a single file
+    def process_file(f):
         csum = md5sum_file(f)
         found_in_sessions = {}  # session -> list of repo paths
         
@@ -275,31 +278,73 @@ def cmd_locate(args):
                 for bi in blobinfos:
                     found_in_sessions[sname].append(bi['filename'])
         
-        if not found_in_sessions:
-            if not options.json_output:
-                print("Missing:", f)
-            results.append({
-                'filename': f,
-                'md5': csum,
-                'sessions': {},
-                'existing': False
-            })
-        else:
-            if not options.json_output:
-                print("OK:", f)
-                for sname, repo_paths in found_in_sessions.items():
-                    for repo_path in repo_paths:
-                        if options.all_sessions:
-                            print("   [%s] %s" % (sname, repo_path))
-                        else:
-                            print("   " + repo_path)
-            # For existing files, add to results with existing=True
-            results.append({
-                'filename': f,
-                'md5': csum,
-                'sessions': found_in_sessions,
-                'existing': True
-            })
+        return (f, csum, found_in_sessions)
+    
+    # Process files in parallel if threads > 1
+    if options.threads > 1:
+        with ThreadPoolExecutor(max_workers=options.threads) as executor:
+            # Submit all tasks
+            future_to_file = {executor.submit(process_file, f): f for f in files_to_check}
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_file):
+                f, csum, found_in_sessions = future.result()
+                
+                if not found_in_sessions:
+                    if not options.json_output:
+                        print("Missing:", f)
+                    results.append({
+                        'filename': f,
+                        'md5': csum,
+                        'sessions': {},
+                        'existing': False
+                    })
+                else:
+                    if not options.json_output:
+                        print("OK:", f)
+                        for sname, repo_paths in found_in_sessions.items():
+                            for repo_path in repo_paths:
+                                if options.all_sessions:
+                                    print("   [%s] %s" % (sname, repo_path))
+                                else:
+                                    print("   " + repo_path)
+                    # For existing files, add to results with existing=True
+                    results.append({
+                        'filename': f,
+                        'md5': csum,
+                        'sessions': found_in_sessions,
+                        'existing': True
+                    })
+    else:
+        # Serial processing (original behavior)
+        for f in files_to_check:
+            f, csum, found_in_sessions = process_file(f)
+            
+            if not found_in_sessions:
+                if not options.json_output:
+                    print("Missing:", f)
+                results.append({
+                    'filename': f,
+                    'md5': csum,
+                    'sessions': {},
+                    'existing': False
+                })
+            else:
+                if not options.json_output:
+                    print("OK:", f)
+                    for sname, repo_paths in found_in_sessions.items():
+                        for repo_path in repo_paths:
+                            if options.all_sessions:
+                                print("   [%s] %s" % (sname, repo_path))
+                            else:
+                                print("   " + repo_path)
+                # For existing files, add to results with existing=True
+                results.append({
+                    'filename': f,
+                    'md5': csum,
+                    'sessions': found_in_sessions,
+                    'existing': True
+                })
     
     if options.json_output:
         print(json.dumps(results, indent=2))
