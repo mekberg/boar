@@ -64,4 +64,35 @@ This repository contains Boar, a snapshotting backup/version control tool aimed 
 - Use `front.get_session_bloblist(revision)` to get all blobs (files) in a specific revision
 - The `invert_bloblist()` helper creates a checksum→blobinfo lookup table, useful for the locate command and similar operations
 
+## Quick start for manual testing
+
+If you need to manually test changes, you can set up a temporary repository and session using the following steps:
+
+1.  **Create a repository:**
+    ```bash
+    ./boar mkrepo /path/to/repo
+    ```
+
+2.  **Set the repository path:**
+    You can either pass `--repo /path/to/repo` to every command or set the environment variable:
+    ```bash
+    export REPO_PATH=/path/to/repo
+    ```
+
+3.  **Create a session:**
+    Before importing data, you must create a session (branch).
+    ```bash
+    ./boar mksession SessionName
+    ```
+
+4.  **Import data:**
+    ```bash
+    ./boar import /path/to/source/dir SessionName
+    ```
+
+5.  **Checkout data:**
+    ```bash
+    ./boar co SessionName /path/to/workdir
+    ```
+
 Refer back to this document when navigating the code; it should help you locate the right layer for your changes and respect the project's cross-version compatibility constraints.
