@@ -443,14 +443,43 @@ def cmd_list(args):
                       help="Show meta sessions (stores session properties, normally hidden)")
     parser.add_option("-d", "--dump", dest = "dump", action="store_true",
                       help="Dump a machine readable listing of all revisions and their properties")
+    parser.add_option("-a", "--all", dest = "all_blobs", action="store_true",
+                      help="Dump a json array with entries for each blob in the repository")
     (options, args) = parser.parse_args(args)
     if len(args) > 2:
         raise UserError("Too many arguments")
+    
+    def list_all_blobs(front, include_meta=False):
+        blob_map = {} # md5 -> {size, filenames: []}
+        for session_name in front.get_session_names(include_meta=include_meta):
+            sid = front.find_last_revision(session_name)
+            if not sid:
+                continue
+            bloblist = front.get_session_bloblist(sid)
+            for info in bloblist:
+                md5 = info['md5sum']
+                size = info['size']
+                filename = info['filename']
+                full_path = session_name + "/" + filename
+                
+                if md5 not in blob_map:
+                    blob_map[md5] = {'md5': md5, 'size': size, 'filenames': []}
+                blob_map[md5]['filenames'].append(full_path)
+        
+        # Convert to list
+        result = list(blob_map.values())
+        print(json.dumps(result, indent=4))
+
     front = connect_to_repo(get_repo_url())
     if options.dump:
         if args:
             raise UserError("a dump can not be combined with other arguments")
         dump_all_revisions(front)
+    elif options.all_blobs:
+        if args:
+            raise UserError("--all can not be combined with other arguments")
+        globals()["suppress_finishmessage"] = True
+        list_all_blobs(front, options.show_meta)
     elif len(args) == 0:
         list_sessions(front, options.show_meta)
     elif len(args) == 1:
