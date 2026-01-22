@@ -108,6 +108,70 @@ class TestCliWindowsSpecific(unittest.TestCase):
     def testEmpty(self):
         pass
 
+    @unittest.skipUnless(os.name == "nt", "Windows-specific encoding test")
+    def testLocateUnicodeFilenameToFile(self):
+        """Test that locate command handles Unicode filenames correctly when 
+        stdout is redirected to a file (uses cp1252 encoding on Windows).
+        
+        This tests for the bug:
+        UnicodeEncodeError: 'charmap' codec can't encode character '\u0416' 
+        in position 52: character maps to <undefined>
+        
+        The character '\u0416' is Cyrillic capital letter ZHE (Ж), which cannot
+        be represented in Windows-1252 (cp1252) encoding.
+        """
+        # Create a repository and session
+        call([BOAR, "mkrepo", "TESTREPO"])
+        call([BOAR, "--repo", "TESTREPO", "mksession", "TestSession"])
+        call([BOAR, "--repo", "TESTREPO", "co", "TestSession"])
+        
+        # Create a file with ASCII filename but commit it first
+        # to establish a working session
+        ascii_filename = "TestSession/test_file.txt"
+        test_content = "test content for locate"
+        write_file(ascii_filename, test_content)
+        call([BOAR, "ci"], cwd="TestSession")
+        
+        # Create a local file with Cyrillic characters in the filename
+        # '\u0416' is Cyrillic capital letter ZHE (Ж)
+        # This character cannot be encoded in cp1252 (Windows-1252)
+        local_cyrillic_file = "Локальный_Ж_файл.txt"  # Local file with Cyrillic name
+        write_file(local_cyrillic_file, test_content)  # Same content as repo file
+        
+        # The bug occurs when stdout is redirected to a file
+        # Python uses cp1252 encoding on Windows when redirecting to a file
+        output_file = "locate_output.txt"
+        
+        # Use shell=True to simulate the user's command line experience with redirection
+        # This is the scenario that triggers the bug: boar locate ... > file.txt
+        cmd = '"%s" --repo TESTREPO locate TestSession "%s" > "%s" 2>&1' % (
+            BOAR, local_cyrillic_file, output_file)
+        
+        # Run through cmd.exe to get proper redirection behavior
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            cwd=self.testdir
+        )
+        
+        # Check if output file was created
+        output_exists = os.path.exists(output_file)
+        if output_exists:
+            with open(output_file, "rb") as f:
+                output_content = f.read()
+        else:
+            output_content = b""
+        
+        # The command should complete without a UnicodeEncodeError
+        # If the bug exists, the output will contain "UnicodeEncodeError"
+        self.assertNotIn(b"UnicodeEncodeError", output_content,
+            "locate command failed with Unicode encoding error. Output: %s" % output_content)
+        
+        # Also check return code
+        self.assertEqual(result.returncode, 0, 
+            "locate command failed with Unicode filename. Output: %s" % output_content)
+
 
 if __name__ == '__main__':
     unittest.main()

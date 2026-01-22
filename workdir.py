@@ -207,7 +207,7 @@ class Workdir(object):
     def export_md5(self):
         assert not os.path.exists("md5sum.txt")
         front = self.get_front()
-        with open("md5sum.txt", "w") as f:
+        with open("md5sum.txt", "w", encoding="utf-8") as f:
             for info in self.get_bloblist(self.revision):
                 f.write(info['md5sum'] +" *" + info['filename'] + "\n")
 

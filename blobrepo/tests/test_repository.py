@@ -111,7 +111,7 @@ class TestBlobRepo(unittest.TestCase):
         reader = self.repo.get_blob_reader("f749878a7974cf018b5ae2e10c7d8358")
         for n in  range(2500):
             self.assertEqual(reader.read(2**20), megabyte_of_zeroes)
-        self.assertEqual(reader.read(2**20), "")
+        self.assertEqual(reader.read(2**20), b"")
         
 
     def test_secondary_session(self):

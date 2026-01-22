@@ -204,7 +204,7 @@ class StreamDataSource(DataSource):
         if n == None:
             n = self.bytes_left()
         if self.remaining == 0:
-            return ""
+            return b""
         bytes_to_read = min(n, self.remaining)
         data = self.stream.read(bytes_to_read)
         self.remaining -= bytes_to_read
@@ -238,7 +238,7 @@ class FileDataSource(DataSource):
         if n == None:
             n = self.remaining
         if self.remaining == 0:
-            return ""
+            return b""
         bytes_to_read = min(n, self.remaining)
         data = self.fo.read(bytes_to_read)
         self.remaining -= bytes_to_read
