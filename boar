@@ -41,7 +41,8 @@ import boarserve
 
 json = get_json_module()
 
-assert sys.version_info >= (3, 8)
+if sys.version_info < (3, 8):
+    sys.exit("ERROR: Boar requires Python 3.8 or later. You are running Python %d.%d." % (sys.version_info[0], sys.version_info[1]))
 
 def execfile(filepath):
     with open(filepath, 'rb') as f:
@@ -947,7 +948,7 @@ def cmd_sessions(args):
         json.dump(names, stdout, indent = 4)
     else:
         for name in names:
-            stdout.write(name.encode("utf-8"))
+            stdout.write(name)
             stdout.write("\n")
 
 def cmd_revisions(args):
@@ -1204,7 +1205,7 @@ def cmd_export(args):
     for exportspec in args:
         blobid, destination = exportspec.split(":")
         assert not os.path.exists(destination)
-        fo = open(destination, "w")
+        fo = open(destination, "wb")
         datasource = front.get_blob(blobid)
         while datasource.bytes_left():
             fo.write(datasource.read(4096))
@@ -1333,7 +1334,7 @@ def cmd_getprop(args):
 
     if options.file:
         try:        
-            with open(options.file, "w") as f:
+            with open(options.file, "w", encoding="utf-8") as f:
                 f.write(property_value)
         except Exception as e:
             raise UserError("Problems writing file %s: %s" % (options.file, e))
@@ -1487,7 +1488,7 @@ def cmd_findlost(args):
             n += 1
             output_path = os.path.join(outputDir, filename + ("(%d)" % n))
             
-        with open(output_path, "w") as f:
+        with open(output_path, "wb") as f:
             datareader = front.get_blob(blobid)
             while datareader.bytes_left() > 0:
                 f.write(datareader.read(2**14))
@@ -1667,6 +1668,16 @@ if __name__ == "__main__":
         msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
         msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
         
+    # Reconfigure stdout/stderr to use UTF-8 encoding with backslashreplace error
+    # handler. This fixes UnicodeEncodeError when printing filenames containing
+    # characters that can't be encoded in the console's default encoding (e.g.,
+    # Cyrillic characters on Windows with cp1252 encoding when stdout is redirected
+    # to a file). Commands that output binary data (like 'cat') use stdout.buffer
+    # directly, so they are not affected by this text encoding configuration.
+    # Note: reconfigure() requires Python 3.7+, but we require 3.8+ anyway.
+    sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='backslashreplace')
+
     sys.argv = list(map(tounicode, sys.argv))
     global ucwd
     ucwd = tounicode(os.getcwd())

@@ -41,10 +41,13 @@ import json
 import re
 
 import sys
-import codecs
 
-# Avoid problems with unicode chars when piping the output of this program
-sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+# Ensure stdout/stderr use UTF-8 encoding when output is redirected
+# (e.g., on Windows where the default encoding may be cp1252)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='backslashreplace')
 
 import hashlib
 import os
