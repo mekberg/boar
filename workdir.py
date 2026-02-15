@@ -926,6 +926,19 @@ class DummyChecksumProgressPrinter(object):
     def update(self, total_files, remaining_files, total_bytes, remaining_bytes): pass
     def finished(self): pass
 
+def _mtime_to_str(mtime):
+    """Convert an mtime float to string using Python 2.7-compatible
+    formatting.  Python 2.7 str(float) uses 12 significant digits
+    (like '%.12g') but always keeps a decimal point for
+    integer-valued floats (e.g. '1234567890.0' instead of
+    '1234567890').  We must match that behavior so that row checksums
+    computed under Python 2.7 remain valid."""
+    s = '%.12g' % mtime
+    if '.' not in s and 'e' not in s and 'E' not in s:
+        s += '.0'
+    return s
+
+
 class ChecksumCache(object):
     def __init__(self, dbpath):
         assert dbpath == ":memory:" or os.path.isabs(dbpath)
@@ -950,9 +963,13 @@ class ChecksumCache(object):
         except sqlite3.DatabaseError as e:
             raise
 
+    @staticmethod
+    def _row_md5(path, mtime, md5):
+        return md5sum(path.encode("utf8") + b"!" + _mtime_to_str(mtime).encode("utf8") + b"!" + md5.encode("utf8"))
+
     def set(self, path, mtime, md5):
         assert type(path) == str
-        md5_row = md5sum(path.encode("utf8") + b"!" + str(mtime).encode("utf8") + b"!" + md5.encode("utf8"))
+        md5_row = self._row_md5(path, mtime, md5)
         try:
             self.conn.execute("REPLACE INTO ccache (path, mtime, md5, row_md5) VALUES (?, ?, ?, ?)", (path, mtime, md5, md5_row))
             if self.rate_limiter.ready():
@@ -972,9 +989,12 @@ class ChecksumCache(object):
             return None
         assert len(rows) == 1
         md5, row_md5 = rows[0]
-        expected_md5_row = md5sum(path.encode("utf8") + b"!" + str(mtime).encode("utf8") + b"!" + md5.encode("utf8"))
-        # TODO: use a nice exception for cache corruption
-        assert row_md5 == expected_md5_row, "Workdir cache corrupted"
+        expected_md5_row = self._row_md5(path, mtime, md5)
+        if row_md5 != expected_md5_row:
+            # Also accept checksums computed with Python 3's str(float)
+            # for caches that were written by a pre-fix Python 3 version.
+            py3_md5_row = md5sum(path.encode("utf8") + b"!" + str(mtime).encode("utf8") + b"!" + md5.encode("utf8"))
+            assert row_md5 == py3_md5_row or row_md5 == expected_md5_row, "Workdir cache corrupted"
         return md5
 
     def sync(self):
