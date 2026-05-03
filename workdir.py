@@ -211,7 +211,7 @@ class Workdir(object):
             for info in self.get_bloblist(self.revision):
                 f.write(info['md5sum'] +" *" + info['filename'] + "\n")
 
-    def checkout(self, write_meta = True, symlink = False, reflink = False):
+    def checkout(self, write_meta = True, symlink = False, reflink = False, restore_mtime = True):
         assert os.path.exists(self.root) and os.path.isdir(self.root)
         assert not (symlink and reflink)
         front = self.get_front()
@@ -223,9 +223,11 @@ class Workdir(object):
         for info in sorted_bloblist(self.get_bloblist(self.revision)):
             if not is_child_path(self.offset, info['filename']):
                 continue
-            self.fetch_file(info['filename'], info['md5sum'], overwrite = False, symlink = symlink, reflink = reflink)
+            mtime = info.get('mtime') if restore_mtime else None
+            self.fetch_file(info['filename'], info['md5sum'], overwrite = False,
+                            symlink = symlink, reflink = reflink, mtime = mtime)
 
-    def fetch_file(self, session_path, md5, overwrite = False, symlink = False, reflink = False):
+    def fetch_file(self, session_path, md5, overwrite = False, symlink = False, reflink = False, mtime = None):
         assert is_child_path(self.offset, session_path)
         target = strip_path_offset(self.offset, session_path)
         target_path = os.path.join(self.root, target)
@@ -238,6 +240,10 @@ class Workdir(object):
             if not os.path.exists(target_dir):
                 os.makedirs(target_dir)
             os.symlink(blob_path, target_path)
+            # Skip mtime restoration: target is a symlink to the shared
+            # blob in the repo, and os.utime would follow the link and
+            # mutate the blob.
+            return
         elif reflink:
             from reflink import reflink
             assert self.get_front().repo.has_raw_blob(md5)
@@ -261,8 +267,29 @@ class Workdir(object):
                     raise
             else:
                 reflink(blob_path, target_path)
+            if mtime is not None:
+                self._apply_mtime(target, target_path, md5, mtime)
         else:
-            fetch_blob(self.get_front(), md5, target_path, overwrite = overwrite)
+            fetch_blob(self.get_front(), md5, target_path, overwrite = overwrite, mtime = mtime)
+            if mtime is not None:
+                self._apply_cache_for_mtime(target, target_path, md5)
+
+    def _apply_mtime(self, wd_relative_path, target_path, md5, mtime):
+        """Set the file's mtime to the given value and refresh the
+        checksum cache so that the new mtime maps to the known md5."""
+        os.utime(target_path, (mtime, mtime))
+        self._apply_cache_for_mtime(wd_relative_path, target_path, md5)
+
+    def _apply_cache_for_mtime(self, wd_relative_path, target_path, md5):
+        """Refresh the checksum cache entry for the file at
+        target_path. Called after a file has been written and (possibly)
+        had its mtime adjusted, so that subsequent commands can find the
+        cached checksum without re-reading the file."""
+        try:
+            new_mtime = os.stat(target_path).st_mtime
+        except OSError:
+            return
+        self.sqlcache.set(wd_relative_path, new_mtime, md5)
 
     def update_revision(self, new_revision = None):
         assert new_revision == None or isinstance(new_revision, int)
@@ -283,7 +310,7 @@ class Workdir(object):
         assert not self.front.is_deleted(new_revision) # Should not be possible, but could potentially cause deletion of workdir files
         return self.update(self.revision, new_revision, ignore_errors)
 
-    def update(self, old_revision, new_revision, ignore_errors = False, reflink = False):
+    def update(self, old_revision, new_revision, ignore_errors = False, reflink = False, restore_mtime = True):
         """ Apply the changes from old_revision to
         new_revision. Differences in the workdir from old_revision
         will be considered modifications and will not be
@@ -307,13 +334,17 @@ class Workdir(object):
                 continue
             target_wdpath = strip_path_offset(self.offset, b['filename'])
             target_abspath = os.path.join(self.root, target_wdpath)
+            mtime = b.get('mtime') if restore_mtime else None
             if not os.path.exists(target_abspath) or self.cached_md5sum(target_wdpath) != b['md5sum']:
                 print("Updating:", b['filename'], file=log)
                 try:
                     if reflink:
-                        self.fetch_file(b['filename'], b['md5sum'], overwrite = True, reflink = True)
+                        self.fetch_file(b['filename'], b['md5sum'], overwrite = True,
+                                        reflink = True, mtime = mtime)
                     else:
-                        fetch_blob(front, b['md5sum'], target_abspath, overwrite = True)
+                        fetch_blob(front, b['md5sum'], target_abspath, overwrite = True, mtime = mtime)
+                        if mtime is not None:
+                            self._apply_cache_for_mtime(target_wdpath, target_abspath, b['md5sum'])
                 except (IOError, OSError) as e:
                     print("Could not update file %s: %s" % (b['filename'], e.strerror), file=log)
                     if not ignore_errors:
@@ -829,7 +860,7 @@ def create_blobinfo(abspath, sessionpath, md5sum):
     blobinfo["size"] = st[stat.ST_SIZE]
     return blobinfo
 
-def fetch_blob(front, blobname, target_path, overwrite = False):
+def fetch_blob(front, blobname, target_path, overwrite = False, mtime = None):
     assert overwrite or not os.path.exists(target_path)
     target_dir = os.path.dirname(target_path)
     if not os.path.exists(target_dir):
@@ -852,6 +883,8 @@ def fetch_blob(front, blobname, target_path, overwrite = False):
         if os.path.exists(tmpfile):
             os.remove(tmpfile)
         raise
+    if mtime is not None:
+        os.utime(target_path, (mtime, mtime))
 
 def bloblist_to_dict(bloblist):
     d = {}
