@@ -246,7 +246,21 @@ class Workdir(object):
             target_dir = os.path.dirname(target_path)
             if not os.path.exists(target_dir):
                 os.makedirs(target_dir)
-            reflink(blob_path, target_path)
+            if overwrite and os.path.exists(target_path):
+                # reflink() requires the target to not exist, so write
+                # to a sibling tempfile and rename into place atomically.
+                fd, tmp_path = tempfile.mkstemp(prefix=".boar-reflink-", dir=target_dir)
+                os.close(fd)
+                os.remove(tmp_path)
+                try:
+                    reflink(blob_path, tmp_path)
+                    os.rename(tmp_path, target_path)
+                except:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                    raise
+            else:
+                reflink(blob_path, target_path)
         else:
             fetch_blob(self.get_front(), md5, target_path, overwrite = overwrite)
 
@@ -269,7 +283,7 @@ class Workdir(object):
         assert not self.front.is_deleted(new_revision) # Should not be possible, but could potentially cause deletion of workdir files
         return self.update(self.revision, new_revision, ignore_errors)
 
-    def update(self, old_revision, new_revision, ignore_errors = False):
+    def update(self, old_revision, new_revision, ignore_errors = False, reflink = False):
         """ Apply the changes from old_revision to
         new_revision. Differences in the workdir from old_revision
         will be considered modifications and will not be
@@ -296,7 +310,10 @@ class Workdir(object):
             if not os.path.exists(target_abspath) or self.cached_md5sum(target_wdpath) != b['md5sum']:
                 print("Updating:", b['filename'], file=log)
                 try:
-                    fetch_blob(front, b['md5sum'], target_abspath, overwrite = True)
+                    if reflink:
+                        self.fetch_file(b['filename'], b['md5sum'], overwrite = True, reflink = True)
+                    else:
+                        fetch_blob(front, b['md5sum'], target_abspath, overwrite = True)
                 except (IOError, OSError) as e:
                     print("Could not update file %s: %s" % (b['filename'], e.strerror), file=log)
                     if not ignore_errors:
