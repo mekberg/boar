@@ -249,11 +249,16 @@ class Workdir(object):
             if overwrite and os.path.exists(target_path):
                 # reflink() requires the target to not exist, so write
                 # to a sibling tempfile and rename into place atomically.
-                tmp_path = target_path + ".boar.reflink.tmp"
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                reflink(blob_path, tmp_path)
-                os.rename(tmp_path, target_path)
+                fd, tmp_path = tempfile.mkstemp(prefix=".boar-reflink-", dir=target_dir)
+                os.close(fd)
+                os.remove(tmp_path)
+                try:
+                    reflink(blob_path, tmp_path)
+                    os.rename(tmp_path, target_path)
+                except:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                    raise
             else:
                 reflink(blob_path, target_path)
         else:
