@@ -75,12 +75,16 @@ grep -E "^[MAD?] " st.txt && {
 # Symlink mode should silently skip mtime restoration (would otherwise
 # mutate the shared blob in the repo). The link target's mtime is the
 # blob's mtime, which is the time it was written to the repo, not the
-# original file mtime.
-$BOAR co -l TestMtime co_symlink >/dev/null
-test -L co_symlink/foo.txt || {
-    echo "Expected symlink"; exit 1; }
-# Verify the symlink points at a repo blob (blob path contains "/blobs/").
-readlink co_symlink/foo.txt | grep -q "/blobs/" || {
-    echo "Symlink does not point to repo blob"; exit 1; }
+# original file mtime. Symlink mode requires direct access to repo
+# internals (front.repo.has_raw_blob / get_blob_path) which are not
+# exposed over RPC, so skip this part under simulated remote.
+if [ -z "$BOAR_TEST_REMOTE_REPO" ] || [ "$BOAR_TEST_REMOTE_REPO" = "0" ]; then
+    $BOAR co -l TestMtime co_symlink >/dev/null
+    test -L co_symlink/foo.txt || {
+        echo "Expected symlink"; exit 1; }
+    # Verify the symlink points at a repo blob (blob path contains "/blobs/").
+    readlink co_symlink/foo.txt | grep -q "/blobs/" || {
+        echo "Symlink does not point to repo blob"; exit 1; }
+fi
 
 exit 0
