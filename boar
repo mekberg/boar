@@ -837,6 +837,8 @@ def cmd_update(args):
                       help="Update the workdir revision but do not update the workdir contents.")
     parser.add_option("-L", "--reflink", dest = "reflink", action="store_true",
                       help="Create reflinks instead of copying the data (only within same device, requires filesystem support).")
+    parser.add_option("--no-restore-mtime", dest = "restore_mtime", action="store_false", default = True,
+                      help="Do not restore file modification times from the snapshot. By default, mtimes are restored.")
     parser.add_option("-q", "--quiet", dest = "quiet", action="store_true", default = False,
                       help="Do not print any progress information")
     (options, args) = parser.parse_args(args)
@@ -871,7 +873,8 @@ def cmd_update(args):
     else:
         have_added_or_modified = wd.update(
             old_revision = old_revision, new_revision = new_revision,
-            ignore_errors = options.ignore_errors, reflink = options.reflink)
+            ignore_errors = options.ignore_errors, reflink = options.reflink,
+            restore_mtime = options.restore_mtime)
 
         if have_added_or_modified and deleted_old_revision:
             warn("The old revision that you are updating to was deleted from the repository. " +
@@ -1238,6 +1241,8 @@ def cmd_co(args):
                       help="Create symlinks to the repository instead of copying the data. (DANGEROUS)")
     parser.add_option("-L", "--reflink", dest = "reflink", action="store_true",
                       help="Create reflinks instead of copying the data (only within same device, requires filesystem support).")
+    parser.add_option("--no-restore-mtime", dest = "restore_mtime", action="store_false", default = True,
+                      help="Do not restore file modification times from the snapshot. By default, mtimes are restored.")
 
     (options, args) = parser.parse_args(args)
     if not args:
@@ -1284,7 +1289,8 @@ def cmd_co(args):
 
     os.mkdir(workdir_path)
     wd = workdir.Workdir(repourl, session_name, offset, sid, workdir_path, front = front)
-    wd.checkout(symlink=options.symlink, reflink=options.reflink)
+    wd.checkout(symlink=options.symlink, reflink=options.reflink,
+                restore_mtime=options.restore_mtime)
 
 def cmd_setprop(args):
     parser = OptionParser(usage="usage: boar setprop [options] <session name> <property> [new value]")
