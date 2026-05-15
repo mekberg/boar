@@ -97,9 +97,13 @@ def read_json(filename):
 specific for any project """
 
 def is_md5sum(s):
+    # Use fullmatch (not match with $) because $ matches before a final \n,
+    # which would allow a trailing newline to pass validation. The md5sum
+    # often gates path construction, so a sloppy match could end up creating
+    # files with newline-terminated names inside the repo.
     b = str2bytes(s)
     try:
-        return re.match(b"^[a-f0-9]{32}$", b) != None
+        return re.fullmatch(b"[a-f0-9]{32}", b) != None
     except TypeError:
         return False
 

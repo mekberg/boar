@@ -294,6 +294,21 @@ class TestMisc(unittest.TestCase):
         test("abc", "a", "")
         test("a", "abc", "")
 
+    def test_is_md5sum(self):
+        valid = "a" * 32
+        self.assertTrue(common.is_md5sum(valid))
+        self.assertTrue(common.is_md5sum(valid.encode("ascii")))
+        # Anchored validation: trailing or embedded whitespace/control chars
+        # must not pass, even though Python's "$" would match before a final \n.
+        self.assertFalse(common.is_md5sum(valid + "\n"))
+        self.assertFalse(common.is_md5sum(valid + "\r\n"))
+        self.assertFalse(common.is_md5sum(valid + "/"))
+        self.assertFalse(common.is_md5sum("/" + valid[1:]))
+        self.assertFalse(common.is_md5sum(valid[:-1]))
+        self.assertFalse(common.is_md5sum(valid + "a"))
+        self.assertFalse(common.is_md5sum(valid.upper()))
+        self.assertFalse(common.is_md5sum(""))
+
     def test_invert_dict(self):
         inv_d = common.invert_dict({
             "k1": "v1",
