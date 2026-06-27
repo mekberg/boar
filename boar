@@ -63,9 +63,11 @@ def print_help():
 Usage: boar <command> 
 
 Commands:
+cat       Print the contents of a file or blob to standard output
 ci        Commit changes in a work directory
 clone     Create or update a clone of a repository
 co        Check out files from the repository
+contents  Show the file listing of a snapshot, with checksums
 diffrepo  Check if two repositories are identical
 getprop   Get session properties, such as file ignore lists
 info      Show some information about the current workdir
@@ -76,9 +78,13 @@ log       Show changes and log messages
 ls        Show the contents of a specific sub directory of a snapshot
 mkrepo    Create a new repository
 mksession Create a new session
+revisions List the revisions of a session
+sessions  List all session names in the repository
 setprop   Set session properties, such as file ignore lists
 serve     Make a repository accessible over the network
+stats     Show statistics about the repository
 status    List any changes in the current work directory
+truncate  Remove the history of a session, keeping only its latest revision (DESTRUCTIVE)
 update    Update the current work directory from the repository
 verify    Verify the integrity of the repository
 
@@ -1007,7 +1013,7 @@ def cmd_contents(args):
         raise UserError("Too many arguments")
     session_name = args.pop(0)
     if options.punycode:
-        session_name = str(session_name).decode("punycode")
+        session_name = session_name.encode("ascii").decode("punycode")
     stdout = dedicated_stdout()
     globals()["suppress_finishmessage"] = True
     front = connect_to_repo(get_repo_url())
@@ -1026,13 +1032,13 @@ def cmd_contents(args):
     dump['revision'] = sessionId
     dump['fingerprint'] = front.get_session_fingerprint(sessionId)
     entries = []
+    dump['files'] = entries
     for bi in front.get_session_bloblist(sessionId):
         entries.append(OrderedDict([('filename', bi['filename']),
                                     ('size', bi['size']),
                                     ('md5', bi['md5sum']),
                                     ('mtime', bi['mtime'])
         ]))
-        dump['files'] = entries
 
     if options.md5sum:
         for bi in dump['files']:
@@ -1153,7 +1159,7 @@ def cmd_cat(args):
         while args:
             path = args.pop(0)
             if options.punycode:
-                path = str(path).decode("punycode")
+                path = path.encode("ascii").decode("punycode")
             session_name, session_path = parse_sessionpath(path)
             if options.revision:
                 if options.revision not in front.get_session_ids(session_name):

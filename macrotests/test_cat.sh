@@ -56,6 +56,10 @@ $BOAR cat RäksmörgåsSession/nonexisting.txt >output.txt 2>&1 && {
 txtmatch.py expected.txt output.txt || { echo "Cat non-existing file gave unexpected output"; exit 1; }
 
 
+# The --punycode option lets the session/path be given in punycode form.
+PUNYPATH=$($PYTHON_BINARY -c "print('RäksmörgåsSession/r3.txt'.encode('punycode').decode('ascii'))")
+$BOAR cat --punycode "$PUNYPATH" | grep "Rev 3" || { echo "Unexpected output for cat --punycode"; exit 1; }
+
 
 echo "All is well"
 true
