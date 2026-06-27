@@ -644,7 +644,7 @@ class BoarMessageServer(object):
                     if is_progress_packet:
                         raise ConnectionLost("Got a progress packet from the client")
                 except WrongProtocolVersion as e:
-                    self.__send_result("['Dummy message. The response header should tell the client that the server is of an incompatible version']")
+                    self.__send_result(str2bytes("['Dummy message. The response header should tell the client that the server is of an incompatible version']"))
                     break
                 except ConnectionLost as e:
                     self.log("Disconnected: %s" % e)
