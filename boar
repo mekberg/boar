@@ -441,6 +441,10 @@ def cmd_mkrepo(args):
                       "blobs tied together with a recipe. This makes it possible to keep "
                       "the repository on a filesystem with a maximum file size. SIZE may "
                       "use the suffixes k, M, G or T (powers of 1024), for example '2G'.")
+    parser.add_option("-c", "--compress", dest = "compress", metavar="ALGORITHM",
+                      help="Store all blob data compressed with ALGORITHM (one of: "
+                      "gzip, xz, bz2, lz4). Make sure you will be able to decode the "
+                      "chosen algorithm in the future.")
     (options, args) = parser.parse_args(args)
     if len(args) > 1:
         raise UserError("Too many arguments")
@@ -454,7 +458,8 @@ def cmd_mkrepo(args):
         except ValueError as e:
             raise UserError("Invalid --max-file-size value: %s" % e)
     repository.create_repository(repopath, enable_deduplication = options.dedup,
-                                 max_blob_size = max_blob_size)
+                                 max_blob_size = max_blob_size,
+                                 compression_algorithm = options.compress)
 
 def cmd_list(args):
     parser = OptionParser(usage="usage: boar list [session name [snapshot id]]")

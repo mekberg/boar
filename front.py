@@ -639,6 +639,9 @@ class Front(object):
     def get_max_blob_size(self):
         return self.repo.get_max_blob_size()
 
+    def get_compression(self):
+        return self.repo.get_compression()
+
 class DryRunFront(object):
 
     def __init__(self, front):
