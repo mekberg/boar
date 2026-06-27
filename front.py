@@ -643,7 +643,7 @@ class DryRunFront(object):
         return self.realfront.get_session_ids()
 
     def get_session_info(self, id):
-        return self.realfront.get_session_properties(id)['client_data']
+        return self.realfront.get_session_info(id)
 
     def get_session_bloblist(self, id):
         return self.realfront.get_session_bloblist(id)
@@ -661,7 +661,7 @@ class DryRunFront(object):
         return []
 
     def add_blob_data_streamed(self, blob_md5=None, progress_callback=None, datasource=None):
-        while datasource.remaining:
+        while datasource.bytes_left():
             datasource.read(2**12)
 
     def blob_finished(self, blob_md5):

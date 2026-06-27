@@ -151,7 +151,7 @@ def benchmark():
             return blob_path
     block_size = 65536
     block_count = 10000
-    blob_fo.write("\0" * block_size)
+    blob_fo.write(b"\0" * block_size)
     recipe = {"md5sum": "00000000000000000000000000000000",
               "method": "concat",
               "size": block_size * block_count,

@@ -125,7 +125,7 @@ class Workdir(object):
         except UndecodableFilenameException as e:
             raise UserError("Found a filename that is illegal under the current file system encoding (%s): '%s'" %
                             (sys.getfilesystemencoding(), e.human_readable_name))
-        self.tree_csums == None
+        self.tree_csums = None
         self.__reload_manifests()
 
     def __reload_manifests(self):
