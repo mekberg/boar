@@ -77,4 +77,21 @@ static inline uint64_t value64_rolling(const RollingState* const state) {
   return RollsumDigest64(&(state->sum));
 }
 
+// Compute the rolling-checksum digest of a single block directly,
+// without allocating a RollingState or a window buffer. A block whose
+// length does not exceed the window never makes the window rotate, so
+// its digest is simply the roll-in accumulation over its bytes - bit
+// identical to feeding the block through a fresh RollingState, but
+// with no allocation and no buffer writes. Used by calc_rolling() and
+// thus by the harvest path (BlockChecksum).
+static inline uint64_t calc_rolling_digest(const char* const buf, const unsigned len) {
+  unsigned long s1 = 0;
+  unsigned long s2 = 0;
+  for(unsigned i = 0; i < len; i++){
+    s1 += (unsigned char)buf[i] + ROLLSUM_CHAR_OFFSET;
+    s2 += s1;
+  }
+  return (((uint64_t)s2) << 32) | s1;
+}
+
 #endif

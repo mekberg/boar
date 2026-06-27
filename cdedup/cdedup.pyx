@@ -29,6 +29,7 @@ cdef extern from "rollsum.h":
     void push_rolling(RollingState* state, unsigned char c_add)
     void push_buffer_rolling(RollingState* state, char* buf, unsigned len)
     uint64_t value64_rolling(RollingState* state)
+    uint64_t calc_rolling_digest(char* buf, unsigned len)
 
 cdef extern from "intset.h":
     cdef struct _IntSet:
@@ -190,14 +191,12 @@ cpdef uint64_t calc_rolling(s, window_size):
     return _calc_rolling(s, len(s), window_size)
 
 cdef uint64_t _calc_rolling(char[] buf, unsigned buf_length, unsigned window_size):
-    cdef RollingState* state 
     cdef uint64_t result
-    state = create_rolling(window_size)
-    #for n in xrange(0, buf_length):
-    #    push_rolling(state, buf[n])
-    push_buffer_rolling(state, buf, buf_length)
-    result = value64_rolling(state)
-    destroy_rolling(state)
+    # A block no larger than the window never rotates the rolling
+    # window, so its digest can be computed directly with no per-block
+    # allocation. window_size is therefore unused, but kept for API
+    # compatibility.
+    result = calc_rolling_digest(buf, buf_length)
     return result;
 
 def benchmark():
