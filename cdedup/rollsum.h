@@ -19,9 +19,9 @@
 #include "circularbuffer.h"
 
 typedef struct _Rollsum {
-  unsigned long count;               /* count of bytes included in sum */
-  unsigned long s1;                  /* s1 part of sum */
-  unsigned long s2;                  /* s2 part of sum */
+  uint64_t count;                    /* count of bytes included in sum */
+  uint64_t s1;                       /* s1 part of sum */
+  uint64_t s2;                       /* s2 part of sum */
 } Rollsum;
 
 typedef struct _RollingState {
@@ -85,8 +85,8 @@ static inline uint64_t value64_rolling(const RollingState* const state) {
 // with no allocation and no buffer writes. Used by calc_rolling() and
 // thus by the harvest path (BlockChecksum).
 static inline uint64_t calc_rolling_digest(const char* const buf, const unsigned len) {
-  unsigned long s1 = 0;
-  unsigned long s2 = 0;
+  uint64_t s1 = 0;
+  uint64_t s2 = 0;
   for(unsigned i = 0; i < len; i++){
     s1 += (unsigned char)buf[i] + ROLLSUM_CHAR_OFFSET;
     s2 += s1;

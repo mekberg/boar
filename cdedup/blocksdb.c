@@ -379,8 +379,11 @@ BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint64_t* of
     LOG_EXIT();
     return BLOCKSDB_DONE;
   }
-  assert(false, "Unexpected result in get_all_rolling_next");
-  return BLOCKSDB_ERR_OTHER; // should never get here
+  // sqlite3_step() returned something other than ROW/DONE (e.g.
+  // SQLITE_CORRUPT, SQLITE_IOERR, SQLITE_BUSY). Report it as an error
+  // instead of aborting the process; the Python layer turns this into
+  // a SoftCorruptionError.
+  RET_SQLITE_ERROR("Unexpected result while reading blocks");
 }
 
 BLOCKSDB_RESULT get_blocks_finish(BlocksDbState* dbstate) {

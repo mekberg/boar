@@ -29,6 +29,7 @@ static void assert(int c, const char* msg){
 #define RollsumDigest(sum) (((sum)->s2 << 16) | ((sum)->s1 & 0xffff))
 
 RollingState* create_rolling(uint32_t window_size){
+  assert(window_size > 0, "create_rolling(): window_size must be positive");
   RollingState* state = (RollingState*) calloc(1, sizeof(RollingState));
   assert(state != NULL, "create_rolling(): Failed to allocate memory for state");
   state->cb = create_circular_buffer(window_size);
