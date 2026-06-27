@@ -55,7 +55,7 @@
  * sqlite error state information.
  */
 #define RET_SQLITE_ERROR(msg) {						\
-    sprintf(dbstate->error_msg, msg "(%s:%u: error %d:%s)",		\
+    snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),msg "(%s:%u: error %d:%s)",		\
 	    __FILE__, __LINE__, sqlite3_errcode(dbstate->handle),	\
 	    sqlite3_errmsg(dbstate->handle));				\
     LOG_EXIT();								\
@@ -63,14 +63,14 @@
   }
 
 #define RET_ERROR_CORRUPT(msg) {					\
-    sprintf(dbstate->error_msg, msg "(%s:%u: %s)",			\
+    snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),msg "(%s:%u: %s)",			\
 	    __FILE__, __LINE__, "blocks database is corrupt");		\
     LOG_EXIT();								\
     return BLOCKSDB_ERR_CORRUPT;					\
   }
 
 #define RET_ERROR_OTHER(msg)  {						\
-    sprintf(dbstate->error_msg, msg "(%s:%u)",				\
+    snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),msg "(%s:%u)",				\
 	    __FILE__, __LINE__);					\
     LOG_EXIT();								\
     return BLOCKSDB_ERR_OTHER;						\
@@ -194,7 +194,7 @@ static BLOCKSDB_RESULT execute_simple(BlocksDbState* dbstate, char* sql) {
   ASSERT_VALID_STATE(dbstate);
   int retval =  sqlite3_exec(dbstate->handle, sql, NULL, NULL, NULL);
   if(retval != SQLITE_OK){
-    strcpy(dbstate->error_msg, sqlite3_errmsg(dbstate->handle));
+    snprintf(dbstate->error_msg, sizeof(dbstate->error_msg), "%s", sqlite3_errmsg(dbstate->handle));
     return BLOCKSDB_ERR_OTHER;
   }
   LOG_EXIT();
@@ -211,7 +211,7 @@ BLOCKSDB_RESULT get_rolling_init(BlocksDbState* dbstate){
     LOG_EXIT();
     return BLOCKSDB_DONE;
   }
-  sprintf(dbstate->error_msg, 
+  snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),
 	  "Error while initializing fetching rolling checksums: %s", 
 	  sqlite3_errmsg(dbstate->handle));
   return BLOCKSDB_ERR_OTHER; // Should never get here
@@ -230,7 +230,7 @@ BLOCKSDB_RESULT get_rolling_next(BlocksDbState* dbstate, uint64_t *rolling) {
     LOG_EXIT();
     return BLOCKSDB_DONE;
   }
-  sprintf(dbstate->error_msg, 
+  snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),
 	  "Error while fetching rolling checksums (sqlite error %d): %s", 
 	  s, sqlite3_errmsg(dbstate->handle));
   return BLOCKSDB_ERR_OTHER; // Should never get here
@@ -269,12 +269,12 @@ BLOCKSDB_RESULT add_block(BlocksDbState* dbstate, const char* blob, uint64_t off
   ASSERT_VALID_STATE(dbstate);
   //const char* md5_row = block_row_checksum(blob, offset, md5);
   if(! is_md5sum(blob)) {
-    sprintf(dbstate->error_msg, "add_block(): Not a valid blob name: %s", blob);    
+    snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),"add_block(): Not a valid blob name: %s", blob);    
     LOG_EXIT();
     return BLOCKSDB_ERR_OTHER;
   }
   if(! is_md5sum(md5)) {
-    sprintf(dbstate->error_msg, "add_block(): Not a valid md5 sum: %s", md5);    
+    snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),"add_block(): Not a valid md5 sum: %s", md5);    
     LOG_EXIT();
     return BLOCKSDB_ERR_OTHER;
   }
@@ -316,7 +316,7 @@ BLOCKSDB_RESULT get_blocks_init(BlocksDbState* dbstate, char* md5, int limit){
   LOG_ENTER();
   ASSERT_VALID_STATE(dbstate);
   if(! is_md5sum(md5)) {
-    sprintf(dbstate->error_msg, "get_blocks_init(): Not a valid md5 sum: %s", md5);    
+    snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),"get_blocks_init(): Not a valid md5 sum: %s", md5);    
     LOG_EXIT();
     return BLOCKSDB_ERR_OTHER;
   }
@@ -368,7 +368,7 @@ BLOCKSDB_RESULT get_blocks_next(BlocksDbState* dbstate, char* blob, uint64_t* of
     const unsigned short expected_row_crc = crc16_row(blob, *offset, md5);
 
     if(row_crc != expected_row_crc){
-      sprintf(dbstate->error_msg, "An entry in the blocks database is corrupt (block id %s)", md5);
+      snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),"An entry in the blocks database is corrupt (block id %s)", md5);
       LOG_EXIT();
       return BLOCKSDB_ERR_CORRUPT;
     }
@@ -406,7 +406,7 @@ BLOCKSDB_RESULT delete_blocks_add(BlocksDbState* dbstate, char* blob){
   LOG_ENTER();
   ASSERT_VALID_STATE(dbstate);
   if(! is_md5sum(blob)) {
-    sprintf(dbstate->error_msg, "delete_blocks_add(): Not a valid blob name: %s", blob);
+    snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),"delete_blocks_add(): Not a valid blob name: %s", blob);
     LOG_EXIT();
     return BLOCKSDB_ERR_OTHER;
   }
@@ -503,7 +503,7 @@ static BLOCKSDB_RESULT initialize_database(BlocksDbState* dbstate, unsigned bloc
   for(int i = 0; *sql[i] != '\0'; i++){
     const int retval = sqlite3_exec(dbstate->handle, sql[i], NULL, NULL, NULL);
     if(retval != SQLITE_OK){
-      sprintf(dbstate->error_msg, "Error while initializing database (%s): %s", sql[i], sqlite3_errmsg(dbstate->handle));
+      snprintf(dbstate->error_msg, sizeof(dbstate->error_msg),"Error while initializing database (%s): %s", sql[i], sqlite3_errmsg(dbstate->handle));
       LOG_EXIT();
       return BLOCKSDB_ERR_OTHER;
     }
@@ -542,7 +542,7 @@ BLOCKSDB_RESULT init_blocksdb(const char* dbfile, int block_size, BlocksDbState*
   *out_state = state;
   const int retval = sqlite3_open(dbfile, &state->handle);
   if(retval != SQLITE_OK){
-    sprintf(state->error_msg, "Error while opening database %s: %s", dbfile, sqlite3_errmsg(state->handle));
+    snprintf(state->error_msg, sizeof(state->error_msg), "Error while opening database %s: %s", dbfile, sqlite3_errmsg(state->handle));
     LOG_EXIT();
     return BLOCKSDB_ERR_CORRUPT;
   }
