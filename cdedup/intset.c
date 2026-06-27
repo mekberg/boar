@@ -120,29 +120,6 @@ void add_intset(IntSet* intset, uint64_t int_to_add) {
 
 }
 
-//static int skipped_searches = 0;
-
-inline int contains_intset(IntSet* const intset, const uint64_t int_to_find) {
-  // This function is a hot spot. It takes too long to check the magic
-  // number (about 10% slower)
-
-  Bucket* const bucket = &intset->buckets[qmod(int_to_find, intset->bucket_count)];
-  
-  if((bucket->mask & int_to_find) != int_to_find) {
-    //skipped_searches++;
-    return 0;
-  }
-  for(unsigned i=0; i < bucket->used_slots; i++){
-    __builtin_prefetch(&bucket->slots[i], 0, 0);
-  }
-  for(unsigned i=0; i < bucket->used_slots; i++){
-    if(bucket->slots[i] == int_to_find){
-      return 1;
-    }
-  }
-  return 0;
-}
-
 void destroy_intset(IntSet* intset) {
   //print_stats_intset(intset);
   massert(intset->magic == 0x876aa034, "Invalid intset magic number");

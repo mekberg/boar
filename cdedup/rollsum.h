@@ -30,12 +30,51 @@ typedef struct _RollingState {
 } RollingState;
 
 RollingState* create_rolling(uint32_t window_size);
-int is_full(RollingState* state);
-int is_empty(RollingState* state);
-void push_rolling(RollingState* state, unsigned char c_add);
+void destroy_rolling(RollingState* state);
 void push_buffer_rolling(RollingState* state, const char* buf, unsigned len);
 unsigned value_rolling(RollingState* state);
-uint64_t value64_rolling(RollingState* state);
-void destroy_rolling(RollingState* state);
+
+// Snipped from rsynclib
+// (http://stackoverflow.com/questions/6178201/zlib-adler32-rolling-checksum-problem)
+
+#define ROLLSUM_CHAR_OFFSET 31
+
+#define RollsumRotate(sum,out,in) { \
+  (sum)->s1 += (unsigned char)(in) - (unsigned char)(out); \
+  (sum)->s2 += (sum)->s1 - (sum)->count*((unsigned char)(out)+ROLLSUM_CHAR_OFFSET); \
+  }
+
+#define RollsumRollin(sum,c) { \
+  (sum)->s1 += ((unsigned char)(c)+ROLLSUM_CHAR_OFFSET); \
+  (sum)->s2 += (sum)->s1; \
+  (sum)->count++; \
+  }
+
+#define RollsumDigest64(sum) (						\
+			      (((uint64_t)((sum)->s2)) << 32) |		\
+			      ((sum)->s1)				\
+								)
+
+// The per-byte hot path. Kept "static inline" in the header so it
+// folds directly into the scanning loop in the Cython-generated code
+// (which #includes this header), eliminating one cross-module call
+// per input byte.
+static inline int is_full(const RollingState* const state) {
+  return is_full_circular_buffer(state->cb);
+}
+
+static inline void push_rolling(RollingState* const state, const unsigned char c_add) {
+  if(!is_full_circular_buffer(state->cb)){
+    push_circular_buffer(state->cb, c_add);
+    RollsumRollin(&state->sum, c_add);
+  } else {
+    const unsigned char c_remove = rotate_circular_buffer(state->cb, c_add);
+    RollsumRotate(&state->sum, c_remove, c_add);
+  }
+}
+
+static inline uint64_t value64_rolling(const RollingState* const state) {
+  return RollsumDigest64(&(state->sum));
+}
 
 #endif
