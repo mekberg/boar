@@ -433,16 +433,28 @@ def cmd_info(args):
 def cmd_mkrepo(args):
     if len(args) == 0:
         args = ["--help"]
-    parser = OptionParser(usage="usage: boar mkrepo [-d|--enable-deduplication] <new repo path>")
+    parser = OptionParser(usage="usage: boar mkrepo [-d|--enable-deduplication] [-m|--max-file-size SIZE] <new repo path>")
     parser.add_option("-d", "--enable-deduplication", dest = "dedup", action="store_true",
                       help="Enable deduplication for this repository")
+    parser.add_option("-m", "--max-file-size", dest = "max_file_size", metavar="SIZE",
+                      help="Store files larger than SIZE by splitting them into smaller "
+                      "blobs tied together with a recipe. This makes it possible to keep "
+                      "the repository on a filesystem with a maximum file size. SIZE may "
+                      "use the suffixes k, M, G or T (powers of 1024), for example '2G'.")
     (options, args) = parser.parse_args(args)
     if len(args) > 1:
         raise UserError("Too many arguments")
     repopath, = args
     if os.path.exists(repopath):
         raise UserError("File or directory already exists: %s" % repopath)
-    repository.create_repository(repopath, enable_deduplication = options.dedup)
+    max_blob_size = None
+    if options.max_file_size is not None:
+        try:
+            max_blob_size = parse_human_size(options.max_file_size)
+        except ValueError as e:
+            raise UserError("Invalid --max-file-size value: %s" % e)
+    repository.create_repository(repopath, enable_deduplication = options.dedup,
+                                 max_blob_size = max_blob_size)
 
 def cmd_list(args):
     parser = OptionParser(usage="usage: boar list [session name [snapshot id]]")

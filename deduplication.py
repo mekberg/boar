@@ -216,6 +216,16 @@ class OriginalPieceHandler(object):
         recipe."""
         pass
 
+    def get_piece_segments(self, index, size):
+        """After the handler has been closed, this method must return a
+        list of (blob, offset, size) segments that, concatenated in
+        order, reproduce the data of the given piece. The default
+        implementation stores each piece in a single blob and so
+        returns a single segment; handlers that split data across
+        several blobs override this."""
+        blob, offset = self.get_piece_address(index)
+        return [(blob, offset, size)]
+
 from statemachine import GenericStateMachine
 
 START_STATE = "START"
@@ -433,10 +443,15 @@ class RecipeFinder(GenericStateMachine):
 
         for s in self.sequences:
             if isinstance(s, Struct):
-                # Original data
-                restored_size += s.piece_size
-                blob, offset = s.piece_handler.get_piece_address(s.piece_index)
-                yield get_dict(blob, offset, s.piece_size, True)
+                # Original data. The piece may be spread over several
+                # blobs if a maximum blob size is configured, so emit
+                # one recipe piece per stored segment.
+                segment_total = 0
+                for blob, offset, segment_size in s.piece_handler.get_piece_segments(s.piece_index, s.piece_size):
+                    segment_total += segment_size
+                    restored_size += segment_size
+                    yield get_dict(blob, offset, segment_size, True)
+                assert segment_total == s.piece_size
 
             elif type(s) == list:
                 # Duplicated data

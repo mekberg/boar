@@ -589,7 +589,9 @@ class Front(object):
 
     def new_snapshot_has_blob(self, sum):
         assert self.new_session, "new_snapshot_has_blob() must only be called when a new snapshot is underway"
-        return self.new_session.has_blob(sum)
+        # A blob already uploaded in this snapshot may be stored either
+        # as a raw blob or, for oversized/deduplicated files, as a recipe.
+        return self.new_session.has_blob(sum) or self.new_session.has_recipe(sum)
 
     def find_last_revision(self, session_name):
         """ Returns the id of the latest snapshot in the specified
@@ -633,6 +635,9 @@ class Front(object):
 
     def deduplication_enabled(self):
         return self.repo.deduplication_enabled()
+
+    def get_max_blob_size(self):
+        return self.repo.get_max_blob_size()
 
 class DryRunFront(object):
 
