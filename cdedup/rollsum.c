@@ -19,9 +19,6 @@
 #include "string.h"
 #include "stdint.h"
 
-// Snipped from rsynclib
-// (http://stackoverflow.com/questions/6178201/zlib-adler32-rolling-checksum-problem)
-
 static void assert(int c, const char* msg){
   if(c == 0){
     printf("ASSERT FAILED: %s\n", msg);
@@ -29,37 +26,10 @@ static void assert(int c, const char* msg){
   }
 }
 
-#define ROLLSUM_CHAR_OFFSET 31
-
-#define RollsumInit(sum) { \
-  (sum)->count=(sum)->s1=(sum)->s2=0; \
-  }
-
-#define RollsumRotate(sum,out,in) { \
-  (sum)->s1 += (unsigned char)(in) - (unsigned char)(out); \
-  (sum)->s2 += (sum)->s1 - (sum)->count*((unsigned char)(out)+ROLLSUM_CHAR_OFFSET); \
-  }
-
-#define RollsumRollin(sum,c) { \
-  (sum)->s1 += ((unsigned char)(c)+ROLLSUM_CHAR_OFFSET); \
-  (sum)->s2 += (sum)->s1; \
-  (sum)->count++; \
-  }
-
-#define RollsumRollout(sum,c) { \
-  (sum)->s1 -= ((unsigned char)(c)+ROLLSUM_CHAR_OFFSET); \
-  (sum)->s2 -= (sum)->count*((unsigned char)(c)+ROLLSUM_CHAR_OFFSET); \
-  (sum)->count--; \
-  }
-
 #define RollsumDigest(sum) (((sum)->s2 << 16) | ((sum)->s1 & 0xffff))
 
-#define RollsumDigest64(sum) (						\
-			      (((uint64_t)((sum)->s2)) << 32) |		\
-			      ((sum)->s1)				\
-									)
-
 RollingState* create_rolling(uint32_t window_size){
+  assert(window_size > 0, "create_rolling(): window_size must be positive");
   RollingState* state = (RollingState*) calloc(1, sizeof(RollingState));
   assert(state != NULL, "create_rolling(): Failed to allocate memory for state");
   state->cb = create_circular_buffer(window_size);
@@ -74,30 +44,9 @@ void destroy_rolling(RollingState* state) {
   free(state);
 }
 
-static void massert(int condition, const char* message) {
-  if(condition == 0){
-    printf("Assertion failed: %s\n", message);
-    exit(1);
-  }
-}
-
-int is_full(RollingState* state) { 
-  return is_full_circular_buffer(state->cb);
-}
-
 void push_buffer_rolling(RollingState* const state, const char* const buf, const unsigned len){
   for(unsigned i=0;i<len;i++){
     push_rolling(state, buf[i]);
-  }
-}
-
-void push_rolling(RollingState* const state, const unsigned char c_add) {
-  if(!is_full(state)){
-    push_circular_buffer(state->cb, c_add);
-    RollsumRollin(&state->sum, c_add);
-  } else {
-    const unsigned char c_remove = rotate_circular_buffer(state->cb, c_add);
-    RollsumRotate(&state->sum, c_remove, c_add);
   }
 }
 
@@ -105,18 +54,8 @@ unsigned value_rolling(RollingState* const state) {
   return RollsumDigest(&(state->sum));
 }
 
-uint64_t value64_rolling(RollingState* const state) {
-  return RollsumDigest64(&(state->sum));
-}
-
-
 int main_rollsum() {
   // gcc -g -O2 -Wall -std=c99 rollsum.c circularbuffer.c && time ./a.out
-  /* Benchmark results at the time of writing for 100 MB
-     real    0m1.134s
-     user    0m1.098s
-     sys     0m0.035s
-  */
   char* buf = malloc(100000000);
   memset(buf, 'x', 100000000);
   printf("Running\n");
@@ -126,4 +65,3 @@ int main_rollsum() {
   free(buf);
   return 0;
 };
-

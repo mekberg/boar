@@ -17,24 +17,53 @@
 
 #include "stdint.h"
 
+// A fixed-size ring buffer holding the last "circular_buffer_size"
+// bytes. The rolling checksum only ever needs the byte that is about
+// to leave the window, so the buffer is exactly window-sized and the
+// hot operations are branch-light, inlinable, and allocation-free.
 typedef struct _CircularBuffer {
   uint32_t magic;
-  uint32_t circular_buffer_size; // Circular buffer size
-  uint32_t physical_buffer_size; // Actual size of the physical buffer
-  uint32_t pos; // Current start position in the physical buffer
-  uint32_t length; // The number of stored bytes in the circular buffer
-  char* buf; // buffer
-  // char* next_p; // A pointer to the next insertion point
+  uint32_t circular_buffer_size; // Window size == physical buffer size
+  uint32_t pos; // Index of the oldest byte (the next one to leave the window)
+  uint32_t length; // Number of bytes currently stored (<= circular_buffer_size)
+  char* buf; // Physical buffer of "circular_buffer_size" bytes
   uint32_t sentinel;
 } CircularBuffer;
 
-void print_circular_buffer(CircularBuffer* state);
 CircularBuffer* create_circular_buffer(uint32_t window_size);
 void destroy_circular_buffer(CircularBuffer* state);
-void push_circular_buffer(CircularBuffer* state, char c);
-char rotate_circular_buffer(CircularBuffer* state, const char c);
-char get_circular_buffer(CircularBuffer* state, const uint32_t pos);
 void print_circular_buffer(CircularBuffer* state);
-int is_full_circular_buffer(CircularBuffer* state);
+
+static inline int is_full_circular_buffer(const CircularBuffer* const state){
+  return state->length == state->circular_buffer_size;
+}
+
+// Append a byte to a buffer that is known not to be full yet. While
+// the buffer is filling, "pos" is still 0, so the next free slot is
+// simply at index "length".
+static inline void push_circular_buffer(CircularBuffer* const state, const char c) {
+  state->buf[state->length] = c;
+  state->length += 1;
+}
+
+// Overwrite the oldest byte with "c" and return the byte that left
+// the window. Only valid on a full buffer.
+static inline char rotate_circular_buffer(CircularBuffer* const state, const char c) {
+  const uint32_t pos = state->pos;
+  const char pushed_out = state->buf[pos];
+  state->buf[pos] = c;
+  uint32_t next = pos + 1;
+  if(next == state->circular_buffer_size)
+    next = 0;
+  state->pos = next;
+  return pushed_out;
+}
+
+static inline char get_circular_buffer(const CircularBuffer* const state, const uint32_t pos){
+  uint32_t i = state->pos + pos;
+  if(i >= state->circular_buffer_size)
+    i -= state->circular_buffer_size;
+  return state->buf[i];
+}
 
 #endif

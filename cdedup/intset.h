@@ -33,7 +33,26 @@ typedef struct _IntSet {
 
 IntSet* create_intset(uint32_t bucket_count);
 void add_intset(IntSet* intset, uint64_t int_to_add);
-int contains_intset(IntSet* intset, uint64_t int_to_find);
 void destroy_intset(IntSet* intset);
+
+// This function is a hot spot - it is called once per input byte from
+// the scanning loop. It is kept "static inline" in the header so it
+// folds directly into the Cython-generated caller. The per-bucket
+// "mask" (the OR of every value in the bucket) lets us reject the
+// common miss case with a single load and compare, before touching
+// the slot array at all.
+static inline int contains_intset(const IntSet* const intset, const uint64_t int_to_find) {
+  const Bucket* const bucket = &intset->buckets[int_to_find & (intset->bucket_count - 1)];
+
+  if((bucket->mask & int_to_find) != int_to_find) {
+    return 0;
+  }
+  for(uint32_t i=0; i < bucket->used_slots; i++){
+    if(bucket->slots[i] == int_to_find){
+      return 1;
+    }
+  }
+  return 0;
+}
 
 #endif
