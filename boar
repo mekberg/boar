@@ -1408,7 +1408,11 @@ def __clone_once(source_front, target_front, skip_verify=False, reflink=False):
 
     stats = front.clone(source_front, target_front, reflink = reflink)
     if reflink:
-        print("Reflinked %d blob(s); copied %d blob(s)." % (stats["reflinked"], stats["copied"]))
+        print("Reflinked %d blob(s); copied %d blob(s); %d blob(s) already present." %
+              (stats["reflinked"], stats["copied"], stats["present"]))
+    else:
+        print("Copied %d blob(s); %d blob(s) already present." %
+              (stats["copied"], stats["present"]))
 
     if not skip_verify:
         print("Performing full verify on cloned repo")

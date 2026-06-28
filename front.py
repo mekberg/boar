@@ -79,8 +79,9 @@ valid_session_props = set(["ignore", "include"])
 
 def clone(from_front, to_front, reflink = False):
     """Clone all new snapshots from from_front into to_front. Returns a
-    statistics dict with the number of blobs 'reflinked' and 'copied'."""
-    stats = {"reflinked": 0, "copied": 0}
+    statistics dict with the number of blobs 'reflinked', 'copied' and
+    'present' (already in the destination, so skipped)."""
+    stats = {"reflinked": 0, "copied": 0, "present": 0}
     from_front.acquire_repo_lock()
     to_front.acquire_repo_lock()
     try:
@@ -191,11 +192,35 @@ def __clone_single_snapshot(from_front, to_front, session_id, reflink = False, s
     assert from_front != to_front
     other_bloblist = from_front.get_session_bloblist(session_id)
     other_raw_bloblist = from_front.get_session_raw_bloblist(session_id)
-    for n, blobinfo in enumerate(other_raw_bloblist):
+
+    # Work out up front how many blobs actually need transferring, so the
+    # progress can be numbered contiguously ("blob 3 of 40"). Numbering by
+    # each blob's position in the full list instead makes the visible
+    # sequence jump (e.g. 9, 11, 13...) wherever a blob the destination
+    # already has was silently skipped, which looks like something is wrong.
+    seen = set()
+    blobs_to_transfer = 0
+    for blobinfo in other_raw_bloblist:
+        if blobinfo.get("action", None):
+            continue
+        md5sum = blobinfo['md5sum']
+        if md5sum in seen or to_front.has_blob(md5sum):
+            continue
+        seen.add(md5sum)
+        blobs_to_transfer += 1
+
+    transferred = 0
+    for blobinfo in other_raw_bloblist:
         action = blobinfo.get("action", None)
         if not action:
             md5sum = blobinfo['md5sum']
-            if not (to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum)):
+            if to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum):
+                # The destination already has this blob (from an earlier
+                # snapshot or earlier in this one); nothing to send.
+                if stats is not None:
+                    stats["present"] += 1
+            else:
+                transferred += 1
                 reflinked = False
                 if reflink and _local_source_has_raw_blob(from_front, to_front, md5sum):
                     # Offer the destination the source's raw blob file to share
@@ -216,7 +241,7 @@ def __clone_single_snapshot(from_front, to_front, session_id, reflink = False, s
                 if not reflinked:
                     pp = SimpleProgressPrinter(sys.stdout,
                                                label="Sending blob %s of %s (%s MB)" %
-                                               (n+1, len(other_raw_bloblist),
+                                               (transferred, blobs_to_transfer,
                                                 round((blobinfo['size'] / float(2**20)), 3)))
                     sw = StopWatch(enabled=False, name="front.clone")
                     to_front.init_new_blob(md5sum, blobinfo['size'])
