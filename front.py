@@ -77,11 +77,14 @@ def set_file_contents(front, session_name, filename, contents):
 
 valid_session_props = set(["ignore", "include"])
 
-def clone(from_front, to_front):
+def clone(from_front, to_front, reflink = False):
+    """Clone all new snapshots from from_front into to_front. Returns a
+    statistics dict with the number of blobs 'reflinked' and 'copied'."""
+    stats = {"reflinked": 0, "copied": 0}
     from_front.acquire_repo_lock()
     to_front.acquire_repo_lock()
     try:
-        __clone(from_front, to_front)
+        __clone(from_front, to_front, reflink = reflink, stats = stats)
     finally:
         # Always try to release the locks, but any errors here are
         # probably not very interesting, let's ignore them.
@@ -89,8 +92,32 @@ def clone(from_front, to_front):
         except: pass
         try: from_front.release_repo_lock()
         except: pass
+    return stats
 
-def __clone(from_front, to_front):
+def _local_source_has_raw_blob(from_front, to_front, md5sum):
+    """True if both repositories are local (direct filesystem access) and the
+    source stores the given blob as a single raw file - so there is a raw blob
+    that could be shared into the destination via a copy-on-write reflink.
+
+    This is only the source-side and locality part of the decision. Whether
+    the destination would actually store the blob verbatim (and so may reflink
+    it) is decided by the destination itself - see
+    Repository.stores_blob_verbatim() and SessionWriter.reflink_new_blob()."""
+    if not (isinstance(from_front, Front) and isinstance(to_front, Front)):
+        return False
+    return from_front.repo.has_raw_blob(md5sum)
+
+def _blob_can_reflink_replace(from_front, to_front, md5sum):
+    """True if, after the normal write path has run, the destination ended
+    up storing this blob verbatim as a single raw blob identical to one the
+    source already has - so that raw blob can be replaced with a reflink to
+    share its data. This is how a deduplicating destination still reflinks
+    the (often many) blobs that turn out to have no duplicate blocks and are
+    therefore stored exactly as in the source."""
+    return _local_source_has_raw_blob(from_front, to_front, md5sum) \
+        and to_front.new_snapshot_has_raw_blob(md5sum)
+
+def __clone(from_front, to_front, reflink = False, stats = None):
     # Check that other repo is a continuation of this one
     assert is_continuation(base_front = to_front, cont_front = from_front), \
         "Cannot pull: %s is not a continuation of %s" % (from_front, to_front)
@@ -132,7 +159,7 @@ def __clone(from_front, to_front):
             if snapshots_to_delete:
                 to_front.erase_snapshots(snapshots_to_delete)
                 snapshots_to_delete = None
-            __clone_single_snapshot(from_front, to_front, session_id)
+            __clone_single_snapshot(from_front, to_front, session_id, reflink = reflink, stats = stats)
             self.commit_raw(session_name = session_name, log_message = session_info.get("log_message", None),
                             timestamp = session_info.get('timestamp', None), date = session_info['date'])
 
@@ -158,7 +185,7 @@ def find_snapshots_to_delete(from_front, to_front):
         snapshots_to_delete.append(rev)
     return snapshots_to_delete
 
-def __clone_single_snapshot(from_front, to_front, session_id):
+def __clone_single_snapshot(from_front, to_front, session_id, reflink = False, stats = None):
     """ This function requires that a new snapshot is underway in
     to_front. It does not commit that snapshot. """
     assert from_front != to_front
@@ -169,22 +196,52 @@ def __clone_single_snapshot(from_front, to_front, session_id):
         if not action:
             md5sum = blobinfo['md5sum']
             if not (to_front.has_blob(md5sum) or to_front.new_snapshot_has_blob(md5sum)):
-                pp = SimpleProgressPrinter(sys.stdout,
-                                           label="Sending blob %s of %s (%s MB)" %
-                                           (n+1, len(other_raw_bloblist),
-                                            round((blobinfo['size'] / float(2**20)), 3)))
-                sw = StopWatch(enabled=False, name="front.clone")
-                to_front.init_new_blob(md5sum, blobinfo['size'])
-                sw.mark("front.init_new_blob()")
-                datasource = from_front.get_blob(md5sum)
-                pp.update(0.0)
-                datasource.set_progress_callback(pp.update)
-                to_front.add_blob_data_streamed(blob_md5 = md5sum,
-                                                datasource = datasource)
-                pp.finished()
-                sw.mark("front.add_blob_data_streamed()")
-                to_front.blob_finished(md5sum)
-                sw.mark("front.finished()")
+                reflinked = False
+                if reflink and _local_source_has_raw_blob(from_front, to_front, md5sum):
+                    # Offer the destination the source's raw blob file to share
+                    # via a copy-on-write reflink instead of streaming and
+                    # re-storing its data. The destination takes it only if it
+                    # would store the blob verbatim anyway; repos that
+                    # deduplicate or split decline and the blob is streamed
+                    # normally below (so those features still apply).
+                    try:
+                        reflinked = to_front.reflink_new_blob(
+                            md5sum, blobinfo['size'],
+                            from_front.repo.get_blob_path(md5sum))
+                    except (OSError, IOError):
+                        # A reflink can still fail for a particular blob even
+                        # after the up-front check (e.g. the disk filled up).
+                        # Fall back to copying that blob normally.
+                        reflinked = False
+                if not reflinked:
+                    pp = SimpleProgressPrinter(sys.stdout,
+                                               label="Sending blob %s of %s (%s MB)" %
+                                               (n+1, len(other_raw_bloblist),
+                                                round((blobinfo['size'] / float(2**20)), 3)))
+                    sw = StopWatch(enabled=False, name="front.clone")
+                    to_front.init_new_blob(md5sum, blobinfo['size'])
+                    sw.mark("front.init_new_blob()")
+                    datasource = from_front.get_blob(md5sum)
+                    pp.update(0.0)
+                    datasource.set_progress_callback(pp.update)
+                    to_front.add_blob_data_streamed(blob_md5 = md5sum,
+                                                    datasource = datasource)
+                    pp.finished()
+                    sw.mark("front.add_blob_data_streamed()")
+                    to_front.blob_finished(md5sum)
+                    sw.mark("front.finished()")
+                    if reflink and _blob_can_reflink_replace(from_front, to_front, md5sum):
+                        # Deduplication/splitting ran, but this blob ended up
+                        # stored verbatim as a single raw blob identical to
+                        # the source's - share it with a reflink instead of
+                        # keeping the freshly copied data.
+                        try:
+                            to_front.reflink_replace_blob(md5sum, from_front.repo.get_blob_path(md5sum))
+                            reflinked = True
+                        except (OSError, IOError):
+                            reflinked = False
+                if stats is not None:
+                    stats["reflinked" if reflinked else "copied"] += 1
             to_front.add(blobinfo)
         elif action == "remove":
             to_front.remove(blobinfo['filename'])
@@ -494,6 +551,24 @@ class Front(object):
     def blob_finished(self, blob_md5):
         self.new_session.blob_finished(blob_md5)
 
+    def reflink_new_blob(self, blob_md5, blob_size, source_path):
+        """ Try to add a blob to the active snapshot by reflinking an existing
+        raw blob file (on the same filesystem) instead of copying its data.
+        Returns True if reflinked, or False if the destination would not store
+        the blob verbatim and the caller should stream it normally instead. """
+        return self.new_session.reflink_new_blob(blob_md5, blob_size, source_path)
+
+    def reflink_replace_blob(self, blob_md5, source_path):
+        """ Replace a raw blob just stored in the active snapshot with a
+        reflink of an identical source blob, to share its data. """
+        self.new_session.reflink_replace_blob(blob_md5, source_path)
+
+    def new_snapshot_has_raw_blob(self, sum):
+        """ True if the active snapshot currently stores the given blob as a
+        single raw blob (as opposed to a recipe, or not at all). """
+        assert self.new_session, "new_snapshot_has_raw_blob() requires an active snapshot"
+        return self.new_session.has_blob(sum)
+
     def add(self, metadata):
         """ Must be called after a create_session(). Adds a link to a existing
         blob. Will throw an exception if there is no such blob """
@@ -638,6 +713,9 @@ class Front(object):
 
     def get_max_blob_size(self):
         return self.repo.get_max_blob_size()
+
+    def get_blob_split_size(self):
+        return self.repo.get_blob_split_size()
 
 class DryRunFront(object):
 

@@ -1395,7 +1395,7 @@ def cmd_lostfiles(args):
             if restore_missing:
                 wd.fetch_file(bi['filename'], bi['md5sum'], overwrite = False)
 
-def __clone_once(source_front, target_front, skip_verify=False):
+def __clone_once(source_front, target_front, skip_verify=False, reflink=False):
     if front.is_identical(source_front, target_front):
         print("Repositories are already identical")
         return
@@ -1406,14 +1406,16 @@ def __clone_once(source_front, target_front, skip_verify=False):
         print("Quick verifying destination repo")
         verify_repo(target_front, verify_blobs = False)
 
-    front.clone(source_front, target_front)
+    stats = front.clone(source_front, target_front, reflink = reflink)
+    if reflink:
+        print("Reflinked %d blob(s); copied %d blob(s)." % (stats["reflinked"], stats["copied"]))
 
     if not skip_verify:
         print("Performing full verify on cloned repo")
         verify_repo(target_front, verify_blobs = True)
     print("Repos are in sync.")
 
-def __clone_replicate(source_front, target_front, skip_verify = False):
+def __clone_replicate(source_front, target_front, skip_verify = False, reflink = False):
     if not skip_verify:
         print("Quick verifying source repo")
         verify_repo(source_front, verify_blobs = False)
@@ -1426,7 +1428,7 @@ def __clone_replicate(source_front, target_front, skip_verify = False):
             time.sleep(10)
             continue
         print("Incoming changes found. Cloning...")
-        __clone_once(source_front, target_front, skip_verify=True)
+        __clone_once(source_front, target_front, skip_verify=True, reflink=reflink)
         print("Waiting for incoming changes...")
 
 def cmd_clone(args):
@@ -1437,6 +1439,12 @@ def cmd_clone(args):
                       help="Continously replicate any changes from the master to the clone (does not return)")
     parser.add_option("--skip-verification", dest = "skip_verify", action="store_true",
                       help="No verifications will be performed. WARNING: If the source repo is corrupt, the clone may also become corrupt.")
+    parser.add_option("--reflink", dest = "reflink", action="store_true",
+                      help="Share blobs with the source using copy-on-write reflinks instead of "
+                      "copying their data, where the destination would store the blob verbatim. "
+                      "A destination that deduplicates or splits blobs still does so "
+                      "(those blobs are copied, not reflinked). Both repositories must be local "
+                      "and on the same reflink-capable filesystem (such as XFS or btrfs).")
     (options, args) = parser.parse_args(args)
     if len(args) != 2:
         raise UserError("You must specify one source repository and one destination repository.")
@@ -1447,10 +1455,19 @@ def cmd_clone(args):
     target_front = client.connect(repopath2)
     if not front.is_continuation(base_front = target_front, cont_front = source_front):
         raise UserError("The source repo is not a continuation of the destination repo. Cannot clone.")
+    if options.reflink:
+        if not (isinstance(source_front, Front) and isinstance(target_front, Front)):
+            raise UserError("--reflink can only be used with local repositories, not over the network.")
+        # Probe by reflinking an existing source file (read-only) into the
+        # destination, so this works even for a write-protected source repo.
+        probe_source = os.path.join(source_front.repo.repopath, repository.RECOVERYTEXT_FILE)
+        if not reflink_supported(probe_source, target_front.repo.get_tmpdir()):
+            raise UserError("--reflink was requested, but the source and destination are not on the "
+                            "same reflink-capable filesystem (such as XFS or btrfs).")
     if options.replicate:
-        __clone_replicate(source_front, target_front, skip_verify = options.skip_verify)
+        __clone_replicate(source_front, target_front, skip_verify = options.skip_verify, reflink = options.reflink)
     else:
-        __clone_once(source_front, target_front, skip_verify = options.skip_verify)
+        __clone_once(source_front, target_front, skip_verify = options.skip_verify, reflink = options.reflink)
 
 
 def cmd_diffrepo(args):

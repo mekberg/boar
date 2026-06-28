@@ -71,6 +71,16 @@ REPO_DIRS_V5 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
 
 DEDUP_BLOCK_SIZE = 2**16
 
+def aligned_split_size(max_blob_size, block_size = DEDUP_BLOCK_SIZE):
+    """Returns the actual size at which a repository with the given maximum
+    blob size cuts blobs into sub-blobs: the maximum rounded down to a whole
+    number of deduplication blocks (but at least one block), so that cut
+    points line up with block boundaries. Returns None if there is no
+    maximum (blobs are not split)."""
+    if max_blob_size is None:
+        return None
+    return max(block_size, (max_blob_size // block_size) * block_size)
+
 recoverytext = """Repository format v%s
 
 This is a versioned repository of files. It is designed to be easy to
@@ -327,6 +337,27 @@ class Repo(object):
             else:
                 self._max_blob_size_cache = None
         return self._max_blob_size_cache
+
+    def get_blob_split_size(self):
+        """Returns the size at which this repository actually cuts blobs into
+        sub-blobs (the configured maximum, aligned down to a whole number of
+        deduplication blocks), or None if blobs are not split."""
+        return aligned_split_size(self.get_max_blob_size())
+
+    def stores_blob_verbatim(self, blob_size):
+        """True if a blob of the given size would be stored verbatim as a
+        single raw blob file - that is, this repository does not deduplicate
+        and would not split a blob of that size into sub-blobs. Such a blob is
+        written via a fast path that bypasses the deduplication machinery (see
+        SessionWriter.init_new_blob), and can be shared from an identical
+        source file via a copy-on-write reflink (see clone --reflink). This is
+        the single source of truth for that decision, used by both."""
+        if self.deduplication_enabled():
+            return False
+        split_size = self.get_blob_split_size()
+        if split_size is not None and blob_size > split_size:
+            return False
+        return True
 
     def __upgrade_repo(self):
         assert not self.readonly, "Repo is read only, cannot upgrade"
