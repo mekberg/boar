@@ -35,6 +35,7 @@ from boar_exceptions import *
 from .blobreader import create_blob_reader
 
 import deduplication
+import compression
 
 LATEST_REPO_FORMAT = 5
 REPOID_FILE = "repoid.txt"
@@ -51,6 +52,7 @@ DERIVED_BLOCKS_DIR = os.path.join(DERIVED_DIR, "blocks")
 DERIVED_BLOCKS_DB = os.path.join(DERIVED_BLOCKS_DIR, "blocks.db")
 DELETE_MARKER = "deleted.json"
 MAXBLOBSIZE_FILE = "maxblobsize.txt"
+COMPRESSION_FILE = "compression.txt"
 
 # The smallest maximum blob size that may be configured for a
 # repository. It must be at least one deduplication block so that the
@@ -138,6 +140,17 @@ blobs; a recipe never refers to another recipe. When you have appended
 all pieces, the result is the original file, whose checksum will match
 the recipe name.
 
+A recipe may instead have the method "compress". In that case the blob
+data is stored compressed, and the recipe additionally contains an
+"algorithm" field (such as "gzip", "xz", "bz2" or "lz4"). To
+reconstruct such a blob, first concatenate the pieces exactly as
+described above - this yields the compressed data in that algorithm's
+standard container format (for example, a "gzip" source can be
+expanded with the standard "gunzip" tool). Then decompress that data
+with the named algorithm to obtain the original file, whose checksum
+will again match the recipe name. The "size" field is the size of the
+decompressed (original) data.
+
 When extracting a snapshot (see below), a bloblist entry may refer to
 a checksum that exists only as a recipe. In that case, reconstruct the
 data from the recipe instead of copying a raw blob.
@@ -190,7 +203,7 @@ def integrity_assert(test, errormsg = None):
     if not test:
         raise CorruptionError(errormsg)
 
-def create_repository(repopath, enable_deduplication = False, max_blob_size = None):
+def create_repository(repopath, enable_deduplication = False, max_blob_size = None, compression_algorithm = None):
     if enable_deduplication and not deduplication.dedup_available:
         # Ok, we COULD create a deduplicated repo without the module,
         # but the user is likely to be confused when he cannot use it.
@@ -199,6 +212,11 @@ def create_repository(repopath, enable_deduplication = False, max_blob_size = No
         assert isinstance(max_blob_size, int)
         if max_blob_size < MIN_MAX_BLOB_SIZE:
             raise UserError("Maximum blob size must be at least %s bytes" % MIN_MAX_BLOB_SIZE)
+    if compression_algorithm is not None:
+        # get_codec() raises a UserError if the algorithm is unknown or
+        # its module is not installed (the user could not read the repo).
+        compression.get_codec(compression_algorithm)
+        compression_algorithm = compression.canonical_name(compression_algorithm)
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
     for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR:
@@ -210,6 +228,8 @@ def create_repository(repopath, enable_deduplication = False, max_blob_size = No
             pass
     if max_blob_size is not None:
         create_file(os.path.join(repopath, MAXBLOBSIZE_FILE), str(max_blob_size))
+    if compression_algorithm is not None:
+        create_file(os.path.join(repopath, COMPRESSION_FILE), compression_algorithm)
 
 def looks_like_repo(repo_path):
     """Superficial check to see if the given path contains anything
@@ -263,6 +283,12 @@ class Repo(object):
         if self.deduplication_enabled() and not deduplication.dedup_available:
             self.readonly = True
             notice("This repository requires the native deduplication module for writing - only read operations can be performed.")
+
+        configured_compression = self.get_compression()
+        if configured_compression and not compression.is_available(configured_compression):
+            self.readonly = True
+            notice("This repository stores its data compressed with '%s', which is not available here - "
+                   "writing is disabled and reading compressed blobs will fail." % configured_compression)
 
         if not self.readonly:
             self.repo_mutex.lock_with_timeout(60)
@@ -327,6 +353,18 @@ class Repo(object):
             else:
                 self._max_blob_size_cache = None
         return self._max_blob_size_cache
+
+    def get_compression(self):
+        """Returns the canonical name of the compression algorithm that
+        this repository stores its blob data with, or None if blobs are
+        stored uncompressed (the default)."""
+        if not hasattr(self, "_compression_cache"):
+            path = os.path.join(self.repopath, COMPRESSION_FILE)
+            if os.path.exists(path):
+                self._compression_cache = compression.canonical_name(bytes2str(read_file(path)).strip())
+            else:
+                self._compression_cache = None
+        return self._compression_cache
 
     def __upgrade_repo(self):
         assert not self.readonly, "Repo is read only, cannot upgrade"
@@ -616,7 +654,7 @@ class Repo(object):
             return FileDataSource(fo, size)
         recipe = self.get_recipe(sum)
         if recipe:
-            reader = blobreader.RecipeReader(recipe, self, offset=offset, size=size)
+            reader = blobreader.create_recipe_reader(recipe, self, offset=offset, size=size)
             return reader
         raise ValueError("No such blob or recipe exists: "+sum)
 
@@ -726,6 +764,7 @@ class Repo(object):
         result.append(('number_of_raw_blobs', len(self.get_raw_blob_names())))
         result.append(('number_of_recipes', len(self.get_recipe_names())))
         result.append(('max_blob_size', self.get_max_blob_size()))
+        result.append(('compression', self.get_compression()))
         virtual_size = sum([self.get_blob_size(md5) for md5 in self.get_all_level_1_blobs()])
         actual_size = sum([self.get_blob_size(md5) for md5 in self.get_raw_blob_names()])
         result.append(('virtual_size', virtual_size))
@@ -1119,7 +1158,7 @@ class Transaction(object):
             full_path = self.get_recipe_path(recipe_blob)
             md5summer = hashlib.md5()
             recipe = read_json(full_path)
-            reader = blobreader.RecipeReader(recipe, self.repo, local_path=self.path)
+            reader = blobreader.create_recipe_reader(recipe, self.repo, local_path=self.path)
             while reader.bytes_left():
                 # DEDUP_BLOCK_SIZE should fit the data nicely, as
                 # a recipe will be chunked suchwise.

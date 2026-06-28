@@ -32,6 +32,7 @@ from common import *
 from boar_common import *
 
 import deduplication
+import compression
 
 """
 The SessionWriter and SessionReader are together with Repository the
@@ -402,6 +403,99 @@ class PieceHandler(deduplication.OriginalPieceHandler):
             remaining -= segment_size
         return segments
 
+class CompressingBlobWriter(object):
+    """Compresses a single uploaded blob with a streaming codec and stores
+    the resulting compressed data as one or more raw "sub-blobs". If the
+    repository has a maximum blob size configured, the compressed stream is
+    split so that no sub-blob exceeds the limit. The blob is then described
+    by a "compress" recipe whose pieces concatenate back into the
+    compressed data.
+
+    Compression replaces (does not stack with) deduplication: the
+    compressed byte stream defeats block matching, so no deduplication
+    blocks are harvested for compressed blobs."""
+
+    def __init__(self, session_dir, algorithm, max_blob_size = None):
+        assert os.path.isdir(session_dir)
+        assert max_blob_size is None or max_blob_size > 0
+        self.session_dir = session_dir
+        self.algorithm = algorithm
+        self.compressor = compression.get_codec(algorithm).compressor()
+        self.max_blob_size = max_blob_size
+        self.uncompressed_md5 = hashlib.md5()
+        self.uncompressed_size = 0
+        self.sub_blobs = [] # list of (md5, size), in order
+        self.closed = False
+        self._cur_file = None
+        self._cur_summer = None
+        self._cur_size = 0
+        self._cur_tmppath = None
+
+    def feed(self, data):
+        assert not self.closed
+        assert type(data) == bytes
+        self.uncompressed_md5.update(data)
+        self.uncompressed_size += len(data)
+        compressed = self.compressor.compress(data)
+        if compressed:
+            self.__write(compressed)
+
+    def __open_sub_blob(self):
+        assert self._cur_file == None
+        self._cur_tmppath = tempfile.mktemp(prefix = "compressed_", dir = self.session_dir)
+        self._cur_file = open(self._cur_tmppath, "wb")
+        self._cur_summer = hashlib.md5()
+        self._cur_size = 0
+
+    def __finalize_sub_blob(self):
+        assert self._cur_file != None
+        self._cur_file.close()
+        self._cur_file = None
+        md5 = self._cur_summer.hexdigest()
+        real_name = os.path.join(self.session_dir, md5)
+        if os.path.exists(real_name):
+            safe_delete_file(self._cur_tmppath)
+        else:
+            os.rename(self._cur_tmppath, real_name)
+        self.sub_blobs.append((md5, self._cur_size))
+        self._cur_tmppath = None
+        self._cur_summer = None
+        self._cur_size = 0
+
+    def __write(self, data):
+        view = memoryview(data)
+        pos = 0
+        total = len(data)
+        while pos < total:
+            if self._cur_file == None:
+                self.__open_sub_blob()
+            if self.max_blob_size == None:
+                take = total - pos
+            else:
+                space = self.max_blob_size - self._cur_size
+                assert space > 0
+                take = min(total - pos, space)
+            chunk = view[pos:pos + take]
+            self._cur_file.write(chunk)
+            self._cur_summer.update(chunk)
+            self._cur_size += take
+            pos += take
+            if self.max_blob_size != None and self._cur_size == self.max_blob_size:
+                self.__finalize_sub_blob()
+
+    def close(self):
+        assert not self.closed
+        self.closed = True
+        tail = self.compressor.flush()
+        if tail:
+            self.__write(tail)
+        if self._cur_file != None:
+            self.__finalize_sub_blob()
+        # Every codec emits at least a container header on flush, so there
+        # is always at least one sub-blob, even for an empty input.
+        assert self.sub_blobs, "Compressor produced no output"
+
+
 class SessionWriter(object):
     def __init__(self, repo, session_name, base_session = None, session_id = None, force_base_snapshot = False):
         assert session_name and isinstance(session_name, str)
@@ -419,6 +513,10 @@ class SessionWriter(object):
         self.metadatas = {}
         self.found_uncommitted_blocks = []
         self.blob_deduplicator = {}
+        # When compression is enabled it takes precedence over
+        # deduplication for storing blob data (the two do not stack).
+        self.compression = repo.get_compression()
+        self.compress_writers = {}
 
         all_rolling = self.repo.blocksdb.get_all_rolling()
         self.rolling_set = deduplication.CreateIntegerSet(all_rolling)
@@ -470,6 +568,10 @@ class SessionWriter(object):
         # here. Possibly some other session is uploading, or has
         # uploaded this blob, before we get here. But that is ok.
         assert not self.dead
+        if self.compression:
+            self.compress_writers[blob_md5] = CompressingBlobWriter(
+                self.session_path, self.compression, self.max_blob_size)
+            return
         if self.repo.deduplication_enabled():
             assert deduplication.dedup_available, "Deduplication module not available"
             rollingchecksumclass = deduplication.RollingChecksum
@@ -498,9 +600,38 @@ class SessionWriter(object):
         assert is_md5sum(blob_md5)
         assert not self.dead
         assert type(fragment) == bytes
+        if blob_md5 in self.compress_writers:
+            self.compress_writers[blob_md5].feed(fragment)
+            return
         self.blob_deduplicator[blob_md5].feed(fragment)
 
+    def __blob_finished_compressed(self, blob_md5):
+        writer = self.compress_writers[blob_md5]
+        writer.close()
+        assert writer.uncompressed_md5.hexdigest() == blob_md5, \
+            "Compressed data does not match the promised checksum"
+        assert writer.sub_blobs, "A compressed blob must have at least one piece"
+        recipe = {
+            "method": "compress",
+            "algorithm": writer.algorithm,
+            "md5sum": blob_md5,
+            "size": writer.uncompressed_size,
+            "compressed_size": sum(size for md5, size in writer.sub_blobs),
+            "pieces": [{"source": md5, "offset": 0, "size": size}
+                       for md5, size in writer.sub_blobs],
+        }
+        recipe_json_bytes = str2bytes(json.dumps(recipe, indent = 4))
+        recipe_md5 = md5sum(recipe_json_bytes)
+        recipe_path = os.path.join(self.session_path, blob_md5 + ".recipe")
+        if not os.path.exists(recipe_path): # If it already exists, don't write it again
+            with StrictFileWriter(recipe_path, recipe_md5, len(recipe_json_bytes)) as recipe_file:
+                recipe_file.write(recipe_json_bytes)
+        del self.compress_writers[blob_md5]
+
     def blob_finished(self, blob_md5):
+        if blob_md5 in self.compress_writers:
+            self.__blob_finished_compressed(blob_md5)
+            return
         sw = StopWatch(enabled=False, name="session.blob_finished")
         self.blob_deduplicator[blob_md5].close()
         for block in self.blob_deduplicator[blob_md5].original_piece_handler.blocks:
@@ -592,8 +723,14 @@ class SessionWriter(object):
             recipe_path = os.path.join(self.session_path, blob_name + ".recipe")
             assert os.path.exists(blob_path) or os.path.exists(recipe_path),\
                 "a blob in the commit disappeared after deduplication"
-            assert not(os.path.exists(blob_path) and os.path.exists(recipe_path)),\
-                "a blob in the commit exists as both raw blob and recipe"
+            if os.path.exists(blob_path) and os.path.exists(recipe_path):
+                # The same md5 can name both a raw blob and a recipe when a
+                # compressed sub-blob's (compressed) checksum happens to
+                # equal another file's (uncompressed) checksum. Both are
+                # content-addressed to this md5, so they hold identical
+                # data; keep the raw blob (authoritative, no decoding
+                # needed) and drop the now-redundant recipe.
+                safe_delete_recipe(recipe_path)
 
         if self.force_base_snapshot:
             bloblist = list(self.resulting_blobdict.values())

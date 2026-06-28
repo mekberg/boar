@@ -1,8 +1,13 @@
 from common import *
 from jsonrpc import DataSource
 import deduplication
+import compression
 import boar_exceptions
 from copy import copy
+
+# Size of the chunks used when streaming compressed data to/from a
+# decompressor. Just a reasonable value, not part of any format.
+DECOMP_CHUNK_SIZE = 2 ** 16
 
 """ A recipe has the following format:
 
@@ -21,11 +26,26 @@ from copy import copy
     ]
 }
 
+A "compress" recipe has the same shape but an additional "algorithm"
+field. Its pieces, concatenated, form the compressed data; decompressing
+that data with the named algorithm yields the original blob. "size" is
+the size of the decompressed (original) data.
 """
+
+def create_recipe_reader(recipe, repo, offset = 0, size = None, local_path = None):
+    """Return a streaming reader for the given recipe, dispatching on its
+    'method'. This is the entry point that understands every recipe type."""
+    assert recipe
+    method = recipe.get('method')
+    if method == "concat":
+        return RecipeReader(recipe, repo, offset = offset, size = size, local_path = local_path)
+    if method == "compress":
+        return CompressReader(recipe, repo, offset = offset, size = size, local_path = local_path)
+    raise boar_exceptions.CorruptionError("Unknown recipe method: %r" % (method,))
 
 def create_blob_reader(recipe, repo):
     assert recipe
-    return RecipeReader(recipe, repo)
+    return create_recipe_reader(recipe, repo)
 
 class RecipeReader(DataSource):
     def __init__(self, recipe, repo, offset = 0, size = None, local_path = None):
@@ -132,10 +152,130 @@ class RecipeReader(DataSource):
             self.current_piece_index = self.__search_forward(current_recipe_read_position, start_index = self.current_piece_index)
             remaining = readsize - len(result)
             data = self.__read_piece_data(self.pieces[self.current_piece_index], current_recipe_read_position, remaining)
+            if not data:
+                # The source blob is shorter than the recipe claims (a
+                # truncated/corrupt blob on disk). Without this guard the
+                # loop would spin forever making no progress.
+                raise boar_exceptions.CorruptionError(
+                    "Blob %s is truncated: a recipe expected more data than is present on disk"
+                    % self.pieces[self.current_piece_index]['source'])
             result += data
             self.bytes_left_in_segment -= len(data)
         self.progress_callback(calculate_progress(self.segment_size, self.segment_size - self.bytes_left_in_segment))
         return result
+
+    def set_progress_callback(self, progress_callback):
+        assert callable(progress_callback)
+        self.progress_callback = progress_callback
+
+
+class CompressReader(DataSource):
+    """Streaming reader for a "compress" recipe. It reads the compressed
+    data by concatenating the recipe's pieces (reusing RecipeReader) and
+    decompresses it on the fly with the algorithm named in the recipe,
+    so the original blob never has to be materialised in full."""
+
+    def __init__(self, recipe, repo, offset = 0, size = None, local_path = None):
+        assert recipe['method'] == "compress"
+        assert 'md5sum' in recipe and is_md5sum(recipe['md5sum'])
+        assert 'algorithm' in recipe
+        assert 'size' in recipe and recipe['size'] >= 0
+        assert offset >= 0
+        assert size == None or size >= 0
+        self.md5sum = recipe['md5sum']
+        self.total_size = recipe['size']
+        if size == None:
+            size = self.total_size - offset
+        assert offset + size <= self.total_size
+        self.segment_size = size
+        self.bytes_left_in_segment = size
+        self.progress_callback = lambda x: None
+
+        self.decompressor = compression.get_codec(recipe['algorithm']).decompressor()
+
+        # The compressed data is itself just a concatenation of raw
+        # blobs, so reuse a RecipeReader to stream it.
+        pieces = recipe['pieces']
+        compressed_size = sum(piece['size'] * piece.get('repeat', 1) for piece in pieces)
+        compressed_recipe = {"method": "concat",
+                             "md5sum": "0" * 32, # not verified, just needs to be well-formed
+                             "size": compressed_size,
+                             "pieces": pieces}
+        self.compressed = RecipeReader(compressed_recipe, repo, offset = 0,
+                                       size = compressed_size, local_path = local_path)
+
+        self.buffer = bytearray()
+        self.buffer_pos = 0
+        if offset:
+            self.__skip(offset)
+
+    @overrides(DataSource)
+    def bytes_left(self):
+        return self.bytes_left_in_segment
+
+    def __pump(self):
+        """Decompress a little more into the buffer. Returns False only
+        when no further progress is possible (end of stream, or the
+        compressed input is exhausted while more is still required).
+
+        Note: some decompressors (notably lz4's frame decompressor) report
+        needs_input == False right after a length-limited read, but then
+        return zero bytes on the following drain call before flipping
+        needs_input back to True. A zero-byte step is therefore not treated
+        as a stall as long as the codec still has, or has just asked for,
+        input."""
+        if self.decompressor.eof:
+            return False
+        if self.decompressor.needs_input:
+            if self.compressed.bytes_left() == 0:
+                return False
+            feed = self.compressed.read(min(self.compressed.bytes_left(), DECOMP_CHUNK_SIZE))
+        else:
+            feed = b""
+        produced = self.decompressor.decompress(feed, DECOMP_CHUNK_SIZE)
+        if produced:
+            self.buffer += produced
+            return True
+        # No output this step. If we supplied no input and the codec still
+        # does not want any, the stream is genuinely stuck.
+        if not feed and not self.decompressor.needs_input:
+            return False
+        return True
+
+    def __emit(self, count):
+        """Produce and consume up to `count` decompressed bytes."""
+        while (len(self.buffer) - self.buffer_pos) < count:
+            if not self.__pump():
+                break
+        out = bytes(self.buffer[self.buffer_pos : self.buffer_pos + count])
+        self.buffer_pos += len(out)
+        if self.buffer_pos > 2 ** 20:
+            del self.buffer[:self.buffer_pos]
+            self.buffer_pos = 0
+        return out
+
+    def __skip(self, n):
+        while n > 0:
+            got = self.__emit(min(n, DECOMP_CHUNK_SIZE))
+            if not got:
+                raise boar_exceptions.CorruptionError(
+                    "Compressed blob %s is truncated or corrupt" % self.md5sum)
+            n -= len(got)
+
+    @overrides(DataSource)
+    def read(self, readsize = None):
+        if readsize == None:
+            readsize = self.bytes_left_in_segment
+        readsize = min(readsize, self.bytes_left_in_segment)
+        assert readsize >= 0
+        out = self.__emit(readsize)
+        if len(out) < readsize:
+            raise boar_exceptions.CorruptionError(
+                "Compressed blob %s is truncated or corrupt" % self.md5sum)
+        self.bytes_left_in_segment -= len(out)
+        self.progress_callback(calculate_progress(self.segment_size,
+                                                  self.segment_size - self.bytes_left_in_segment))
+        return out
 
     def set_progress_callback(self, progress_callback):
         assert callable(progress_callback)

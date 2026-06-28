@@ -1,2 +1,5 @@
 setuptools>=65
 pytest
+# Optional: only required for repositories created with "--compress lz4".
+# The gzip/xz/bz2 algorithms use the Python standard library.
+lz4
