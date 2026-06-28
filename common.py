@@ -27,6 +27,7 @@ import time
 import textwrap
 import stat as statmod
 
+import tempfile
 from tempfile import TemporaryFile
 from threading import current_thread
 
@@ -241,6 +242,59 @@ def safe_open(path, flags = "rb"):
     if flags != "rb":
         raise ValueError("only mode 'rb' allowed")
     return open(path, "rb")
+
+# Linux FICLONE ioctl request code, _IOW(0x94, 9, int) in the asm-generic
+# encoding used by x86, ARM, ARM64 and most other architectures. (A few
+# architectures - powerpc, mips, sparc, alpha - use a different value. There
+# reflinks are simply detected as unsupported by the capability probe and
+# the feature degrades to a normal copy, so this stays correct-or-disabled.)
+FICLONE = 0x40049409
+
+def reflink_file(src, dst):
+    """Create a reflink (copy-on-write clone) of the file 'src' at the
+    path 'dst'. The two paths must be on the same filesystem and that
+    filesystem must support reflinks (for instance XFS or btrfs). 'dst'
+    must not already exist.
+
+    Raises OSError if reflinking is not possible (wrong/different
+    filesystem, unsupported platform, etc). On failure no 'dst' file is
+    left behind."""
+    import fcntl
+    src_fd = os.open(src, os.O_RDONLY)
+    try:
+        dst_fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        try:
+            fcntl.ioctl(dst_fd, FICLONE, src_fd)
+        except BaseException:
+            os.close(dst_fd)
+            try:
+                os.unlink(dst)
+            except OSError:
+                pass
+            raise
+        os.close(dst_fd)
+    finally:
+        os.close(src_fd)
+
+def reflink_supported(src_file, dst_dir):
+    """Returns True if the existing file 'src_file' can be reflinked to a
+    new file in 'dst_dir' - that is, they are on the same reflink-capable
+    filesystem. Only reads 'src_file' (so it works even when the source is
+    read-only); the probe file is created and removed in 'dst_dir'. Performs
+    an actual probe reflink and cleans up afterwards. Never raises."""
+    dst = None
+    try:
+        dst = tempfile.mktemp(prefix="reflink_probe_", dir=dst_dir)
+        reflink_file(src_file, dst)
+        return True
+    except (OSError, ImportError, AttributeError):
+        return False
+    finally:
+        if dst and os.path.exists(dst):
+            try:
+                os.unlink(dst)
+            except OSError:
+                pass
 
 def md5sum(data):
     if type(data) != bytes:

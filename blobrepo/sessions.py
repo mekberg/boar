@@ -206,12 +206,10 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         self.block_size = block_size
         self.session_dir = session_dir
         self.max_blob_size = max_blob_size
-        if max_blob_size is None:
-            self.split_size = None
-        else:
-            # Round down to a whole number of blocks (at least one).
-            self.split_size = max(block_size, (max_blob_size // block_size) * block_size)
-            assert self.split_size <= max_blob_size
+        # The cut size, aligned down to a whole number of blocks (shared with
+        # the reflink decision so the two never disagree about what is split).
+        self.split_size = repository.aligned_split_size(max_blob_size, block_size)
+        assert self.split_size is None or self.split_size <= max_blob_size
         self.blockifiers = {}
         self.blocks = None
         self.piece_start_offsets = {}
@@ -419,6 +417,11 @@ class SessionWriter(object):
         self.metadatas = {}
         self.found_uncommitted_blocks = []
         self.blob_deduplicator = {}
+        # Blobs that are stored verbatim as a single raw file (no
+        # deduplication or splitting) take a fast path that streams straight
+        # to disk, bypassing the deduplication state machine. See
+        # init_new_blob() and Repo.stores_blob_verbatim().
+        self.raw_blob_writers = {}
 
         all_rolling = self.repo.blocksdb.get_all_rolling()
         self.rolling_set = deduplication.CreateIntegerSet(all_rolling)
@@ -470,6 +473,15 @@ class SessionWriter(object):
         # here. Possibly some other session is uploading, or has
         # uploaded this blob, before we get here. But that is ok.
         assert not self.dead
+        if self.repo.stores_blob_verbatim(blob_size):
+            # Fast path: store the blob verbatim, bypassing the deduplication
+            # machinery. Write to a temp file first; blob_finished() puts it in
+            # place (or drops it if an identical blob arrived earlier). The
+            # StrictFileWriter enforces the promised size and checksum.
+            tmppath = tempfile.mktemp(prefix = "rawblob_", dir = self.session_path)
+            self.raw_blob_writers[blob_md5] = \
+                (StrictFileWriter(tmppath, blob_md5, blob_size), tmppath)
+            return
         if self.repo.deduplication_enabled():
             assert deduplication.dedup_available, "Deduplication module not available"
             rollingchecksumclass = deduplication.RollingChecksum
@@ -498,9 +510,27 @@ class SessionWriter(object):
         assert is_md5sum(blob_md5)
         assert not self.dead
         assert type(fragment) == bytes
+        if blob_md5 in self.raw_blob_writers:
+            self.raw_blob_writers[blob_md5][0].write(fragment)
+            return
         self.blob_deduplicator[blob_md5].feed(fragment)
 
+    def __blob_finished_raw(self, blob_md5):
+        writer, tmppath = self.raw_blob_writers[blob_md5]
+        writer.close() # Verifies the promised size and checksum.
+        real_name = os.path.join(self.session_path, blob_md5)
+        # An identical blob may already have been written during this
+        # commit. If so, just drop our copy.
+        if os.path.exists(real_name):
+            safe_delete_file(tmppath)
+        else:
+            os.rename(tmppath, real_name)
+        del self.raw_blob_writers[blob_md5]
+
     def blob_finished(self, blob_md5):
+        if blob_md5 in self.raw_blob_writers:
+            self.__blob_finished_raw(blob_md5)
+            return
         sw = StopWatch(enabled=False, name="session.blob_finished")
         self.blob_deduplicator[blob_md5].close()
         for block in self.blob_deduplicator[blob_md5].original_piece_handler.blocks:
@@ -525,6 +555,50 @@ class SessionWriter(object):
                     recipe_file.write(recipe_json_bytes)
         sw.mark(3)
         del self.blob_deduplicator[blob_md5]
+
+    def reflink_new_blob(self, blob_md5, blob_size, source_path):
+        """Store the blob found at source_path into the new snapshot by
+        sharing it via a filesystem reflink (copy-on-write) instead of having
+        its data streamed in - but only when this repository would store the
+        blob verbatim as a single raw file (no deduplication or splitting).
+        Returns True if the blob was reflinked, or False if the
+        caller should stream and store it normally instead. Used by the clone
+        --reflink option. The source must be a plain raw blob on the same
+        filesystem as this repository."""
+        assert is_md5sum(blob_md5)
+        assert not self.dead
+        if not self.repo.stores_blob_verbatim(blob_size):
+            return False
+        dest = os.path.join(self.session_path, blob_md5)
+        if not os.path.exists(dest):
+            # (If it exists, it was already uploaded earlier in this snapshot.)
+            reflink_file(source_path, dest)
+        return True
+
+    def reflink_replace_blob(self, blob_md5, source_path):
+        """Replace a raw blob that was just stored in this snapshot with a
+        copy-on-write reflink of an identical source blob, so the data is
+        shared instead of duplicated. Used by clone --reflink when the
+        destination (e.g. a deduplicating repo) happened to store a blob
+        verbatim as a single raw blob equal to one the source already has.
+        The blob must already be present as a raw blob here, and the source
+        must hold identical content on the same filesystem."""
+        assert is_md5sum(blob_md5)
+        assert not self.dead
+        dest = os.path.join(self.session_path, blob_md5)
+        assert os.path.exists(dest), "reflink_replace_blob: blob is not present as a raw blob"
+        tmp = tempfile.mktemp(prefix="reflink_", dir=self.session_path)
+        reflink_file(source_path, tmp)
+        try:
+            os.replace(tmp, dest)
+        except BaseException:
+            # Keep the existing (already valid) raw blob and don't leave an
+            # orphan temp file behind, which would later fail verify_meta.
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     def has_blob(self, csum):
         assert is_md5sum(csum)
