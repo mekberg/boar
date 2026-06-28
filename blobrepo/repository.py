@@ -50,6 +50,12 @@ DERIVED_SHA256_DIR = os.path.join(DERIVED_DIR, "sha256")
 DERIVED_BLOCKS_DIR = os.path.join(DERIVED_DIR, "blocks")
 DERIVED_BLOCKS_DB = os.path.join(DERIVED_BLOCKS_DIR, "blocks.db")
 DELETE_MARKER = "deleted.json"
+MAXBLOBSIZE_FILE = "maxblobsize.txt"
+
+# The smallest maximum blob size that may be configured for a
+# repository. It must be at least one deduplication block so that the
+# splitting machinery and block deduplication can coexist.
+MIN_MAX_BLOB_SIZE = 2**16
 
 REPO_DIRS_V0 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR)
 REPO_DIRS_V1 = (QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR,\
@@ -95,6 +101,51 @@ blobs/bc/bc7b0fb8c2e096693acacbd6cb070f16 since the checksum starts
 with the letters "bc". The filename "testimage.jpg" is discarded. Such
 an anonymized file is called a "blob" in this document.
 
+== The recipes ==
+
+Not every blob is necessarily stored as a single raw file under
+"blobs". A blob may instead be described by a "recipe" found under the
+"recipes" directory. Recipes are used both for deduplication and to
+split large files into smaller pieces, so that a repository can be
+stored on a filesystem with a maximum file size (for instance, a
+repository on a FAT32 disk that must avoid files larger than a few
+gigabytes).
+
+Like blobs, recipes are named after the md5 checksum of the data they
+reconstruct, sorted into sub directories by the first two characters
+of the name, but with the suffix ".recipe". For instance, the recipe
+for a blob with the checksum bc7b0fb8c2e096693acacbd6cb070f16 is
+stored in recipes/bc/bc7b0fb8c2e096693acacbd6cb070f16.recipe .
+
+A recipe is a JSON document of the following form:
+
+{
+    "method": "concat",
+    "md5sum": "<checksum of the reconstructed blob>",
+    "size": <size in bytes of the reconstructed blob>,
+    "pieces": [
+        {"source": "<blob checksum>", "offset": <n>, "size": <n>, "repeat": <n>},
+        ...
+    ]
+}
+
+To reconstruct the blob, process the pieces in order. For each piece,
+read "size" bytes starting at "offset" from the raw blob named by
+"source", and append them to the output. If the optional "repeat"
+value is present and greater than 1, append that same range of bytes
+that many times in a row. The sources of a recipe are always raw
+blobs; a recipe never refers to another recipe. When you have appended
+all pieces, the result is the original file, whose checksum will match
+the recipe name.
+
+When extracting a snapshot (see below), a bloblist entry may refer to
+a checksum that exists only as a recipe. In that case, reconstruct the
+data from the recipe instead of copying a raw blob.
+
+If a maximum blob size has been configured for this repository, the
+chosen value is recorded in the file "maxblobsize.txt" in the
+repository root.
+
 == The sessions==
 
 All data files are in the JSON file format. It is quite simple, but if
@@ -139,11 +190,15 @@ def integrity_assert(test, errormsg = None):
     if not test:
         raise CorruptionError(errormsg)
 
-def create_repository(repopath, enable_deduplication = False):
+def create_repository(repopath, enable_deduplication = False, max_blob_size = None):
     if enable_deduplication and not deduplication.dedup_available:
         # Ok, we COULD create a deduplicated repo without the module,
         # but the user is likely to be confused when he cannot use it.
         raise UserError("Cannot create deduplicated repository: deduplication module is not installed")
+    if max_blob_size is not None:
+        assert isinstance(max_blob_size, int)
+        if max_blob_size < MIN_MAX_BLOB_SIZE:
+            raise UserError("Maximum blob size must be at least %s bytes" % MIN_MAX_BLOB_SIZE)
     os.mkdir(repopath)
     create_file(os.path.join(repopath, VERSION_FILE), str(LATEST_REPO_FORMAT))
     for d in QUEUE_DIR, BLOB_DIR, SESSIONS_DIR, TMP_DIR, DERIVED_DIR, DERIVED_BLOCKS_DIR, RECIPES_DIR:
@@ -153,6 +208,8 @@ def create_repository(repopath, enable_deduplication = False):
     if enable_deduplication:
         with open(os.path.join(repopath, "ENABLE_DEDUPLICATION"), "wb"):
             pass
+    if max_blob_size is not None:
+        create_file(os.path.join(repopath, MAXBLOBSIZE_FILE), str(max_blob_size))
 
 def looks_like_repo(repo_path):
     """Superficial check to see if the given path contains anything
@@ -249,6 +306,27 @@ class Repo(object):
 
     def deduplication_enabled(self):
         return os.path.exists(os.path.join(self.repopath, "ENABLE_DEDUPLICATION"))
+
+    def get_max_blob_size(self):
+        """Returns the configured maximum raw blob size in bytes, or
+        None if blobs are unbounded (the default). Files larger than
+        this limit are split into several smaller blobs that are tied
+        together with a recipe, which makes it possible to store the
+        repository on filesystems with a maximum file size."""
+        if not hasattr(self, "_max_blob_size_cache"):
+            path = os.path.join(self.repopath, MAXBLOBSIZE_FILE)
+            if os.path.exists(path):
+                raw = bytes2str(read_file(path)).strip()
+                try:
+                    value = int(raw)
+                except ValueError:
+                    raise CorruptionError("Malformed maximum blob size configuration: %r" % raw)
+                integrity_assert(value >= MIN_MAX_BLOB_SIZE,
+                                 "Illegal maximum blob size configured: %s" % value)
+                self._max_blob_size_cache = value
+            else:
+                self._max_blob_size_cache = None
+        return self._max_blob_size_cache
 
     def __upgrade_repo(self):
         assert not self.readonly, "Repo is read only, cannot upgrade"
@@ -647,6 +725,7 @@ class Repo(object):
         result.append(('number_of_user_files', len(self.get_all_level_1_blobs())))
         result.append(('number_of_raw_blobs', len(self.get_raw_blob_names())))
         result.append(('number_of_recipes', len(self.get_recipe_names())))
+        result.append(('max_blob_size', self.get_max_blob_size()))
         virtual_size = sum([self.get_blob_size(md5) for md5 in self.get_all_level_1_blobs()])
         actual_size = sum([self.get_blob_size(md5) for md5 in self.get_raw_blob_names()])
         result.append(('virtual_size', virtual_size))

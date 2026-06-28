@@ -183,25 +183,51 @@ class _NaiveSessionWriter(object):
 
 
 class PieceHandler(deduplication.OriginalPieceHandler):
-    """ A PieceHandler handles all the original data for a single
-    uploaded blob. A continous length of original data is called a
-    'piece'."""
-    def __init__(self, session_dir, block_size, tmpdir, BlockifierClass):
+    """ A PieceHandler handles all the original (non-deduplicated) data
+    for a single uploaded blob. A continous length of original data is
+    called a 'piece'.
+
+    The concatenation of all original data is referred to as the
+    "amalgam". By default the amalgam is stored as a single raw blob.
+    If the repository has a maximum blob size configured, the amalgam
+    is instead split into a sequence of "sub-blobs", each no larger
+    than that limit. Either way, the resulting recipe pieces always
+    refer to raw blobs that are within the size limit.
+
+    The actual size at which sub-blobs are cut (split_size) is rounded
+    down to a whole number of deduplication blocks. That way the cut
+    points line up with block boundaries, so the deduplication blocks
+    of a freshly stored file never straddle a sub-blob boundary and
+    remain available for deduplicating future files."""
+    def __init__(self, session_dir, block_size, tmpdir, BlockifierClass, max_blob_size = None):
         assert os.path.isdir(session_dir)
         assert block_size > 0
+        assert max_blob_size is None or max_blob_size >= block_size
         self.block_size = block_size
         self.session_dir = session_dir
+        self.max_blob_size = max_blob_size
+        if max_blob_size is None:
+            self.split_size = None
+        else:
+            # Round down to a whole number of blocks (at least one).
+            self.split_size = max(block_size, (max_blob_size // block_size) * block_size)
+            assert self.split_size <= max_blob_size
         self.blockifiers = {}
         self.blocks = None
         self.piece_start_offsets = {}
         self.current_index = None
         self.tmpdir = tmpdir
         self.BlockifierClass = BlockifierClass
-        self.filename = os.path.join(self.session_dir, "amalgam")
-        assert not os.path.exists(self.filename)
-        self.fileobj = open(self.filename, "wb")
-        self.md5summer = hashlib.md5()
-        self.offset = 0
+        self.closed = False
+
+        # The amalgam is physically stored as one or more sub-blobs.
+        self.sub_blobs = [] # list of (md5, size), in amalgam order
+        self.sub_blob_starts = None # filled in by close(): virtual start offset of each sub-blob
+        self.offset = 0 # total amount of original data seen so far (virtual amalgam size)
+        self._cur_file = None
+        self._cur_summer = None
+        self._cur_size = 0
+        self._cur_tmppath = None
 
     @overrides(deduplication.OriginalPieceHandler)
     def init_piece(self, index):
@@ -213,14 +239,58 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         self.piece_start_offsets[index] = self.offset
         self.current_index = index
 
+    def __open_sub_blob(self):
+        assert self._cur_file == None
+        self._cur_tmppath = tempfile.mktemp(prefix = "amalgam_", dir = self.session_dir)
+        self._cur_file = open(self._cur_tmppath, "wb")
+        self._cur_summer = hashlib.md5()
+        self._cur_size = 0
+
+    def __finalize_sub_blob(self):
+        assert self._cur_file != None
+        self._cur_file.close()
+        self._cur_file = None
+        md5 = self._cur_summer.hexdigest()
+        real_name = os.path.join(self.session_dir, md5)
+        # An identical sub-blob may already have been written during
+        # this commit. If so, just drop our copy.
+        if os.path.exists(real_name):
+            # Necessary for windows. Posix silently replaces an existing file.
+            safe_delete_file(self._cur_tmppath)
+        else:
+            os.rename(self._cur_tmppath, real_name)
+        self.sub_blobs.append((md5, self._cur_size))
+        self._cur_tmppath = None
+        self._cur_summer = None
+        self._cur_size = 0
+
     @overrides(deduplication.OriginalPieceHandler)
     def add_piece_data(self, index, data):
         assert self.current_index == index
-        self.fileobj.write(data)
-        self.md5summer.update(data)
+        assert not self.closed
+        # The deduplication blockifier always sees the full data,
+        # independent of how it is physically split into sub-blobs.
         self.blockifiers[index].feed_string(data)
-        self.offset += len(data)
-        #print "Adding", len(data), "bytes"
+        view = memoryview(data)
+        pos = 0
+        total = len(data)
+        while pos < total:
+            if self._cur_file == None:
+                self.__open_sub_blob()
+            if self.split_size == None:
+                take = total - pos
+            else:
+                space = self.split_size - self._cur_size
+                assert space > 0
+                take = min(total - pos, space)
+            chunk = view[pos:pos + take]
+            self._cur_file.write(chunk)
+            self._cur_summer.update(chunk)
+            self._cur_size += take
+            self.offset += take
+            pos += take
+            if self.split_size != None and self._cur_size == self.split_size:
+                self.__finalize_sub_blob()
 
     @overrides(deduplication.OriginalPieceHandler)
     def end_piece(self, index):
@@ -231,29 +301,106 @@ class PieceHandler(deduplication.OriginalPieceHandler):
 
     @overrides(deduplication.OriginalPieceHandler)
     def close(self):
-        self.fileobj.close()
-        self.fileobj = None
-        self.final_md5 = self.md5summer.hexdigest()
-        real_name = os.path.join(self.session_dir, self.final_md5)
+        assert not self.closed
+        self.closed = True
+        # Finalize any partially-filled trailing sub-blob. If there was
+        # no original data at all, no sub-blob is created.
+        if self._cur_file != None:
+            self.__finalize_sub_blob()
 
-        # The piece may already have been added during this commit. If
-        # so, just ignore it.
-        if os.path.exists(real_name):
-            # Necessary for windows. Posix silently replaces an existing file.
-            safe_delete_file(self.filename)
-        else:
-            os.rename(self.filename, real_name)
+        if not self.sub_blobs and self.blockifiers:
+            # There was at least one original piece, but it carried no
+            # data at all (an empty file). Materialize a single empty
+            # sub-blob so that the zero-length piece can still be
+            # represented in the recipe, exactly as before.
+            self.__open_sub_blob()
+            self.__finalize_sub_blob()
 
+        # Compute the virtual start offset of each sub-blob.
+        self.sub_blob_starts = []
+        acc = 0
+        for md5, size in self.sub_blobs:
+            self.sub_blob_starts.append(acc)
+            acc += size
+        assert acc == self.offset, "Sub-blobs do not account for all original data"
+
+        # Harvest deduplication blocks, mapping each to the sub-blob
+        # that physically contains it. A block that straddles a
+        # sub-blob boundary cannot be addressed as a single (blob,
+        # offset) location, so it is simply dropped - it just won't be
+        # available for future deduplication.
         self.blocks = []
         for index, blockifier in list(self.blockifiers.items()):
+            piece_start = self.piece_start_offsets[index]
             for offset, rolling, md5 in blockifier.harvest():
-                self.blocks.append((self.final_md5, self.piece_start_offsets[index] + offset, rolling, md5))
+                location = self.__locate(piece_start + offset, self.block_size)
+                if location != None:
+                    sub_md5, offset_in_blob = location
+                    self.blocks.append((sub_md5, offset_in_blob, rolling, md5))
 
+    def __locate(self, virtual_offset, length):
+        """If the range [virtual_offset, virtual_offset+length) lies
+        entirely within a single sub-blob, return a (sub_blob_md5,
+        offset_within_sub_blob) tuple. Otherwise (the range straddles a
+        boundary or lies outside the amalgam) return None."""
+        assert self.closed
+        if self.split_size == None:
+            if not self.sub_blobs:
+                return None
+            md5, size = self.sub_blobs[0]
+            if virtual_offset + length <= size:
+                return md5, virtual_offset
+            return None
+        index = virtual_offset // self.split_size
+        if index != (virtual_offset + length - 1) // self.split_size:
+            return None # straddles a sub-blob boundary
+        if index >= len(self.sub_blobs):
+            return None
+        md5, size = self.sub_blobs[index]
+        offset_in_blob = virtual_offset - index * self.split_size
+        assert offset_in_blob + length <= size
+        return md5, offset_in_blob
 
     @overrides(deduplication.OriginalPieceHandler)
-    def get_piece_address(self, index):
-        assert self.fileobj == None
-        return self.final_md5, self.piece_start_offsets[index]
+    def get_piece_segments(self, index, size):
+        """Return a list of (sub_blob_md5, offset, size) segments that,
+        concatenated in order, reproduce the original piece's data. A
+        single piece may be spread over several sub-blobs when a
+        maximum blob size is configured."""
+        assert self.closed
+        return self.__map_range(self.piece_start_offsets[index], size)
+
+    def __map_range(self, virtual_offset, length):
+        segments = []
+        pos = virtual_offset
+        remaining = length
+        if length == 0:
+            # Zero-length piece (an empty file). Reference the sub-blob
+            # containing this position with a zero-length segment, so
+            # the recipe still contains a piece for it.
+            index = 0 if self.split_size == None else virtual_offset // self.split_size
+            if index < len(self.sub_blobs):
+                md5, size = self.sub_blobs[index]
+                sub_start = 0 if self.split_size == None else index * self.split_size
+                segments.append((md5, virtual_offset - sub_start, 0))
+            return segments
+        while remaining > 0:
+            if self.split_size == None:
+                index = 0
+                sub_start = 0
+            else:
+                index = pos // self.split_size
+                sub_start = index * self.split_size
+            assert index < len(self.sub_blobs), \
+                "Original data range exceeds the stored sub-blobs"
+            md5, size = self.sub_blobs[index]
+            offset_in_blob = pos - sub_start
+            segment_size = min(remaining, size - offset_in_blob)
+            assert segment_size > 0
+            segments.append((md5, offset_in_blob, segment_size))
+            pos += segment_size
+            remaining -= segment_size
+        return segments
 
 class SessionWriter(object):
     def __init__(self, repo, session_name, base_session = None, session_id = None, force_base_snapshot = False):
@@ -266,7 +413,7 @@ class SessionWriter(object):
         self.repo = repo
         self.tmpblocksdb = deduplication.TmpBlocksDB(self.repo.blocksdb)
         self.session_name = session_name
-        self.max_blob_size = None
+        self.max_blob_size = repo.get_max_blob_size()
         self.base_session = base_session
         self.force_base_snapshot = force_base_snapshot
         self.metadatas = {}
@@ -340,7 +487,8 @@ class SessionWriter(object):
                                        blobsource,
                                        PieceHandler(self.session_path, repository.DEDUP_BLOCK_SIZE,
                                                     tmpdir = self.repo.get_tmpdir(),
-                                                    BlockifierClass = blockifierclass),
+                                                    BlockifierClass = blockifierclass,
+                                                    max_blob_size = self.max_blob_size),
                                        tmpdir = self.repo.get_tmpdir(),
                                        RollingChecksumClass = rollingchecksumclass)
 

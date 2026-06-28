@@ -22,6 +22,7 @@ import platform
 import locale
 import codecs
 import errno
+import math
 import time
 import textwrap
 import stat as statmod
@@ -178,6 +179,40 @@ def read_md5sum(path, expected_md5 = None):
     non-utf-8 files is md5sum.exe on Windows."""
     data = read_file(path, expected_md5).decode("utf-8-sig")
     return parse_md5sum(data)
+
+def parse_human_size(s):
+    """Parse a human-friendly size string into a number of bytes.
+
+    Accepts a plain integer ("65536") or a number followed by one of
+    the binary suffixes k, M, G or T (powers of 1024,
+    case-insensitive). An optional trailing 'b'/'B' is allowed, so
+    "5M", "5MB", "5mb" and "5242880" all mean the same thing. Decimal
+    values such as "1.5G" are accepted. Raises ValueError on malformed
+    input or negative values."""
+    assert isinstance(s, str)
+    text = s.strip().lower()
+    if not text:
+        raise ValueError("Empty size string")
+    if text.endswith("b"):
+        # Allow an explicit byte marker, e.g. "100b" or "5mb".
+        text = text[:-1]
+    units = {'k': 1024, 'm': 1024 ** 2, 'g': 1024 ** 3, 't': 1024 ** 4}
+    multiplier = 1
+    if text and text[-1] in units:
+        multiplier = units[text[-1]]
+        text = text[:-1]
+    text = text.strip()
+    if not text:
+        raise ValueError("Malformed size: %r" % s)
+    try:
+        value = float(text)
+    except ValueError:
+        raise ValueError("Malformed size: %r" % s)
+    if not math.isfinite(value):
+        raise ValueError("Malformed size: %r" % s)
+    if value < 0:
+        raise ValueError("Size must not be negative: %r" % s)
+    return int(value * multiplier)
 
 _file_reader_sum = 0
 def file_reader(f, start = 0, end = None, blocksize = 2 ** 16):

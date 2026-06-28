@@ -48,6 +48,7 @@ class FakePieceHandler(object):
     def end_piece(self, index): pass
     def close(self): pass
     def get_piece_address(self, index): return ("FAKEBLOB", 0)
+    def get_piece_segments(self, index, size): return [("FAKEBLOB", 0, size)]
 
 
 class TestRecipeFinder(unittest.TestCase, WorkdirHelper):
