@@ -1,0 +1,24 @@
+[package]
+name = "rdedup"
+version = "1.0.0"
+edition = "2021"
+description = "Rust port of boar's cdedup deduplication module (drop-in compatible)"
+license = "Apache-2.0"
+
+[lib]
+# The compiled artifact is a Python extension module called "rdedup".
+name = "rdedup"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.22" }
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+[features]
+# Enabled when building the importable Python extension (avoids linking
+# libpython into the .so). Left off for `cargo test`, so the test binary can
+# link libpython and run the pure-Rust unit tests.
+extension-module = ["pyo3/extension-module"]
+
+[profile.release]
+opt-level = 3

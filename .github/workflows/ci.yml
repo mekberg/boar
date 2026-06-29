@@ -33,7 +33,7 @@ jobs:
       - name: Assert dedup module is not present
         shell: bash
         run: |
-          test ! -e cdedup.so
+          test ! -e rdedup.so
 
       - name: Run unit tests (no dedup)
         shell: bash

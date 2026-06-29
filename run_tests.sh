@@ -18,7 +18,7 @@ if [ -z "$PYTHON_BINARY" ]; then
 fi
 
 test -e run_tests.sh || { echo "This command must be executed in the boar installation top dir"; exit 1; }
-test -e cdedup.so || { echo "ERROR: dedup module unavailable"; exit 1; }
+test -e rdedup.so || { echo "ERROR: dedup module unavailable"; exit 1; }
 
 #
 # Test with deduplication

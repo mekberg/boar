@@ -1,6 +1,6 @@
 # Boar codebase overview
 
-This repository contains Boar, a snapshotting backup/version control tool aimed at safely storing large directory trees. The project is largely written in Python with a few shell utilities and an optional C extension for block deduplication. The notes below summarize the layout of the tree and highlight the major components so you can navigate and extend the code confidently.
+This repository contains Boar, a snapshotting backup/version control tool aimed at safely storing large directory trees. The project is largely written in Python with a few shell utilities and an optional Rust extension for block deduplication. The notes below summarize the layout of the tree and highlight the major components so you can navigate and extend the code confidently.
 
 ## Core layout
 
@@ -12,14 +12,14 @@ This repository contains Boar, a snapshotting backup/version control tool aimed 
 - blobrepo/ – Python package that implements the repository storage engine. Important modules include repository.py (on-disk layout, blob/session management), blobreader.py (streaming access to blob contents), and sessions.py (snapshot metadata). Unit tests for this package live under blobrepo/tests/.
 - common.py & boar_common.py – Shared utility modules. common.py provides cross-cutting helpers (filesystem safety wrappers, hashing, JSON helpers, logging, concurrency primitives) while boar_common.py contains Boar-specific constants, progress printing, ignore-file parsing, and validation logic. Prefer reusing utilities here instead of reimplementing them.
 - boar_exceptions.py – Centralized definition of the exception hierarchy used across the CLI, RPC layer, and storage backend.
-- deduplication.py – High-level logic for content-defined chunking and deduplication. When the optional C module is available it offloads heavy operations there; otherwise it falls back to pure Python implementations.
+- deduplication.py – High-level logic for content-defined chunking and deduplication. When the optional native module is available it offloads heavy operations there; otherwise it falls back to pure Python implementations.
 - jsonrpc.py – Embedded JSON-RPC implementation adapted for Boar. Both client and server code import this to send commands over pipes or sockets.
 - boarmount – FUSE-based helper that mounts a repository snapshot as a read-only filesystem. It relies on front.py and blobrepo.repository to enumerate files and serve blob data on demand.
 - treecomp.py, statemachine.py, ordered_dict.py, manifest – Supporting utilities used for manifest generation, set comparisons, deterministic orderings, and other CLI features.
 
 ## Native code and packaging
 
-- cdedup/ – Optional C/Cython implementation of the deduplication primitives (blocksdb, rolling checksum, etc.). The Makefile and setup-cython.py build the module into cdedup.so, which the Python code detects at runtime. Keep the Python fallbacks working for environments where the extension is unavailable.
+- rdedup/ – Optional Rust/PyO3 implementation of the deduplication primitives (blocksdb, rolling checksum, etc.). The Makefile builds the crate into rdedup.so (a single abi3 module), which the Python code detects at runtime (exposed under the name "cdedup" for backwards compatibility). Keep the Python fallbacks working for environments where the extension is unavailable. (This replaced the original C/Cython "cdedup" extension; see git history for that implementation.)
 - innosetup/ – Windows installer scripts and resources.
 
 ## Tests and tooling
