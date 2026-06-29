@@ -1,0 +1,15 @@
+# Keep the Docker build context (repo root, used by winbuild/Dockerfile) lean:
+# the image only needs the rdedup/ sources (for `cargo fetch`) and
+# winbuild/build.sh. Excluding build artifacts and caches stops a multi-GB
+# compiled target/ and the local venv/git history from being sent to the daemon
+# or baked into the image. (Docker honors only this context-root .dockerignore.)
+.git/
+.venv/
+**/target/
+**/__pycache__/
+*.so
+*.pyd
+*.pyo
+*.pyc
+out/
+.pytest_cache/

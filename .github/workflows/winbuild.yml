@@ -1,0 +1,92 @@
+name: Windows build
+
+# Builds the single-file Windows boar.exe (with the Rust rdedup backend compiled
+# in) from Linux via the winbuild/ Docker + wine pipeline, and smoke-tests it
+# under wine (import checks, the full deduplication suite, and a real
+# mkrepo -> import -> verify run of the frozen exe). This is heavy (~15-25 min),
+# so PRs only trigger it when an input the exe bundles changes; every push to
+# main builds and validates the deliverable artifact unconditionally.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Trigger on any input the frozen exe actually bundles, so a Windows-only
+    # packaging or smoke-test break is caught before merge. This list mirrors
+    # winbuild/boar.spec (datas + hiddenimports); keep them in sync.
+    paths:
+      - 'winbuild/**'
+      - 'rdedup/**'
+      - 'blobrepo/**'
+      - 'boar'
+      - 'deduplication.py'
+      - 'cdedup.py'
+      - 'front.py'
+      - 'workdir.py'
+      - 'common.py'
+      - 'boar_common.py'
+      - 'boarserve.py'
+      - 'client.py'
+      - 'jsonrpc.py'
+      - 'treecomp.py'
+      - 'statemachine.py'
+      - 'ordered_dict.py'
+      - 'boar_exceptions.py'
+      - 'tests/test_deduplication.py'
+      - '.github/workflows/winbuild.yml'
+  workflow_dispatch:
+
+# Don't cancel an in-flight main build (it produces a deliverable); do collapse
+# rapid pushes to the same PR.
+concurrency:
+  group: winbuild-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  winbuild:
+    name: Cross-build boar.exe (Docker + wine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        # The toolchain image (Rust + wine + a full Windows CPython) is ~5 GB;
+        # drop preinstalled SDKs the build never uses to be safe.
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          df -h /
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build winbuild toolchain image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: winbuild/Dockerfile
+          tags: boar-winbuild:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=min,ignore-error=true
+
+      - name: Cross-build and smoke-test boar.exe
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          docker run --rm -v "$PWD":/src:ro -v "$PWD/out":/out boar-winbuild:ci
+          test -e out/dist/boar.exe || { echo "ERROR: boar.exe was not produced"; exit 1; }
+          file out/dist/boar.exe
+          # /out is written by the (root) container; make it readable for upload.
+          sudo chmod -R a+rX out
+
+      - name: Upload boar.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: boar-windows-exe
+          path: out/dist/boar.exe
+          if-no-files-found: error
