@@ -31,7 +31,7 @@ if ! command -v "$PYTHON_BINARY" >/dev/null 2>&1; then
 fi
 
 test -e run_tests.sh || { echo "This command must be executed in the boar installation top dir"; exit 1; }
-test ! -e cdedup.so || { echo "ERROR: dedup module must not be installed for these tests"; exit 1; }
+test ! -e rdedup.so || { echo "ERROR: dedup module must not be installed for these tests"; exit 1; }
 
 #
 # Test WITHOUT deduplication
