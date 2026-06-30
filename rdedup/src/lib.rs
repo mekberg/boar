@@ -120,6 +120,7 @@ pub struct RollingChecksum {
     feed_s: Vec<u8>,
     feed_queue: VecDeque<Vec<u8>>,
     intset: Py<IntegerSet>,
+    skip_remaining: u64,
 }
 
 #[pymethods]
@@ -139,6 +140,7 @@ impl RollingChecksum {
             feed_s: Vec::new(),
             feed_queue: VecDeque::new(),
             intset: m_intset,
+            skip_remaining: 0,
         })
     }
 
@@ -159,6 +161,15 @@ impl RollingChecksum {
         };
         self.feed_queue.push_back(bytes);
         Ok(())
+    }
+
+    /// Advance the scan by `n` bytes without reporting any matches (the rolling
+    /// state is still updated for every byte). Used after a confirmed,
+    /// non-overlapping hit to skip the overlapping positions the caller would
+    /// discard anyway, avoiding a Python round-trip per byte over long runs of
+    /// duplicated data. Mirrors `cdedup.RollingChecksum.skip`.
+    fn skip(&mut self, n: u64) {
+        self.skip_remaining += n;
     }
 
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
@@ -195,6 +206,7 @@ impl RollingChecksum {
                 this.feed_pos,
                 window,
                 &mut this.feeded_bytecount,
+                &mut this.skip_remaining,
                 intset,
             ) {
                 Some(hit) => {
