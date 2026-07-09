@@ -249,9 +249,9 @@ def __clone_single_snapshot(from_front, to_front, session_id, reflink = False, s
             assert False, "Unexpected blobinfo action: " + str(action)
 
 def is_identical(front1, front2):
-    """ Returns True iff the other repo contains the same sessions
-    with the same fingerprints as this repo."""
-    if not is_continuation(base_front = front2, cont_front = front2):
+    """ Returns True iff the two repos contain the same sessions
+    with the same fingerprints."""
+    if not is_continuation(base_front = front1, cont_front = front2):
         return False
     return set(front1.get_session_ids()) == set(front2.get_session_ids())
 

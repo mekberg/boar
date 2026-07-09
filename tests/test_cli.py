@@ -195,6 +195,38 @@ class TestCli(unittest.TestCase):
                                 "md5": "22af645d1859cb5ca6da0c484f1f37ea"
                                 }], key=lambda x: x['filename']))
 
+    def testDiffrepoDetectsDivergentContent(self):
+        # Regression test: two independent repos with the SAME number of
+        # snapshots but DIFFERENT content must be reported as different.
+        # front.is_identical() used to compare a repo to itself, which
+        # degraded the identity test to equal session-id sets (sequential
+        # revision numbers), so diffrepo wrongly called any two same-shaped
+        # repos "identical" and clone/--replicate could skip needed work.
+        def build_repo(reponame, contents):
+            call([BOAR, "mkrepo", reponame])
+            call([BOAR, "--repo", reponame, "mksession", "S"])
+            wd = reponame + "_wd"
+            call([BOAR, "--repo", reponame, "co", "S", wd])
+            write_file(os.path.join(wd, "file.txt"), contents)
+            call([BOAR, "ci"], cwd=wd)
+            shutil.rmtree(wd)
+
+        build_repo("repoA", "content A")
+        build_repo("repoB", "content B")  # same shape, different content
+
+        output, returncode = call([BOAR, "diffrepo", "repoA", "repoB"],
+                                  check=False)
+        self.assertIn(b"Repositories differ", output)
+        self.assertEqual(returncode, 1)
+
+        # A true clone must still be reported identical (guard against
+        # over-correcting is_identical into always-different).
+        call([BOAR, "clone", "repoA", "repoA_clone"])
+        output, returncode = call([BOAR, "diffrepo", "repoA", "repoA_clone"],
+                                  check=False)
+        self.assertIn(b"Repositories are identical", output)
+        self.assertEqual(returncode, 0)
+
 
 if __name__ == '__main__':
     unittest.main()
