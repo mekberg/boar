@@ -34,9 +34,12 @@ use blocksdb::{BlocksDb, BlocksDbError, ErrKind};
 use intset::IntSet;
 use rollsum::{calc_rolling_digest, RollingState};
 
-/// Major.minor version. Major bumps signal API changes; kept identical to
-/// `cdedup.__version__` so `deduplication.py`'s compatibility assertion holds.
-const VERSION: &str = "1.0";
+/// The deduplication module API version, exposed to Python as `__version__`.
+/// `deduplication.py` requires an exact match (`DEDUP_MODULE_VERSION`) so a
+/// module out of sync with the boar release is rejected instead of misused.
+/// Bump this whenever the Python-facing API changes; 1.1 added
+/// `RollingChecksum.skip()`, which 1.0 modules lack.
+const VERSION: &str = "1.1";
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -167,7 +170,8 @@ impl RollingChecksum {
     /// state is still updated for every byte). Used after a confirmed,
     /// non-overlapping hit to skip the overlapping positions the caller would
     /// discard anyway, avoiding a Python round-trip per byte over long runs of
-    /// duplicated data. Mirrors `cdedup.RollingChecksum.skip`.
+    /// duplicated data. New in module version 1.1 (the legacy cdedup extension
+    /// had no equivalent), which is why deduplication.py requires 1.1.
     fn skip(&mut self, n: u64) {
         self.skip_remaining += n;
     }

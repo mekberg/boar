@@ -21,12 +21,28 @@ from jsonrpc import FileDataSource
 import sys
 import tempfile
 import array
+
+# The native deduplication module (rdedup, re-exported under the historical
+# name "cdedup") ships as part of a boar release and must match it exactly: the
+# Python side calls into its API directly, so a mismatched module means the two
+# halves are out of sync. This is bumped whenever that API changes - most
+# recently for RollingChecksum.skip(), which older modules lack.
+DEDUP_MODULE_VERSION = "1.1"
 try:
     if os.getenv("BOAR_DISABLE_DEDUP") == "1": raise ImportError()
     import cdedup
     if not hasattr(cdedup, "__version__"):
         raise ImportError()
-    assert cdedup.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % cdedup.__version__
+    if cdedup.__version__ != DEDUP_MODULE_VERSION:
+        # The module is present but from a different boar release (for example a
+        # stale cdedup/rdedup binary left earlier on the import path). Using it
+        # would fail unpredictably - e.g. an older module has no skip() - so stop
+        # with an explanation rather than crashing later or silently degrading.
+        sys.exit("ERROR: The native deduplication module reports version %r, but this "
+                 "boar release requires %r. This usually means a native dedup module "
+                 "from a different boar release is on the import path. Reinstall boar so "
+                 "the bundled module matches, or set BOAR_DISABLE_DEDUP=1 to run without "
+                 "deduplication." % (cdedup.__version__, DEDUP_MODULE_VERSION))
     cdedup_version = cdedup.__version__
     from cdedup import RollingChecksum, calc_rolling, IntegerSet, BlocksDB
     dedup_available = True
