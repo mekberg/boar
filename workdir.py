@@ -198,11 +198,13 @@ class Workdir(object):
         if not os.path.exists(metadir):
             os.mkdir(metadir)
         statusfile = os.path.join(workdir_path, METADIR, "info")
-        with open(statusfile, "w") as f:
-            json.dump({'repo_path': self.repoUrl,
-                       'session_name': self.sessionName,
-                       'offset': self.offset,
-                       'session_id': self.revision}, f, indent = 4)
+        # Write atomically (temp file + rename) so a crash mid-write cannot
+        # truncate .boar/info and leave the workdir unreadable. dumps_json uses
+        # indent=4, so the output is byte-identical to the previous json.dump.
+        replace_file(statusfile, dumps_json({'repo_path': self.repoUrl,
+                                             'session_name': self.sessionName,
+                                             'offset': self.offset,
+                                             'session_id': self.revision}))
 
     def export_md5(self):
         assert not os.path.exists("md5sum.txt")
