@@ -894,7 +894,7 @@ class Repo(object):
         for sid in self.get_all_sessions():
             snapshot = self.get_session(sid)
             if snapshot.get_base_id() == rev:
-                result.append(rev)
+                result.append(sid)
         return result
 
     def get_introduced_blobs(self):

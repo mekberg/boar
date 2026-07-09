@@ -198,5 +198,17 @@ class TestBlobRepo(unittest.TestCase):
             pass
         self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
 
+    def test_get_referring_snapshots(self):
+        # Regression: get_referring_snapshots appended the *queried* rev
+        # instead of the referring snapshot's id, so it returned the wrong
+        # ids. The only caller (__erase_snapshot's orphan guard) checks the
+        # result for truthiness only, which hid the bug.
+        id1 = self.repo.create_snapshot(SESSION_NAME).commit()
+        id2 = self.repo.create_snapshot(SESSION_NAME, base_session=id1).commit()
+        id3 = self.repo.create_snapshot(SESSION_NAME, base_session=id2).commit()
+        self.assertEqual([id2], self.repo.get_referring_snapshots(id1))
+        self.assertEqual([id3], self.repo.get_referring_snapshots(id2))
+        self.assertEqual([], self.repo.get_referring_snapshots(id3))
+
 if __name__ == '__main__':
     unittest.main()

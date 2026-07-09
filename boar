@@ -173,7 +173,7 @@ def verify_manifests(front, sid, verbose = False, required_manifests = []):
             else:
                 print("%s is valid" % manifest_filename)
             if calculated_manifest_md5 in remaining_required_manifests:
-                del remaining_required_manifests[calculated_manifest_md5]
+                remaining_required_manifests.discard(calculated_manifest_md5)
 
         md5data = parse_md5sum(manifest_raw.decode("utf-8-sig"))
         for md5, filename in md5data:
@@ -182,7 +182,7 @@ def verify_manifests(front, sid, verbose = False, required_manifests = []):
                 if verbose: print(manifest_filename, filename, "OK")
             else:
                 result = False
-                manifest_result = "ERROR"
+                manifests_result = "ERROR"
                 print(manifest_filename, filename, "ERROR")
         print(manifest_filename, manifests_result)
 

@@ -759,6 +759,12 @@ class DryRunFront(object):
     def commit(self, session_name, log_message = None, progress_callback = None):
         return 0
 
+    def cancel_snapshot(self):
+        # Nothing is ever staged in a dry run, so there is nothing to undo.
+        # Defined so abort paths (e.g. an unreadable file during a dry-run
+        # import) reach their intended UserError instead of an AttributeError.
+        pass
+
     def get_blob_size(self, sum):
         return self.realfront.get_blob_size(sum)
 

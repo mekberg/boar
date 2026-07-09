@@ -238,6 +238,23 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEqual(newtree, {'file1.txt': b'fc1',
                                     'file2.txt': b'fc2'})
 
+    def testImportDryRunUnreadableFileRaisesUserError(self):
+        # Regression: on the unreadable-file abort path _create_snapshot calls
+        # front.cancel_snapshot(). During a dry run 'front' is a DryRunFront,
+        # which lacked cancel_snapshot -> the AttributeError masked the intended
+        # "Unreadable file" UserError. Simulate the EnvironmentError that an
+        # unreadable file raises at check-in time (after the scan has already
+        # cached its checksum).
+        wd = self.createWorkdir(self.repoUrl, {"file1.txt": "fc1"})
+        def raise_permission_denied(*args, **kwargs):
+            raise IOError(errno.EACCES, "Permission denied")
+        original = workdir.check_in_file
+        workdir.check_in_file = raise_permission_denied
+        try:
+            self.assertRaises(UserError, wd.checkin, dry_run = True)
+        finally:
+            workdir.check_in_file = original
+
     def testUpdate(self):
         wd = self.createWorkdir(self.repoUrl,
                                 {'file2.txt': 'f2'})
