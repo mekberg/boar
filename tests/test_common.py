@@ -323,6 +323,36 @@ class TestMisc(unittest.TestCase):
         self.assertEqual(inv_d["v3"], ["k3"])
 
 
+class TestReplaceFile(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors = True)
+
+    def testReplaceExisting(self):
+        dest = os.path.join(self.tmpdir, "info")
+        common.replace_file(dest, "first")
+        common.replace_file(dest, "second")
+        with open(dest) as f:
+            self.assertEqual(f.read(), "second")
+        self.assertFalse(os.path.exists(dest + ".tmp"))
+
+    def testStaleTempDoesNotBlockWrite(self):
+        # Regression: a <dest>.tmp left behind by a previous interrupted write
+        # must not make the next write raise, and the destination must never be
+        # left missing. replace_file now writes with overwrite=True and moves
+        # into place with an atomic os.replace.
+        dest = os.path.join(self.tmpdir, "info")
+        common.replace_file(dest, "first")
+        with open(dest + ".tmp", "w") as f:
+            f.write("leftover garbage from a crash")
+        common.replace_file(dest, "second")  # must not raise
+        with open(dest) as f:
+            self.assertEqual(f.read(), "second")
+        self.assertFalse(os.path.exists(dest + ".tmp"))
+
+
 if __name__ == '__main__':
     unittest.main()
 
