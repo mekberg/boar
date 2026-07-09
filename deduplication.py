@@ -228,6 +228,12 @@ class OriginalPieceHandler(object):
     def close(self):
         pass
 
+    def abort(self):
+        """Release any held resources (e.g. open file handles) without
+        finalizing. Called when a snapshot is cancelled mid-upload so that the
+        staging directory can be removed."""
+        pass
+
     def get_piece_address(self, index):
         """After the handler has been closed, this method must return
         a tuple of (blob, offset) for every piece that has been
@@ -462,6 +468,11 @@ class RecipeFinder(GenericStateMachine):
         assert restored_size == self.feed_byte_count, "Restored is %s, feeded is %s" % (restored_size, self.feed_byte_count)
         del self.rs
 
+    def abort(self):
+        """Cancelled mid-upload: release the piece handler's open files (which
+        live in the staging dir) so the staging dir can be removed. Does not
+        finalize the recipe -- this instance must not be used afterwards."""
+        self.original_piece_handler.abort()
 
     def __seq2rec(self):
         restored_size = 0

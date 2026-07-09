@@ -214,6 +214,20 @@ class TestBlobRepo(unittest.TestCase):
         leftovers = [n for n in os.listdir(tmp_dir) if n.startswith("tmp_")]
         self.assertEqual(leftovers, [])
 
+    def test_cancel_closes_open_writers(self):
+        # Regression: cancel() must close the file handles held by an upload
+        # still in progress before removing the staging dir. On Windows an open
+        # file blocks shutil.rmtree, so the staging dir would leak there.
+        writer = self.repo.create_snapshot(SESSION_NAME)
+        writer.init_new_blob(DATA1_MD5, len(DATA1))
+        writer.add_blob_data(DATA1_MD5, DATA1[:3])  # partial: writer still open
+        raw_writer = writer.raw_blob_writers[DATA1_MD5][0]
+        self.assertFalse(raw_writer.is_closed())
+        writer.cancel()
+        self.assertTrue(raw_writer.is_closed(),
+                        "cancel() must close in-progress blob writers")
+        self.assertFalse(os.path.exists(writer.session_path))
+
     def test_sweep_stale_staging(self):
         # Old staging dirs left by a crashed commit are reaped on repo open;
         # recent ones and non-staging entries (FileMutex dirs) are left alone.

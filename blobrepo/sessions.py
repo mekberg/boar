@@ -263,6 +263,15 @@ class PieceHandler(deduplication.OriginalPieceHandler):
         self._cur_size = 0
 
     @overrides(deduplication.OriginalPieceHandler)
+    def abort(self):
+        # Cancelled mid-upload: close the sub-blob file currently being written
+        # (in the staging dir) without finalizing it, so the staging dir can be
+        # removed. On Windows an open file would otherwise block its removal.
+        if self._cur_file is not None:
+            self._cur_file.close()
+            self._cur_file = None
+
+    @overrides(deduplication.OriginalPieceHandler)
     def add_piece_data(self, index, data):
         assert self.current_index == index
         assert not self.closed
@@ -462,11 +471,33 @@ class SessionWriter(object):
         # unlocked mutex is an error.
         if self.session_mutex.is_locked():
             self.session_mutex.release()
+        # Close any file handles held by an upload still in progress before
+        # removing the staging dir. On Windows an open file blocks rmtree (and
+        # ignore_errors would then silently leave the staging dir behind); on
+        # POSIX it is unnecessary but harmless.
+        self.__release_open_writers()
         # Remove the staging directory so an aborted commit does not leak its
         # (potentially very large) staged blobs into the repo tmp/ dir. Safe on
         # every path: on a successful commit the dir has already been moved into
         # queue/, and ignore_errors makes the removal a no-op if it is gone.
         shutil.rmtree(self.session_path, ignore_errors = True)
+
+    def __release_open_writers(self):
+        """Close the file handles held by any blob upload that was still in
+        progress when the snapshot was cancelled. The writers are being
+        discarded, so their integrity checks (size/checksum) are ignored."""
+        for writer, tmppath in self.raw_blob_writers.values():
+            try:
+                writer.close()  # closes the file; the size check may raise
+            except Exception:
+                pass
+        self.raw_blob_writers.clear()
+        for deduplicator in self.blob_deduplicator.values():
+            try:
+                deduplicator.abort()
+            except Exception:
+                pass
+        self.blob_deduplicator.clear()
 
     def deleted_snapshot(self, deleted_name, deleted_fingerprint):
         self.writer.delete(deleted_name, deleted_fingerprint)
