@@ -227,6 +227,26 @@ class TestCli(unittest.TestCase):
         self.assertIn(b"Repositories are identical", output)
         self.assertEqual(returncode, 0)
 
+    def testManifestsRequireFlagAcceptsPresentManifest(self):
+        # Regression: verify_manifests did `del <set>[key]`, which raises
+        # TypeError the instant a --require'd manifest is actually present
+        # -- i.e. exactly the success case the -e flag exists to confirm.
+        self.setupWorkdir(SESSION)
+        data = b"hello manifest\n"
+        write_file(os.path.join(WORKDIR, "data.txt"), data)
+        # A self-describing manifest: its filename embeds the md5 of its
+        # own content, and its body is a valid md5sum listing of data.txt.
+        manifest_body = ("%s  data.txt\n" % md5sum(data)).encode("utf-8")
+        manifest_md5 = md5sum(manifest_body)
+        write_file(os.path.join(WORKDIR, "manifest-%s.md5" % manifest_md5),
+                   manifest_body)
+        call([BOAR, "ci"], cwd=WORKDIR)
+
+        output, returncode = call(
+            [BOAR, "--repo", REPO, "manifests", "-e", manifest_md5, SESSION],
+            check=False)
+        self.assertEqual(returncode, 0, output)
+
 
 if __name__ == '__main__':
     unittest.main()
