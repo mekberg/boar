@@ -457,7 +457,16 @@ class SessionWriter(object):
 
     def cancel(self):
         self.dead = True
-        self.session_mutex.release()
+        # Release the mutex only if we still hold it: a failed commit() will
+        # already have released it in its own finally clause, and releasing an
+        # unlocked mutex is an error.
+        if self.session_mutex.is_locked():
+            self.session_mutex.release()
+        # Remove the staging directory so an aborted commit does not leak its
+        # (potentially very large) staged blobs into the repo tmp/ dir. Safe on
+        # every path: on a successful commit the dir has already been moved into
+        # queue/, and ignore_errors makes the removal a no-op if it is gone.
+        shutil.rmtree(self.session_path, ignore_errors = True)
 
     def deleted_snapshot(self, deleted_name, deleted_fingerprint):
         self.writer.delete(deleted_name, deleted_fingerprint)

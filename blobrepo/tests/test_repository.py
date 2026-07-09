@@ -198,6 +198,45 @@ class TestBlobRepo(unittest.TestCase):
             pass
         self.assertEqual(self.repo.get_orphan_blobs(), set(["551d8cd98f00b204e9800998ecf8427e"]))
 
+    def test_cancel_removes_staging_dir(self):
+        # Regression (R06): cancel() used to only release the mutex, leaking the
+        # tmp_XXXX staging dir (and its staged blobs) into the repo tmp/ forever.
+        writer = self.repo.create_snapshot(SESSION_NAME)
+        writer.init_new_blob(DATA1_MD5, len(DATA1))
+        writer.add_blob_data(DATA1_MD5, DATA1)
+        writer.blob_finished(DATA1_MD5)
+        writer.add(copy(self.fileinfo1))
+        staging = writer.session_path
+        self.assertTrue(os.path.isdir(staging))
+        writer.cancel()
+        self.assertFalse(os.path.exists(staging))
+        tmp_dir = os.path.join(self.repopath, "tmp")
+        leftovers = [n for n in os.listdir(tmp_dir) if n.startswith("tmp_")]
+        self.assertEqual(leftovers, [])
+
+    def test_sweep_stale_staging(self):
+        # Old staging dirs left by a crashed commit are reaped on repo open;
+        # recent ones and non-staging entries (FileMutex dirs) are left alone.
+        import time
+        tmp_dir = os.path.join(self.repopath, "tmp")
+        old = os.path.join(tmp_dir, "tmp_OLD")
+        os.mkdir(old)
+        with open(os.path.join(old, "blob"), "w") as f:
+            f.write("staged data")
+        new = os.path.join(tmp_dir, "tmp_NEW")
+        os.mkdir(new)
+        mutexdir = os.path.join(tmp_dir, "mutex-deadbeef")  # not a tmp_ dir
+        os.mkdir(mutexdir)
+        old_ts = time.time() - repository.STALE_STAGING_MAX_AGE_SECONDS - 3600
+        os.utime(os.path.join(old, "blob"), (old_ts, old_ts))
+        os.utime(old, (old_ts, old_ts))
+        os.utime(mutexdir, (old_ts, old_ts))  # old, but must survive (not tmp_)
+        # Opening the repo runs the sweep under the repo mutex.
+        repository.Repo(self.repopath)
+        self.assertFalse(os.path.exists(old), "stale tmp_ dir should be reaped")
+        self.assertTrue(os.path.exists(new), "recent tmp_ dir must survive")
+        self.assertTrue(os.path.exists(mutexdir), "non-tmp_ entry must survive")
+
     def test_get_referring_snapshots(self):
         # Regression: get_referring_snapshots appended the *queried* rev
         # instead of the referring snapshot's id, so it returned the wrong

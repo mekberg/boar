@@ -238,6 +238,26 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEqual(newtree, {'file1.txt': b'fc1',
                                     'file2.txt': b'fc2'})
 
+    def testAbortedCommitLeavesNoStagingLeak(self):
+        # Regression (R06): an aborted commit used to leak its staging dir --
+        # with potentially gigabytes of staged blobs -- into the repo tmp/ dir
+        # forever. A Ctrl-C (KeyboardInterrupt) mid-upload was never cleaned up
+        # at all. Now every abort, including KeyboardInterrupt, routes through
+        # cancel_snapshot(), which removes the staging dir.
+        wd = self.createWorkdir(self.repoUrl, {"file1.txt": "fc1",
+                                               "file2.txt": "fc2"})
+        def interrupt(*args, **kwargs):
+            raise KeyboardInterrupt()
+        original = workdir.check_in_file
+        workdir.check_in_file = interrupt
+        try:
+            self.assertRaises(KeyboardInterrupt, wd.checkin)
+        finally:
+            workdir.check_in_file = original
+        tmp_dir = os.path.join(self.repopath, "tmp")
+        leftovers = [n for n in os.listdir(tmp_dir) if n.startswith("tmp_")]
+        self.assertEqual(leftovers, [], "aborted commit leaked a staging dir")
+
     def testImportDryRunUnreadableFileRaisesUserError(self):
         # Regression: on the unreadable-file abort path _create_snapshot calls
         # front.cancel_snapshot(). During a dry run 'front' is a DryRunFront,
