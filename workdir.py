@@ -545,7 +545,15 @@ class Workdir(object):
             self.revision = front.commit(session_name=self.sessionName, log_message=log_message, progress_callback=pp.update)
             pp.finished()
         except BaseException:
-            front.cancel_snapshot()
+            # Best-effort cleanup: a failure here must not mask the original
+            # error. Over an RPC transport the server may already have closed
+            # the connection when it detected the problem (e.g. a file changing
+            # mid-stream), so cancel_snapshot() would raise a secondary
+            # "transport closed" error on top of the real one.
+            try:
+                front.cancel_snapshot()
+            except Exception:
+                pass
             raise
         return self.revision
 
