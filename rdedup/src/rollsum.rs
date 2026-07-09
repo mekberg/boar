@@ -129,6 +129,7 @@ impl RollingState {
         from: usize,
         window: u64,
         feeded: &mut u64,
+        skip_remaining: &mut u64,
         intset: &IntSet,
     ) -> Option<ScanHit> {
         let mut s1 = self.s1;
@@ -138,6 +139,7 @@ impl RollingState {
         let mut length = self.length;
         let cap = self.cap;
         let mut fed = *feeded;
+        let mut skip = *skip_remaining;
 
         // Debug-only check that the ring-buffer invariants the unchecked
         // accesses below rely on actually hold on entry.
@@ -168,6 +170,13 @@ impl RollingState {
                 );
             }
             fed += 1;
+            if skip > 0 {
+                // Inside a post-hit skip: the rolling state is still advanced
+                // (above), but the position is not reported - it overlaps a
+                // confirmed hit and the caller would discard it anyway.
+                skip -= 1;
+                continue;
+            }
             if fed >= window {
                 let rolling = (s2 << 32) | s1;
                 if intset.contains(rolling) {
@@ -187,6 +196,7 @@ impl RollingState {
         self.pos = pos;
         self.length = length;
         *feeded = fed;
+        *skip_remaining = skip;
         result
     }
 }
@@ -251,11 +261,12 @@ mod tests {
         }
         let mut st = RollingState::new(window as usize);
         let mut fed = 0u64;
+        let mut skip = 0u64;
         let mut hits = 0usize;
         let t0 = Instant::now();
         let mut pos = 0usize;
         loop {
-            match st.scan(&data, pos, window, &mut fed, &iset) {
+            match st.scan(&data, pos, window, &mut fed, &mut skip, &iset) {
                 Some(h) => {
                     hits += 1;
                     pos = h.next_pos;

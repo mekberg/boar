@@ -12,7 +12,7 @@ md5sum -c <<EOF || exit 1
 d978f6138c52b8be4f07bbbf571cd450  $BIGFILE
 EOF
 
-($BOAR --version | grep "Deduplication module v1.0") || { 
+($BOAR --version | grep "Deduplication module v1.1") || {
     echo "Deduplication module has wrong version / is not installed"; exit 1; }
 
 (BOAR_DISABLE_DEDUP=1 $BOAR --version | grep "Deduplication module not installed") || { 

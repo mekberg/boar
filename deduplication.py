@@ -21,12 +21,28 @@ from jsonrpc import FileDataSource
 import sys
 import tempfile
 import array
+
+# The native deduplication module (rdedup, re-exported under the historical
+# name "cdedup") ships as part of a boar release and must match it exactly: the
+# Python side calls into its API directly, so a mismatched module means the two
+# halves are out of sync. This is bumped whenever that API changes - most
+# recently for RollingChecksum.skip(), which older modules lack.
+DEDUP_MODULE_VERSION = "1.1"
 try:
     if os.getenv("BOAR_DISABLE_DEDUP") == "1": raise ImportError()
     import cdedup
     if not hasattr(cdedup, "__version__"):
         raise ImportError()
-    assert cdedup.__version__ == "1.0", "Unexpected deduplication module version (was: %s)" % cdedup.__version__
+    if cdedup.__version__ != DEDUP_MODULE_VERSION:
+        # The module is present but from a different boar release (for example a
+        # stale cdedup/rdedup binary left earlier on the import path). Using it
+        # would fail unpredictably - e.g. an older module has no skip() - so stop
+        # with an explanation rather than crashing later or silently degrading.
+        sys.exit("ERROR: The native deduplication module reports version %r, but this "
+                 "boar release requires %r. This usually means a native dedup module "
+                 "from a different boar release is on the import path. Reinstall boar so "
+                 "the bundled module matches, or set BOAR_DISABLE_DEDUP=1 to run without "
+                 "deduplication." % (cdedup.__version__, DEDUP_MODULE_VERSION))
     cdedup_version = cdedup.__version__
     from cdedup import RollingChecksum, calc_rolling, IntegerSet, BlocksDB
     dedup_available = True
@@ -56,6 +72,9 @@ class FakeRollingChecksum(object):
         pass
 
     def feed_string(self, s):
+        pass
+
+    def skip(self, n):
         pass
 
     def __iter__(self):
@@ -386,6 +405,12 @@ class RecipeFinder(GenericStateMachine):
                     #print "Gap found between block hits"
                     self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.end_of_last_hit)
                 self.dispatch(DEDUP_BLOCK_FOUND_EVENT, md5 = md5, offset = offset, block_data = block_data)
+                # This hit consumed a whole block; the next block_size-1 scan
+                # positions overlap it and would be discarded by the check at
+                # the top of the loop. Tell the scanner to skip them natively
+                # instead of handing each one back to Python - the dominant
+                # cost over long runs of duplicated data (e.g. zeroed regions).
+                self.rs.skip(self.block_size - 1)
 
         #print "State after feeding is", self.get_state()
         # We know here that all data, except the last block_size
@@ -402,6 +427,18 @@ class RecipeFinder(GenericStateMachine):
             #print "Before flush:", self.get_state()
             self.dispatch(ORIGINAL_DATA_FOUND_EVENT, offset = self.feed_byte_count - self.block_size)
         #print "Half-time flush complete"
+
+        # Drop buffered bytes that can no longer be referenced. The candidate
+        # loop only reads at offsets >= end_of_last_hit and original data is
+        # never re-read once flushed, so everything up to end_of_last_hit is
+        # safe to release - while always keeping the trailing block, which may
+        # still extend into a hit once more data arrives. Without this, a long
+        # run of deduplicated blocks (during which no original flush ever calls
+        # tail_buffer.release) would grow the tail buffer to the size of the
+        # whole run, e.g. a multi-gigabyte zeroed region of a disk image.
+        release_to = min(self.end_of_last_hit, self.feed_byte_count - self.block_size)
+        if release_to > self.tail_buffer.shifted:
+            self.tail_buffer.release(release_to)
 
     def close(self):
         #print "Closing"
