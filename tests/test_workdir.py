@@ -238,6 +238,44 @@ class TestWorkdir(unittest.TestCase, WorkdirHelper):
         self.assertEqual(newtree, {'file1.txt': b'fc1',
                                     'file2.txt': b'fc2'})
 
+    def testAbortedCommitLeavesNoStagingLeak(self):
+        # Regression (R06): an aborted commit used to leak its staging dir --
+        # with potentially gigabytes of staged blobs -- into the repo tmp/ dir
+        # forever. A Ctrl-C (KeyboardInterrupt) mid-upload was never cleaned up
+        # at all. Now every abort, including KeyboardInterrupt, routes through
+        # cancel_snapshot(), which removes the staging dir.
+        wd = self.createWorkdir(self.repoUrl, {"file1.txt": "fc1",
+                                               "file2.txt": "fc2"})
+        def interrupt(*args, **kwargs):
+            raise KeyboardInterrupt()
+        original = workdir.check_in_file
+        workdir.check_in_file = interrupt
+        try:
+            self.assertRaises(KeyboardInterrupt, wd.checkin)
+        finally:
+            workdir.check_in_file = original
+        tmp_dir = os.path.join(self.repopath, "tmp")
+        leftovers = [n for n in os.listdir(tmp_dir) if n.startswith("tmp_")]
+        self.assertEqual(leftovers, [], "aborted commit leaked a staging dir")
+
+    def testWriteMetadataAtomicOnFailure(self):
+        # Regression (R06): .boar/info is now written serialize-first, then temp
+        # file + rename, so a failed write leaves the existing file intact. The
+        # old truncate-then-write would corrupt it. Force a serialization error
+        # (a non-JSON-serializable revision) and check the good file survives.
+        import json  # note: common.py deletes json.load, so use json.loads
+        wd = self.createWorkdir(self.repoUrl, {"file1.txt": "fc1"})
+        wd.checkin()  # writes a valid .boar/info
+        info_path = os.path.join(wd.root, ".boar", "info")
+        good = open(info_path, "rb").read()
+        self.assertEqual(json.loads(good.decode("utf-8"))["session_name"],
+                         u"TestSession")
+        wd.revision = set()  # not JSON-serializable -> write_metadata raises
+        self.assertRaises(TypeError, wd.write_metadata)
+        self.assertEqual(open(info_path, "rb").read(), good,
+                         "a failed metadata write corrupted the existing .boar/info")
+        self.assertFalse(os.path.exists(info_path + ".tmp"))
+
     def testImportDryRunUnreadableFileRaisesUserError(self):
         # Regression: on the unreadable-file abort path _create_snapshot calls
         # front.cancel_snapshot(). During a dry run 'front' is a DryRunFront,

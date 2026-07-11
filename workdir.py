@@ -198,11 +198,13 @@ class Workdir(object):
         if not os.path.exists(metadir):
             os.mkdir(metadir)
         statusfile = os.path.join(workdir_path, METADIR, "info")
-        with open(statusfile, "w") as f:
-            json.dump({'repo_path': self.repoUrl,
-                       'session_name': self.sessionName,
-                       'offset': self.offset,
-                       'session_id': self.revision}, f, indent = 4)
+        # Write atomically (temp file + rename) so a crash mid-write cannot
+        # truncate .boar/info and leave the workdir unreadable. dumps_json uses
+        # indent=4, so the output is byte-identical to the previous json.dump.
+        replace_file(statusfile, dumps_json({'repo_path': self.repoUrl,
+                                             'session_name': self.sessionName,
+                                             'offset': self.offset,
+                                             'session_id': self.revision}))
 
     def export_md5(self):
         assert not os.path.exists("md5sum.txt")
@@ -512,30 +514,47 @@ class Workdir(object):
         except FileMutex.MutexLocked as e:
             raise UserError("The session '%s' is in use (lockfile %s)" % (self.sessionName, e.mutex_file))
 
-        for sessionpath in sorted(files):
-            wd_path = strip_path_offset(self.offset, sessionpath)
-            abspath = self.abspath(sessionpath)
-            expected_md5sum = self.cached_md5sum(wd_path)
-            if sessionpath in self.manifest and self.manifest[sessionpath] != expected_md5sum:
-                raise UserError("File %s contents conflicts with manifest" % wd_path)
+        # From here on there is a staging directory in the repo tmp/ dir. Any
+        # abort -- a manifest conflict, an unreadable or changed file, a failed
+        # commit, or a Ctrl-C -- must cancel the snapshot, otherwise its staged
+        # blobs (potentially gigabytes) leak into the repo forever. On the
+        # success path front.commit() has already cleared the active snapshot,
+        # so cancel_snapshot() is a no-op there.
+        try:
+            for sessionpath in sorted(files):
+                wd_path = strip_path_offset(self.offset, sessionpath)
+                abspath = self.abspath(sessionpath)
+                expected_md5sum = self.cached_md5sum(wd_path)
+                if sessionpath in self.manifest and self.manifest[sessionpath] != expected_md5sum:
+                    raise UserError("File %s contents conflicts with manifest" % wd_path)
+                try:
+                    check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
+                except ContentViolation:
+                    raise UserError("File changed during commit: %s" % wd_path)
+                except EnvironmentError as e:
+                    if ignore_errors:
+                        warn("Ignoring unreadable (%s) file: %s" % (e, abspath))
+                    else:
+                        raise UserError("Unreadable (%s) file: %s" % (e, abspath))
+
+            for f in deleted_files:
+                print("Deleting", f, file=self.output)
+                front.remove(f)
+
+            pp = SimpleProgressPrinter(self.output, label="Verifying and integrating commit")
+            self.revision = front.commit(session_name=self.sessionName, log_message=log_message, progress_callback=pp.update)
+            pp.finished()
+        except BaseException:
+            # Best-effort cleanup: a failure here must not mask the original
+            # error. Over an RPC transport the server may already have closed
+            # the connection when it detected the problem (e.g. a file changing
+            # mid-stream), so cancel_snapshot() would raise a secondary
+            # "transport closed" error on top of the real one.
             try:
-                check_in_file(front, abspath, sessionpath, expected_md5sum, log = self.output)
-            except ContentViolation:
-                raise UserError("File changed during commit: %s" % wd_path)
-            except EnvironmentError as e:
-                if ignore_errors:
-                    warn("Ignoring unreadable (%s) file: %s" % (e, abspath))
-                else:
-                    front.cancel_snapshot()
-                    raise UserError("Unreadable (%s) file: %s" % (e, abspath))
-
-        for f in deleted_files:
-            print("Deleting", f, file=self.output)
-            front.remove(f)
-
-        pp = SimpleProgressPrinter(self.output, label="Verifying and integrating commit")
-        self.revision = front.commit(session_name=self.sessionName, log_message=log_message, progress_callback=pp.update)
-        pp.finished()
+                front.cancel_snapshot()
+            except Exception:
+                pass
+            raise
         return self.revision
 
 

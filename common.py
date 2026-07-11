@@ -374,21 +374,19 @@ def create_file(destination, content, tmp_suffix = ".tmp"):
     os.rename(tmpfile, destination)
 
 def replace_file(destination, content, tmp_suffix = ".tmp"):
-    """Write the given content to a possibly existing file at the
-    given path. The contents will first be written to a temporary file
-    in the destination directory, with the given suffix, and then
-    moved to its destination. The suffix file may exist and will in
-    that case be overwritten and lost. Note that this operation is not
-    atomic, the destination file may just be deleted if the operation
-    fails half-way."""
+    """Atomically write the given content to a possibly existing file at the
+    given path. The contents are first written to a temporary file in the
+    destination directory (with the given suffix) and then moved into place
+    with os.replace, which replaces the destination in a single atomic step.
+    So the destination is never left missing or half-written, and -- because
+    the temporary file is written with overwrite=True -- a temporary file left
+    behind by an earlier interrupted write does not block later writes."""
     tmpfile = destination + tmp_suffix
     if type(content) == str:
         content = str2bytes(content)
-    with StrictFileWriter(tmpfile, md5sum(content), len(content)) as f:
+    with StrictFileWriter(tmpfile, md5sum(content), len(content), overwrite = True) as f:
         f.write(content)
-    if os.path.exists(destination):
-        os.remove(destination)
-    os.rename(tmpfile, destination)
+    os.replace(tmpfile, destination)
 
 def split_file(source, dest_dir, cut_positions, want_piece = None):
     """'Cuts' is a list of positions where to split the source

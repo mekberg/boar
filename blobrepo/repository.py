@@ -52,6 +52,12 @@ DERIVED_BLOCKS_DB = os.path.join(DERIVED_BLOCKS_DIR, "blocks.db")
 DELETE_MARKER = "deleted.json"
 MAXBLOBSIZE_FILE = "maxblobsize.txt"
 
+# Staging directories (tmp/tmp_*) left behind by a boar process that died
+# mid-commit are reaped on repo open once they are at least this old. The
+# threshold is deliberately generous: a live commit still streaming into its
+# staging dir keeps it fresh, and no real commit runs for anywhere near a week.
+STALE_STAGING_MAX_AGE_SECONDS = 7 * 24 * 3600
+
 # The smallest maximum blob size that may be configured for a
 # repository. It must be at least one deduplication block so that the
 # splitting machinery and block deduplication can coexist.
@@ -281,6 +287,7 @@ class Repo(object):
                 self.__quick_check()
                 self.blocksdb = BlocksDB(os.path.join(self.repopath, DERIVED_BLOCKS_DB), DEDUP_BLOCK_SIZE)
                 self.process_queue()
+                self.__sweep_stale_staging()
             finally:
                 self.repo_mutex.release()
 
@@ -310,6 +317,51 @@ class Repo(object):
             integrity_assert(dir_exists(os.path.join(self.repopath, directory)), assert_msg)
         integrity_assert(os.path.exists(os.path.join(self.repopath, REPOID_FILE)),
                          "Repository at %s does not have an identity file." % self.repopath)
+
+    def __sweep_stale_staging(self):
+        """Reap staging directories (tmp/tmp_*) orphaned by a boar process that
+        died mid-commit (power loss, SIGKILL, ...). A normal abort now removes
+        its own staging dir, so this only cleans up after hard crashes.
+
+        Only directories that have not been touched for at least
+        STALE_STAGING_MAX_AGE_SECONDS are removed, so a commit that is still
+        streaming into its staging dir (which keeps the dir or its contents
+        fresh) is never affected. Runs under the repo mutex, which the only
+        other tmp_* producer -- a repo format upgrade -- also holds, so the two
+        can never race. Matches the 'tmp_' prefix exactly, so FileMutex
+        directories (mutex-*) and erase trash (TRASH_*) are left alone."""
+        assert self.repo_mutex.is_locked()
+        tmp_dir = os.path.join(self.repopath, TMP_DIR)
+        now = time.time()
+        for name in os.listdir(tmp_dir):
+            if not name.startswith("tmp_"):
+                continue
+            path = os.path.join(tmp_dir, name)
+            if not os.path.isdir(path):
+                continue
+            try:
+                age = now - self.__newest_mtime(path)
+            except OSError:
+                # Disappeared or became unreadable underneath us - leave it.
+                continue
+            if age < STALE_STAGING_MAX_AGE_SECONDS:
+                continue
+            notice("Removing stale staging directory from an interrupted commit: %s" % name)
+            shutil.rmtree(path, ignore_errors = True)
+
+    def __newest_mtime(self, path):
+        """The most recent mtime of a directory and its immediate entries. Using
+        the newest entry -- not just the directory's own mtime -- means a
+        staging dir in which a single large blob is still being streamed (dir
+        mtime static, but the blob file freshly written) is correctly seen as
+        recently active."""
+        newest = os.path.getmtime(path)
+        for entry in os.listdir(path):
+            try:
+                newest = max(newest, os.path.getmtime(os.path.join(path, entry)))
+            except OSError:
+                pass
+        return newest
 
     def allows_permanent_erase(self):
         return os.path.exists(os.path.join(self.repopath, "ENABLE_PERMANENT_ERASE"))
