@@ -230,7 +230,7 @@ class TestReflinkClone(unittest.TestCase):
 
         # Both blobs were reflinked (a successful FICLONE means the data is
         # shared copy-on-write); none were copied.
-        self.assertEqual(self.last_stats, {"reflinked": 2, "copied": 0})
+        self.assertEqual(self.last_stats, {"reflinked": 2, "copied": 0, "present": 0})
         # All blobs present as raw blobs, content correct, repo verifies.
         for name, data in payload.items():
             md5 = md5sum(data)
@@ -299,7 +299,7 @@ class TestReflinkClone(unittest.TestCase):
 
         # The two unique blobs (a.bin, c.bin) are stored verbatim and shared
         # via reflink; the duplicate (b.bin) is deduplicated, not reflinked.
-        self.assertEqual(self.last_stats, {"reflinked": 2, "copied": 1})
+        self.assertEqual(self.last_stats, {"reflinked": 2, "copied": 1, "present": 0})
         self.assertTrue(target.repo.has_raw_blob(md5sum(base)))
         self.assertTrue(target.repo.has_raw_blob(md5sum(uniq)))
         self.assertEqual(target.get_blob(md5sum(uniq)).read(), uniq)
