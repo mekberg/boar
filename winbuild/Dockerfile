@@ -91,12 +91,18 @@ RUN xvfb-run -a wine64 wine64 reg add 'HKCU\Software\Wine\WineDbg' \
 RUN python3 -m pip download --only-binary=:all: \
       --platform win_amd64 --python-version ${PYSHORT} --implementation cp --abi none \
       --dest /tmp/wheels pyinstaller setuptools pywin32-ctypes pefile \
+ # PyNaCl (libsodium) provides the cipher for encrypted TCP connections. It and
+ # its cffi dependency are native wheels, so they need their own abi tags.
+ && python3 -m pip download --only-binary=:all: \
+      --platform win_amd64 --python-version ${PYSHORT} --implementation cp \
+      --abi cp${PYSHORT} --abi abi3 --abi none \
+      --dest /tmp/wheels pynacl cffi pycparser \
  && for w in /tmp/wheels/*.whl; do unzip -o -q "$w" -d "${WINPY}/Lib/site-packages"; done \
  && rm -rf /tmp/wheels \
  # setuptools' distutils-precedence.pth runs _distutils_hack at every startup;
  # drop it to keep interpreter startup minimal and predictable under wine.
  && rm -f "${WINPY}/Lib/site-packages/distutils-precedence.pth" \
- && xvfb-run -a wine64 "${WINPY}/python.exe" -c "import PyInstaller, sys; print('PyInstaller', PyInstaller.__version__, 'on', sys.version.split()[0])"
+ && xvfb-run -a wine64 "${WINPY}/python.exe" -c "import PyInstaller, nacl.bindings, sys; print('PyInstaller', PyInstaller.__version__, 'on', sys.version.split()[0])"
 
 # --- warm the cargo dependency cache (download + offline-capable runs) --------
 # Copy just the crate manifest/sources so `cargo fetch` can resolve and cache

@@ -76,6 +76,7 @@ list      Show the contents of a repository or snapshot
 locate    Check if some non-versioned files are already present in a repository
 log       Show changes and log messages
 ls        Show the contents of a specific sub directory of a snapshot
+mkkey     Create a key file for use with "boar serve"
 mkrepo    Create a new repository
 mksession Create a new session
 revisions List the revisions of a session
@@ -1094,10 +1095,20 @@ def cmd_serve(args):
     parser = OptionParser(usage=
     """usage: boar serve [options] <repository path>
 
-    WARNING: This Boar server has no authentication or encryption. 
-             Your repository will be open for reading and writing to
-             anyone who is able to connect to the address and port you 
-             specify.""")
+    Clients must have a copy of the server's key file, which is
+    created with "boar mkkey". The key authenticates both sides and
+    encrypts the connection. Clients point out their copy of the key
+    file with the BOAR_KEYFILE environment variable.
+
+    WARNING: With --allow-insecure, the server also accepts connections
+             with no authentication or encryption (as used by older
+             versions of boar). Your repository will then be open for
+             reading and writing to anyone who is able to connect to
+             the address and port you specify.""")
+    parser.add_option("-k", "--keyfile", dest = "keyfile", metavar = "FILE", default=None,
+                      help="The file containing the key that clients must have to connect (default: the value of the BOAR_KEYFILE environment variable)")
+    parser.add_option("--allow-insecure", dest = "allow_insecure", action="store_true",
+                      help="Also accept connections without authentication or encryption. A key is optional when this is given.")
     parser.add_option("-p", "--port", action="store", dest = "port", type="int", default=None, metavar = "PORT",
                       help="The port that the network server will listen to (default: 10001)")
     parser.add_option("-a", "--address", dest = "address", metavar = "ADDR", default=None,
@@ -1115,8 +1126,9 @@ def cmd_serve(args):
         raise UserError("Too many arguments.")
 
     repopath = str(os.path.abspath(args.pop()))
-    if options.use_stdio and (options.port != None or options.address != None):
-        raise UserError("Stdio server (-S) does not accept --port or --address options.")
+    if options.use_stdio and (options.port != None or options.address != None or
+                              options.keyfile != None or options.allow_insecure):
+        raise UserError("Stdio server (-S) does not accept --port, --address, --keyfile or --allow-insecure options.")
 
     if options.port == None:    options.port = 10001
     if options.address == None: options.address = ""
@@ -1124,7 +1136,35 @@ def cmd_serve(args):
     if options.use_stdio:
         boarserve.init_stdio_server(repopath).serve()
     else:
-        boarserve.run_socketserver(repopath, options.address, options.port)
+        import securestream
+        keyfile = options.keyfile or os.getenv(securestream.KEYFILE_ENV)
+        key = None
+        if keyfile:
+            key = securestream.read_keyfile(keyfile)
+            securestream.require_cipher()
+        elif not options.allow_insecure:
+            raise UserError("You must specify a key file with --keyfile (create one with 'boar mkkey'). " +
+                            "To serve the repository with no security at all, use --allow-insecure.")
+        boarserve.run_socketserver(repopath, options.address, options.port,
+                                   key = key, allow_insecure = bool(options.allow_insecure))
+
+def cmd_mkkey(args):
+    parser = OptionParser(usage=
+    """usage: boar mkkey <key file>
+
+    Create a new key file for use with "boar serve". Give the file to
+    the server with --keyfile, and securely copy it to every client
+    that should have access. Clients point it out with the
+    BOAR_KEYFILE environment variable. Anyone who has the file has
+    full access to the served repository.""")
+    if len(args) == 0:
+        args = ["--help"]
+    (options, args) = parser.parse_args(args)
+    if len(args) != 1:
+        raise UserError("mkkey requires a single file name as argument")
+    import securestream
+    securestream.write_keyfile(args[0])
+    print("New key written to %s" % args[0])
 
 def cmd_truncate(args):
     if len(args) == 0:
@@ -1666,6 +1706,8 @@ def main():
         return cmd_contents(args[1:])
     elif args[0] == "mksession":
         return cmd_mksession(args[1:])
+    elif args[0] == "mkkey":
+        return cmd_mkkey(args[1:])
     elif args[0] == "mkstandalone":
         return cmd_mkstandalone(args[1:]) 
     elif args[0] == "revisions":

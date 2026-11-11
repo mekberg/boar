@@ -7,6 +7,7 @@
 #
 # All of boar's real imports are declared as hiddenimports in boar.spec, since
 # running the script through runpy hides them from static analysis.
+import io
 import os
 import sys
 import runpy
@@ -28,6 +29,19 @@ if os.environ.get("BOAR_WINBUILD_SELFTEST") == "1":
         getattr(backend, "__name__", None),
         deduplication.cdedup_version,
     ))
-    sys.exit(0 if deduplication.dedup_available else 1)
+    # ...and that the cipher for encrypted TCP connections works.
+    import securestream
+    try:
+        wire = io.BytesIO()
+        writer = securestream.SecureWriter(wire, bytes(32))
+        writer.write(b"selftest")
+        writer.flush()
+        wire.seek(0)
+        crypto_available = securestream.SecureReader(wire, bytes(32)).read() == b"selftest"
+    except Exception as e:
+        print("BOAR_WINBUILD_SELFTEST: crypto failure: %r" % (e,))
+        crypto_available = False
+    print("BOAR_WINBUILD_SELFTEST: crypto_available=%r" % crypto_available)
+    sys.exit(0 if deduplication.dedup_available and crypto_available else 1)
 
 runpy.run_path(os.path.join(base, "boar"), run_name="__main__")
