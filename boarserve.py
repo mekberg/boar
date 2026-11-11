@@ -25,6 +25,9 @@ from boar_exceptions import *
 from common import warn
 
 import jsonrpc
+import securestream
+
+HANDSHAKE_TIMEOUT = 30 # seconds
 
 def ping():
     return "pong"
@@ -32,6 +35,7 @@ def ping():
 class PipedBoarServer(object):
     def __init__(self, repopath, from_client, to_client):
         self.repopath = repopath
+        self.repo = None
         self.handler = jsonrpc.RpcHandler()
         self.handler.register_function(ping, "ping")
         self.handler.register_function(self.initialize, "initialize")
@@ -49,7 +53,7 @@ class PipedBoarServer(object):
             self._cleanup()
 
     def _cleanup(self):
-        if self.repo.repo_mutex.is_locked():
+        if self.repo and self.repo.repo_mutex.is_locked():
             self.repo.repo_mutex.release()
 
 def init_stdio_server(repopath):
@@ -67,14 +71,39 @@ if "fork" in dir(os):
     class ForkingTCPServer(socketserver.ForkingMixIn, socketserver.TCPServer):
         pass
 
-def run_socketserver(repopath, address, port):
+def run_socketserver(repopath, address, port, key = None, allow_insecure = False):
+    """Serve the repository over TCP. Clients must prove knowledge of
+    'key' and all traffic is encrypted, unless 'allow_insecure' is
+    true, in which case old-style cleartext connections are accepted
+    as well. Without a key, only cleartext connections are possible."""
+    assert key is not None or allow_insecure
     repository.Repo(repopath) # Just check if the repo path is valid
     class BoarTCPHandler(socketserver.BaseRequestHandler):
         def handle(self):
             to_client = self.request.makefile(mode="wb")
             from_client = self.request.makefile(mode="rb")
-            PipedBoarServer(repopath, from_client, to_client).serve()
+            peer = "%s:%s" % self.client_address[:2]
+            # Don't let silent connections hang around forever
+            self.request.settimeout(HANDSHAKE_TIMEOUT)
+            try:
+                streams = securestream.server_handshake(from_client, to_client, key, allow_insecure)
+            except OSError:
+                streams = None
+            if not streams:
+                warn("Rejected connection from %s" % peer)
+                return
+            self.request.settimeout(None)
+            from_client, to_client, encrypted = streams
+            if not encrypted:
+                warn("Client %s is using an insecure (cleartext) connection" % peer)
+            try:
+                PipedBoarServer(repopath, from_client, to_client).serve()
+            except ConnectionLost as e:
+                # Typically a client with the wrong key
+                warn("Dropped connection from %s: %s" % (peer, e))
 
+    # Allow the server to be restarted immediately
+    socketserver.TCPServer.allow_reuse_address = True
     if "fork" not in dir(os):
         warn("Your operating system does not support the 'fork()' system call. This server will only be able to handle one client at a time. Please see the manual on how to set up a server on your operating system to handle multiple clients.")
         server = socketserver.TCPServer((address, port), BoarTCPHandler)
@@ -84,5 +113,9 @@ def run_socketserver(repopath, address, port):
     ip = server.socket.getsockname()[0]
     if ip == "0.0.0.0":
         ip = socket.gethostname()
-    print("Serving repository %s as boar://%s:%s/" % (repopath, ip, port))
+    if key is None:
+        warn("This server has no authentication or encryption. Anyone who can connect to it can read and modify the repository.")
+    elif allow_insecure:
+        warn("This server accepts insecure connections. Anyone who can connect to it can read and modify the repository.")
+    print("Serving repository %s as boar://%s:%s/" % (repopath, ip, port), flush=True)
     server.serve_forever()

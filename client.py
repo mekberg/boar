@@ -16,6 +16,7 @@
 # limitations under the License.
 
 import jsonrpc
+import securestream
 import base64
 import re
 import sys
@@ -101,20 +102,50 @@ def create_boar_proxy(to_server, from_server):
 
     try:
         assert server.ping() == "pong"
+    except WrongProtocolVersion:
+        raise
     except ConnectionLost as e:
         raise UserError("Could not connect to remote repository: %s" % e)
-    except:
-        raise
     server.initialize()
     return server
 
-def _connect_tcp(host, port):
+def _open_tcp_streams(host, port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((host, port))
-    to_server = s.makefile(mode="wb")
-    from_server = s.makefile(mode="rb")
-    server = create_boar_proxy(to_server, from_server)
-    return server.front
+    return s.makefile(mode="rb"), s.makefile(mode="wb")
+
+def _connect_tcp(host, port):
+    """Connect to a boar TCP server. The connection is authenticated
+    and encrypted with the shared key in the file named by the
+    BOAR_KEYFILE environment variable. Cleartext connections, with no
+    security at all, are only made if BOAR_ALLOW_INSECURE=1 is set and
+    the server can't do (or we have no key for) anything better."""
+    keyfile = os.getenv(securestream.KEYFILE_ENV)
+    allow_insecure = os.getenv(securestream.ALLOW_INSECURE_ENV) == "1"
+    insecure_hint = "To connect anyway, with no security, set %s=1 (the server must be configured to allow that)." % \
+        securestream.ALLOW_INSECURE_ENV
+    why_insecure = "no key file is given in %s" % securestream.KEYFILE_ENV
+    if keyfile:
+        key = securestream.read_keyfile(keyfile)
+        from_server, to_server = _open_tcp_streams(host, port)
+        try:
+            from_server, to_server = securestream.client_handshake(from_server, to_server, key)
+            return create_boar_proxy(to_server, from_server).front
+        except securestream.ServerSpeaksCleartextOnly as e:
+            from_server.close()
+            to_server.close()
+            if not allow_insecure:
+                raise UserError("%s. %s" % (e, insecure_hint))
+            why_insecure = str(e)
+    elif not allow_insecure:
+        raise UserError("Connecting to a boar server requires its key. Set %s to the path of the key file. %s" %
+                        (securestream.KEYFILE_ENV, insecure_hint))
+    warn("Using an INSECURE connection to %s:%s (%s)" % (host, port, why_insecure))
+    from_server, to_server = _open_tcp_streams(host, port)
+    try:
+        return create_boar_proxy(to_server, from_server).front
+    except WrongProtocolVersion:
+        raise UserError("The server does not accept insecure connections")
 
 def _connect_cmd(cmd):
     p = subprocess.Popen(cmd,

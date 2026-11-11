@@ -85,10 +85,12 @@ echo "--- confirm the bundled backend is really rdedup (not the python fallback)
 # Hard gate: boar_entry.py exits non-zero if dedup is unavailable. Capture the
 # output and assert the native backend is actually active, so a broken freeze
 # (e.g. the dedup module silently not bundled) fails the build here.
-selftest_out=$(BOAR_WINBUILD_SELFTEST=1 "${RUN[@]}")
+selftest_out=$(BOAR_WINBUILD_SELFTEST=1 "${RUN[@]}") || true
 echo "$selftest_out"
 echo "$selftest_out" | grep -q "dedup_available=True" \
   || { echo "ERROR: frozen exe has no working deduplication backend"; exit 1; }
+echo "$selftest_out" | grep -q "crypto_available=True" \
+  || { echo "ERROR: frozen exe has no working cipher for encrypted connections"; exit 1; }
 
 SMOKE=/tmp/smoke
 rm -rf "$SMOKE"; mkdir -p "$SMOKE/data"

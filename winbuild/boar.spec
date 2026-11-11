@@ -21,8 +21,10 @@ hiddenimports = [
     # automatically; list them here and let PyInstaller pull their transitive deps.
     'blobrepo', 'blobrepo.repository', 'blobrepo.sessions', 'blobrepo.blobreader',
     'boar_exceptions', 'deduplication', 'front', 'workdir', 'common',
-    'boar_common', 'boarserve', 'client', 'jsonrpc', 'treecomp',
+    'boar_common', 'boarserve', 'client', 'jsonrpc', 'securestream', 'treecomp',
     'statemachine', 'ordered_dict',
+    # Cipher for encrypted TCP connections (imported lazily by securestream)
+    'nacl.bindings', '_cffi_backend',
     # stdlib imported directly by the boar script (not reached via the modules above)
     'optparse', 'cProfile', 'pstats', 'posixpath', 'ntpath', 'errno', 'shutil',
 ]
