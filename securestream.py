@@ -228,9 +228,13 @@ class SecureReader(object):
 
     mode = "rb"
 
-    def __init__(self, stream, key):
+    def __init__(self, stream, key, on_authenticated = None):
+        """'on_authenticated', if given, is called once, when the
+        first record has been received and found to be authentic. Only
+        then is it certain that the other side knows the key."""
         self.stream = stream
         self.key = key
+        self.on_authenticated = on_authenticated
         self.aead = _aead()
         self.seq = 0
         self.buffer = bytearray()
@@ -260,6 +264,9 @@ class SecureReader(object):
         except Exception:
             # Wrong key at the other end, or tampering
             raise ConnectionLost("Encrypted stream failed authentication")
+        if self.on_authenticated:
+            callback, self.on_authenticated = self.on_authenticated, None
+            callback()
         return True
 
     def read(self, n = -1):
@@ -362,10 +369,14 @@ def _reject(to_client, status):
         pass
 
 
-def server_handshake(from_client, to_client, key, allow_insecure):
+def server_handshake(from_client, to_client, key, allow_insecure, on_authenticated = None):
     """Greet a newly connected client. Returns the tuple (from_client,
     to_client, encrypted) with the streams to use for the rest of the
     connection, or None if the client was turned away.
+
+    Note that an encrypted client has not yet proven that it knows the
+    key when this function returns. That happens when its first record
+    arrives, at which point 'on_authenticated' is called.
 
     'key' may be None, in which case only cleartext connections are
     possible. Cleartext connections are only accepted if
@@ -407,4 +418,4 @@ def server_handshake(from_client, to_client, key, allow_insecure):
         return None
     to_client.write(struct.pack("!IIB", MAGIC, HELLO_VERSION, STATUS_OK) + server_public + tag)
     to_client.flush()
-    return SecureReader(from_client, c2s_key), SecureWriter(to_client, s2c_key), True
+    return SecureReader(from_client, c2s_key, on_authenticated), SecureWriter(to_client, s2c_key), True

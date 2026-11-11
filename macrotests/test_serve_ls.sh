@@ -133,7 +133,34 @@ stop_server
 #
 PORT=10003
 URL=boar://127.0.0.1:${PORT}
-start_server $PORT --keyfile key.txt
+BOAR_TEST_HANDSHAKE_TIMEOUT=2 start_server $PORT --keyfile key.txt
+
+# Completing the handshake takes no key. A client that does so and then
+# goes silent must be dropped, or a few of them could occupy all the
+# connections that the server is willing to handle.
+cat >silent_client.py <<PYEOF
+import sys, socket, time
+sys.path.insert(0, "$BOARTESTHOME/..")
+import securestream, client
+s = socket.create_connection(("127.0.0.1", int(sys.argv[1])))
+from_server, to_server = securestream.client_handshake(
+    s.makefile(mode="rb"), s.makefile(mode="wb"), securestream.read_keyfile("key.txt"))
+if sys.argv[2] == "authenticated":
+    # Once the client has shown that it knows the key, it may idle
+    front = client.create_boar_proxy(to_server, from_server).front
+    time.sleep(4)
+    print(front.get_session_names())
+    sys.exit(0)
+s.settimeout(10)
+try:
+    data = s.recv(1)
+except socket.timeout:
+    sys.exit("The server did not drop a silent, unauthenticated client")
+assert data == b"", data
+PYEOF
+$PYTHON_BINARY silent_client.py $PORT silent >client.log 2>&1 || { cat client.log server.log >&2; exit 1; }
+expect_ok "idle authenticated client" $PYTHON_BINARY silent_client.py $PORT authenticated
+grep -q "Dropped unauthenticated connection" server.log || { echo "Missing server log message" >&2; cat server.log >&2; exit 1; }
 expect_ok "right key" env BOAR_KEYFILE=key.txt $BOAR --repo=$URL sessions
 grep -q "INSECURE" client.log && { echo "Unexpected client warning" >&2; exit 1; }
 expect_ok "right key, insecure allowed by client" env BOAR_KEYFILE=key.txt BOAR_ALLOW_INSECURE=1 $BOAR --repo=$URL sessions

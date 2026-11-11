@@ -235,6 +235,39 @@ class TestHandshake(unittest.TestCase):
         self.assertEqual(from_server.read(6), b"answer")
 
     @unittest.skipUnless(have_crypto, "PyNaCl not installed")
+    def testAuthenticatedCallback(self):
+        """Completing the handshake takes no knowledge of the key. The
+        server must not consider a client authenticated until a valid
+        record has arrived."""
+        calls = []
+        client_sock, server_sock = socket.socketpair()
+        self.addCleanup(client_sock.close)
+        self.addCleanup(server_sock.close)
+        result = []
+        thread = threading.Thread(target = lambda: result.append(securestream.server_handshake(
+            server_sock.makefile("rb"), server_sock.makefile("wb"), KEY, False, lambda: calls.append(1))))
+        thread.start()
+        _, to_server = securestream.client_handshake(client_sock.makefile("rb"), client_sock.makefile("wb"), KEY)
+        thread.join(10)
+        from_client, _, _ = result[0]
+        self.assertEqual(calls, [])
+        to_server.write(b"one")
+        to_server.flush()
+        self.assertEqual(from_client.read(3), b"one")
+        self.assertEqual(calls, [1])
+        to_server.write(b"two")
+        to_server.flush()
+        self.assertEqual(from_client.read(3), b"two")
+        self.assertEqual(calls, [1])
+
+    @unittest.skipUnless(have_crypto, "PyNaCl not installed")
+    def testNoAuthenticatedCallbackForWrongKey(self):
+        calls = []
+        reader = securestream.SecureReader(io.BytesIO(encrypt(OTHER_KEY, b"hello")), KEY, lambda: calls.append(1))
+        self.assertRaises(ConnectionLost, reader.read, 5)
+        self.assertEqual(calls, [])
+
+    @unittest.skipUnless(have_crypto, "PyNaCl not installed")
     def testSessionKeysAreUnique(self):
         """The same data must never encrypt the same way twice"""
         wires = []

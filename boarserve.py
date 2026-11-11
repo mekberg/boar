@@ -27,7 +27,8 @@ from common import warn
 import jsonrpc
 import securestream
 
-HANDSHAKE_TIMEOUT = 30 # seconds
+# The time a client has to prove that it knows the key (seconds)
+HANDSHAKE_TIMEOUT = float(os.getenv("BOAR_TEST_HANDSHAKE_TIMEOUT", "30"))
 
 def ping():
     return "pong"
@@ -83,24 +84,35 @@ def run_socketserver(repopath, address, port, key = None, allow_insecure = False
             to_client = self.request.makefile(mode="wb")
             from_client = self.request.makefile(mode="rb")
             peer = "%s:%s" % self.client_address[:2]
-            # Don't let silent connections hang around forever
+            # Don't let connections that have not shown that they know
+            # the key hang around. They tie up a server process each,
+            # and there is a limit on how many of those there can be.
             self.request.settimeout(HANDSHAKE_TIMEOUT)
+            authenticated = []
+            def on_authenticated():
+                authenticated.append(True)
+                self.request.settimeout(None)
             try:
-                streams = securestream.server_handshake(from_client, to_client, key, allow_insecure)
+                streams = securestream.server_handshake(from_client, to_client, key, allow_insecure,
+                                                        on_authenticated)
             except OSError:
                 streams = None
             if not streams:
                 warn("Rejected connection from %s" % peer)
                 return
-            self.request.settimeout(None)
             from_client, to_client, encrypted = streams
             if not encrypted:
                 warn("Client %s is using an insecure (cleartext) connection" % peer)
+                on_authenticated() # This is as authenticated as it gets
             try:
                 PipedBoarServer(repopath, from_client, to_client).serve()
             except ConnectionLost as e:
                 # Typically a client with the wrong key
                 warn("Dropped connection from %s: %s" % (peer, e))
+            except OSError as e:
+                if authenticated:
+                    raise
+                warn("Dropped unauthenticated connection from %s: %s" % (peer, e))
 
     # Allow the server to be restarted immediately
     socketserver.TCPServer.allow_reuse_address = True
